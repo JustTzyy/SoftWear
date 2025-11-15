@@ -1,0 +1,794 @@
+﻿@page "/seller/Product"
+@layout IT13_Final.Components.Layout.Seller.Seller
+@inject IT13_Final.Services.Data.IProductService ProductService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Nav
+@implements IDisposable
+@using System.ComponentModel.DataAnnotations
+
+<h1 class="page-title">Product Records</h1>
+
+@if (showSuccessMessage && !string.IsNullOrEmpty(successMessageText))
+{
+    <div class="success-banner">
+        <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span>@successMessageText</span>
+    </div>
+}
+
+<div class="products-container">
+    <div class="search-actions-row">
+        <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input type="text" class="search-input" placeholder="Search products" value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        </div>
+
+        <div class="action-buttons">
+            <button class="archive-btn" @onclick="NavigateToArchive">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                    <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                </svg>
+                <span>Archive</span>
+            </button>
+            <button class="add-product-btn" @onclick="HandleAddProduct">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="16"></line>
+                    <line x1="8" y1="12" x2="16" y2="12"></line>
+                </svg>
+                <span>Add Product</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <div class="table-header">List</div>
+        <table class="products-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Image</th>
+                    <th>Name</th>
+                    <th>Category</th>
+                    <th>Description</th>
+                    <th>Date Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="7" class="loading-cell">Loading...</td>
+                    </tr>
+                }
+                else if (Products.Count == 0)
+                {
+                    <tr>
+                        <td colspan="7" class="empty-cell">No Products found</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var product in Products)
+                    {
+                        <tr class="clickable-row" @onclick="() => HandleRowClick(product.Id)">
+                            <td>@product.Id</td>
+                            <td class="image-cell">
+                                @if (!string.IsNullOrEmpty(product.ImageBase64))
+                                {
+                                    <img src="data:image/jpeg;base64,@product.ImageBase64" alt="Product" class="product-thumbnail" />
+                                }
+                                else
+                                {
+                                    <div class="no-image-placeholder">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                            <polyline points="21 15 16 10 5 21"></polyline>
+                                        </svg>
+                                    </div>
+                                }
+                            </td>
+                            <td class="product-name">@product.Name</td>
+                            <td>@product.CategoryName</td>
+                            <td class="description-cell">@(string.IsNullOrEmpty(product.Description) ? "N/A" : product.Description)</td>
+                            <td>@product.DateCreated.ToString("MMM dd, yyyy")</td>
+                            <td class="actions-cell" @onclick:stopPropagation>
+                                <button class="action-btn edit-btn" @onclick="() => HandleEdit(product.Id)" title="Edit">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                    </svg>
+                                </button>
+                                <button class="action-btn delete-btn" @onclick="() => HandleDelete(product.Id)" title="Delete">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="3 6 5 6 21 6"></polyline>
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="pagination-btn" @onclick="PreviousPage" disabled="@(currentPage == 1)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+            <span class="page-info">Page @currentPage of @totalPages</span>
+            <button class="pagination-btn" @onclick="NextPage" disabled="@(currentPage == totalPages)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+@* Product Details Modal *@
+@if (showProductDetails && productDetails != null)
+{
+    <div class="modal-overlay" @onclick="CloseProductDetails">
+        <div class="modal-container" @onclick:stopPropagation>
+            <div class="modal-header">
+                <div class="modal-title">
+                    <svg class="modal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    </svg>
+                    <span>Product Details</span>
+                </div>
+                <button class="modal-close" @onclick="CloseProductDetails" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                    <span class="modal-close-text">Close</span>
+                </button>
+            </div>
+
+            <div class="modal-content-product">
+                @if (!string.IsNullOrEmpty(productDetails.ImageBase64))
+                {
+                    <div class="product-image-large">
+                        <img src="data:image/jpeg;base64,@productDetails.ImageBase64" alt="Product Image" />
+                    </div>
+                }
+                <div class="details-list">
+                    <div class="detail-item">
+                        <span class="detail-label">PRODUCT NAME:</span>
+                        <span class="detail-value">@productDetails.Name</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">CATEGORY:</span>
+                        <span class="detail-value">@productDetails.CategoryName</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">DESCRIPTION:</span>
+                        <span class="detail-value">@(string.IsNullOrEmpty(productDetails.Description) ? "N/A" : productDetails.Description)</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">STATUS:</span>
+                        <span class="detail-value status-badge @(productDetails.Status.ToUpper() == "ACTIVE" ? "active" : "inactive")">@productDetails.Status</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">DATE CREATED:</span>
+                        <span class="detail-value">@productDetails.DateCreated.ToString("M/d/yyyy")</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* Add Product Modal *@
+@if (showAddProductModal)
+{
+    <div class="modal-overlay" @onclick="CloseAddProductModal">
+        <div class="add-product-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Add Product</h2>
+                <button class="modal-close-btn" @onclick="CloseAddProductModal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <EditForm EditContext="@_addProductEditContext" OnValidSubmit="SaveProductAsync">
+                    <DataAnnotationsValidator />
+                    
+                    <div class="form-grid">
+                        <div class="form-field">
+                            <label class="field-label">Product Name</label>
+                            <InputText class="form-input" @bind-Value="_addProductModel.Name" placeholder="e.g., Classic T-Shirt" />
+                            <ValidationMessage For="@(() => _addProductModel.Name)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Category</label>
+                            <InputSelect class="form-input" @bind-Value="_addProductModel.CategoryId">
+                                <option value="0">Select a category</option>
+                                @foreach (var category in categories)
+                                {
+                                    <option value="@category.Id">@category.Name</option>
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => _addProductModel.CategoryId)" />
+                        </div>
+                        <div class="form-field full-width">
+                            <label class="field-label">Description (Optional)</label>
+                            <InputTextArea class="form-textarea" @bind-Value="_addProductModel.Description" placeholder="Enter product description" rows="3" />
+                        </div>
+                        <div class="form-field full-width">
+                            <label class="field-label">Product Image (Optional)</label>
+                            <div class="image-upload-container">
+                                <InputFile OnChange="HandleAddImageSelected" class="file-input" id="addImageInput" accept="image/*" />
+                                <label for="addImageInput" class="file-input-label">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="17 8 12 3 7 8"></polyline>
+                                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                                    </svg>
+                                    <span>@(string.IsNullOrEmpty(_addImageFileName) ? "Choose Image" : _addImageFileName)</span>
+                                </label>
+                                @if (!string.IsNullOrEmpty(_addImagePreview))
+                                {
+                                    <div class="image-preview">
+                                        <img src="@_addImagePreview" alt="Preview" />
+                                        <button type="button" class="remove-image-btn" @onclick="RemoveAddImage">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-btn" @onclick="CloseAddProductModal">
+                            <span>Cancel</span>
+                        </button>
+                        <button type="submit" class="save-product-btn">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                <polyline points="7 3 7 8 15 8"></polyline>
+                            </svg>
+                            <span>Save Product</span>
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@* Update Product Modal *@
+@if (showUpdateProductModal)
+{
+    <div class="modal-overlay" @onclick="CloseUpdateProductModal">
+        <div class="update-product-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Update Product</h2>
+                <button class="modal-close-btn" @onclick="CloseUpdateProductModal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <EditForm EditContext="@_updateProductEditContext" OnValidSubmit="SaveUpdateProductAsync">
+                    <DataAnnotationsValidator />
+                    
+                    <div class="form-grid">
+                        <div class="form-field">
+                            <label class="field-label">Product Name</label>
+                            <InputText class="form-input" @bind-Value="_updateProductModel.Name" placeholder="e.g., Classic T-Shirt" />
+                            <ValidationMessage For="@(() => _updateProductModel.Name)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Category</label>
+                            <InputSelect class="form-input" @bind-Value="_updateProductModel.CategoryId">
+                                <option value="0">Select a category</option>
+                                @foreach (var category in categories)
+                                {
+                                    <option value="@category.Id">@category.Name</option>
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => _updateProductModel.CategoryId)" />
+                        </div>
+                        <div class="form-field full-width">
+                            <label class="field-label">Description (Optional)</label>
+                            <InputTextArea class="form-textarea" @bind-Value="_updateProductModel.Description" placeholder="Enter product description" rows="3" />
+                        </div>
+                        <div class="form-field full-width">
+                            <label class="field-label">Product Image (Optional)</label>
+                            <div class="image-upload-container">
+                                <InputFile OnChange="HandleUpdateImageSelected" class="file-input" id="updateImageInput" accept="image/*" />
+                                <label for="updateImageInput" class="file-input-label">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="17 8 12 3 7 8"></polyline>
+                                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                                    </svg>
+                                    <span>@(string.IsNullOrEmpty(_updateImageFileName) ? "Change Image" : _updateImageFileName)</span>
+                                </label>
+                                @if (!string.IsNullOrEmpty(_updateImagePreview))
+                                {
+                                    <div class="image-preview">
+                                        <img src="@_updateImagePreview" alt="Preview" />
+                                        <button type="button" class="remove-image-btn" @onclick="RemoveUpdateImage">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                }
+                                else if (!string.IsNullOrEmpty(_updateProductModel.ExistingImageBase64))
+                                {
+                                    <div class="image-preview">
+                                        <img src="data:image/jpeg;base64,@_updateProductModel.ExistingImageBase64" alt="Current Image" />
+                                        <div class="existing-image-label">Current Image</div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-btn" @onclick="CloseUpdateProductModal">
+                            <span>Cancel</span>
+                        </button>
+                        <button type="submit" class="save-product-btn">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                <polyline points="7 3 7 8 15 8"></polyline>
+                            </svg>
+                            <span>Update Product</span>
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<IT13_Final.Services.Data.ProductModel> Products = new();
+    private List<IT13_Final.Services.Data.CategoryOption> categories = new();
+    private string searchTerm = string.Empty;
+    private bool isLoading = true;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling((double)totalCount / pageSize);
+
+    private bool showProductDetails = false;
+    private IT13_Final.Services.Data.ProductDetailsModel? productDetails = null;
+
+    private bool showSuccessMessage = false;
+    private string successMessageText = string.Empty;
+    private System.Threading.Timer? _successBannerTimer;
+
+    private bool showAddProductModal = false;
+    private AddProductModel _addProductModel = new();
+    private EditContext? _addProductEditContext;
+    private byte[]? _addImageData;
+    private string? _addImageContentType;
+    private string? _addImagePreview;
+    private string? _addImageFileName;
+
+    private bool showUpdateProductModal = false;
+    private UpdateProductModel _updateProductModel = new();
+    private EditContext? _updateProductEditContext;
+    private int _updateProductId;
+    private byte[]? _updateImageData;
+    private string? _updateImageContentType;
+    private string? _updateImagePreview;
+    private string? _updateImageFileName;
+
+    private System.Threading.Timer? _searchTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _addProductEditContext = new EditContext(_addProductModel);
+        _updateProductEditContext = new EditContext(_updateProductModel);
+        await LoadCategoriesAsync();
+        await LoadProductsAsync();
+    }
+
+    private async Task LoadCategoriesAsync()
+    {
+        try
+        {
+            categories = await ProductService.GetActiveCategoriesAsync();
+        }
+        catch (Exception)
+        {
+            categories = new List<IT13_Final.Services.Data.CategoryOption>();
+        }
+    }
+
+    private async Task LoadProductsAsync()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            totalCount = await ProductService.GetProductsCountAsync(searchTerm);
+            Products = await ProductService.GetProductsAsync(searchTerm, currentPage, pageSize);
+        }
+        catch (Exception)
+        {
+            Products = new List<IT13_Final.Services.Data.ProductModel>();
+            totalCount = 0;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void HandleSearchInput(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? string.Empty;
+        
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            currentPage = 1;
+            await InvokeAsync(async () => await LoadProductsAsync());
+        }, null, 300, Timeout.Infinite);
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _searchTimer?.Dispose();
+            currentPage = 1;
+            await LoadProductsAsync();
+        }
+    }
+
+    private async Task PreviousPage()
+    {
+        if (currentPage > 1)
+        {
+            currentPage--;
+            await LoadProductsAsync();
+        }
+    }
+
+    private async Task NextPage()
+    {
+        if (currentPage < totalPages)
+        {
+            currentPage++;
+            await LoadProductsAsync();
+        }
+    }
+
+    private void NavigateToArchive()
+    {
+        Nav.NavigateTo("/seller/Archive_Product_Record");
+    }
+
+    private void HandleAddProduct()
+    {
+        _addProductModel = new AddProductModel();
+        _addProductEditContext = new EditContext(_addProductModel);
+        _addImageData = null;
+        _addImageContentType = null;
+        _addImagePreview = null;
+        _addImageFileName = null;
+        showAddProductModal = true;
+    }
+
+    private async Task HandleAddImageSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file != null)
+        {
+            try
+            {
+                const long maxFileSize = 5 * 1024 * 1024; // 5MB
+                if (file.Size > maxFileSize)
+    {
+                    await JSRuntime.InvokeVoidAsync("alert", "Image file size must be less than 5MB");
+                    return;
+                }
+
+                using var stream = file.OpenReadStream(maxFileSize);
+                using var memoryStream = new MemoryStream();
+                await stream.CopyToAsync(memoryStream);
+                _addImageData = memoryStream.ToArray();
+                _addImageContentType = file.ContentType;
+                _addImageFileName = file.Name;
+                _addImagePreview = $"data:{file.ContentType};base64,{Convert.ToBase64String(_addImageData)}";
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Error loading image: {ex.Message}");
+            }
+        }
+    }
+
+    private void RemoveAddImage()
+    {
+        _addImageData = null;
+        _addImageContentType = null;
+        _addImagePreview = null;
+        _addImageFileName = null;
+        StateHasChanged();
+    }
+
+    private async Task SaveProductAsync()
+    {
+        if (!_addProductEditContext.Validate())
+            return;
+
+        try
+        {
+            var result = await ProductService.CreateProductAsync(
+                _addProductModel.Name,
+                _addProductModel.Description,
+                _addProductModel.CategoryId,
+                _addImageData,
+                _addImageContentType
+            );
+
+            if (result.HasValue)
+            {
+                ShowSuccessMessage("Product added successfully!");
+                showAddProductModal = false;
+                await LoadProductsAsync();
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Failed to add product.");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error adding product: {ex.Message}");
+        }
+    }
+
+    private void CloseAddProductModal()
+    {
+        showAddProductModal = false;
+        _addImageData = null;
+        _addImageContentType = null;
+        _addImagePreview = null;
+        _addImageFileName = null;
+    }
+
+    private async Task HandleEdit(int productId)
+    {
+        try
+    {
+            var productToUpdate = await ProductService.GetProductDetailsAsync(productId);
+            if (productToUpdate != null)
+        {
+                _updateProductModel = new UpdateProductModel
+            {
+                    Name = productToUpdate.Name,
+                    Description = productToUpdate.Description,
+                    CategoryId = productToUpdate.CategoryId,
+                    ExistingImageBase64 = productToUpdate.ImageBase64
+                };
+                _updateProductEditContext = new EditContext(_updateProductModel);
+                _updateProductId = productId;
+                _updateImageData = null;
+                _updateImageContentType = null;
+                _updateImagePreview = null;
+                _updateImageFileName = null;
+                showUpdateProductModal = true;
+        }
+    }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading product: {ex.Message}");
+        }
+    }
+
+    private async Task HandleUpdateImageSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file != null)
+        {
+            try
+            {
+                const long maxFileSize = 5 * 1024 * 1024; // 5MB
+                if (file.Size > maxFileSize)
+    {
+                    await JSRuntime.InvokeVoidAsync("alert", "Image file size must be less than 5MB");
+                    return;
+                }
+
+                using var stream = file.OpenReadStream(maxFileSize);
+                using var memoryStream = new MemoryStream();
+                await stream.CopyToAsync(memoryStream);
+                _updateImageData = memoryStream.ToArray();
+                _updateImageContentType = file.ContentType;
+                _updateImageFileName = file.Name;
+                _updateImagePreview = $"data:{file.ContentType};base64,{Convert.ToBase64String(_updateImageData)}";
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Error loading image: {ex.Message}");
+            }
+        }
+    }
+
+    private void RemoveUpdateImage()
+    {
+        _updateImageData = null;
+        _updateImageContentType = null;
+        _updateImagePreview = null;
+        _updateImageFileName = null;
+        StateHasChanged();
+    }
+
+    private async Task SaveUpdateProductAsync()
+    {
+        if (!_updateProductEditContext.Validate())
+            return;
+
+        try
+        {
+            var success = await ProductService.UpdateProductAsync(
+                _updateProductId,
+                _updateProductModel.Name,
+                _updateProductModel.Description,
+                _updateProductModel.CategoryId,
+                _updateImageData,
+                _updateImageContentType
+            );
+
+            if (success)
+            {
+                ShowSuccessMessage("Product updated successfully!");
+                showUpdateProductModal = false;
+                await LoadProductsAsync();
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Failed to update product.");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error updating product: {ex.Message}");
+        }
+    }
+
+    private void CloseUpdateProductModal()
+    {
+        showUpdateProductModal = false;
+        _updateImageData = null;
+        _updateImageContentType = null;
+        _updateImagePreview = null;
+        _updateImageFileName = null;
+    }
+
+    private async Task HandleDelete(int productId)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to archive this product?");
+        if (confirmed)
+        {
+            try
+            {
+                var success = await ProductService.ArchiveProductAsync(productId);
+        if (success)
+        {
+                    ShowSuccessMessage("Product archived successfully!");
+                    await LoadProductsAsync();
+                }
+                else
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", "Failed to archive product.");
+                }
+            }
+            catch (Exception ex)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Error archiving product: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task HandleRowClick(int productId)
+    {
+        productDetails = await ProductService.GetProductDetailsAsync(productId);
+        if (productDetails != null)
+        {
+            showProductDetails = true;
+        }
+    }
+
+    private void CloseProductDetails()
+    {
+        showProductDetails = false;
+        productDetails = null;
+    }
+
+    private void ShowSuccessMessage(string message)
+    {
+        successMessageText = message;
+        showSuccessMessage = true;
+        StateHasChanged();
+
+        _successBannerTimer?.Dispose();
+        _successBannerTimer = new System.Threading.Timer(_ =>
+            {
+                showSuccessMessage = false;
+            InvokeAsync(StateHasChanged);
+        }, null, 3000, Timeout.Infinite);
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+        _successBannerTimer?.Dispose();
+    }
+
+    public class AddProductModel
+    {
+        [Required(ErrorMessage = "Product name is required")]
+        [StringLength(200, ErrorMessage = "Product name cannot exceed 200 characters")]
+        public string Name { get; set; } = string.Empty;
+
+        [StringLength(1000, ErrorMessage = "Description cannot exceed 1000 characters")]
+        public string? Description { get; set; }
+
+        [Required(ErrorMessage = "Category is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Please select a valid category")]
+        public int CategoryId { get; set; }
+    }
+
+    public class UpdateProductModel
+    {
+        [Required(ErrorMessage = "Product name is required")]
+        [StringLength(200, ErrorMessage = "Product name cannot exceed 200 characters")]
+        public string Name { get; set; } = string.Empty;
+
+        [StringLength(1000, ErrorMessage = "Description cannot exceed 1000 characters")]
+        public string? Description { get; set; }
+
+        [Required(ErrorMessage = "Category is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Please select a valid category")]
+        public int CategoryId { get; set; }
+
+        public string? ExistingImageBase64 { get; set; }
+}
+}

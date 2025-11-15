@@ -1,0 +1,336 @@
+﻿@page "/seller/Archive_Category_Record"
+@layout IT13_Final.Components.Layout.Seller.Seller
+@inject IT13_Final.Services.Data.ICategoryService CategoryService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Nav
+@implements IDisposable
+
+<h1 class="page-title">Archived Categories</h1>
+
+@if (showSuccessMessage && !string.IsNullOrEmpty(successMessageText))
+{
+    <div class="success-banner">
+        <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span>@successMessageText</span>
+    </div>
+}
+
+<div class="admin-records-container">
+    <div class="search-actions-row">
+        <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input type="text" class="search-input" placeholder="Search archived categories" value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        </div>
+
+        <div class="action-buttons">
+            <button class="back-btn" @onclick="NavigateBack">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+                <span>Back to Categories</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <div class="table-header">List</div>
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th>Archived Date</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="5" class="loading-cell">Loading...</td>
+                    </tr>
+                }
+                else if (archivedCategories.Count == 0)
+                {
+                    <tr>
+                        <td colspan="5" class="empty-cell">No archived categories found</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var category in archivedCategories)
+                    {
+                        <tr class="clickable-row" @onclick="() => HandleRowClick(category.Id)">
+                            <td>@category.Id</td>
+                            <td class="category-name">@category.Name</td>
+                            <td class="description-cell">@(string.IsNullOrEmpty(category.Description) ? "N/A" : category.Description)</td>
+                            <td>@category.ArchivedDate.ToString("MMM dd, yyyy")</td>
+                            <td class="actions-cell" @onclick:stopPropagation>
+                                <button class="action-btn restore-btn" @onclick="() => HandleRestore(category.Id)" title="Restore">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+                                        <path d="M21 3v5h-5"></path>
+                                        <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+                                        <path d="M8 16H3v5"></path>
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="pagination-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+            
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                @if (i == 1 || i == totalPages || (i >= currentPage - 2 && i <= currentPage + 2))
+                {
+                    <button class="pagination-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(i)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 3 || i == currentPage + 3)
+                {
+                    <span class="pagination-ellipsis">...</span>
+                }
+            }
+            
+            <button class="pagination-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+@if (showCategoryDetails && categoryDetails != null)
+{
+    <div class="modal-overlay" @onclick="CloseCategoryDetails">
+        <div class="modal-container" @onclick:stopPropagation>
+            <div class="modal-header">
+                <div class="modal-title">
+                    <svg class="modal-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    </svg>
+                    <span>Category Details</span>
+                </div>
+                <button class="modal-close" @onclick="CloseCategoryDetails">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-content">
+                <div class="details-column">
+                    <div class="details-section">
+                        <div class="details-section-header">
+                            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                            </svg>
+                            <span>Category Information</span>
+                        </div>
+                        <div class="details-list">
+                            <div class="detail-item">
+                                <span class="detail-label">Category NAME:</span>
+                                <span class="detail-value">@categoryDetails.Name</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">DESCRIPTION:</span>
+                                <span class="detail-value">@(string.IsNullOrEmpty(categoryDetails.Description) ? "N/A" : categoryDetails.Description)</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">STATUS:</span>
+                                <span class="detail-value status-badge inactive">@categoryDetails.Status</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">DATE CREATED:</span>
+                                <span class="detail-value">@categoryDetails.DateCreated.ToString("M/d/yyyy")</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="close-btn" @onclick="CloseCategoryDetails">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                    <span>CLOSE</span>
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<IT13_Final.Services.Data.ArchivedCategoryModel> archivedCategories = new();
+    private string searchTerm = string.Empty;
+    private bool isLoading = true;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling((double)totalCount / pageSize);
+    private bool showCategoryDetails = false;
+    private IT13_Final.Services.Data.CategoryDetailsModel? categoryDetails = null;
+
+    private bool showSuccessMessage = false;
+    private string successMessageText = string.Empty;
+    private System.Threading.Timer? _successBannerTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadArchivedCategoriesAsync();
+    }
+
+    private async Task LoadArchivedCategoriesAsync()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            totalCount = await CategoryService.GetArchivedCategoriesCountAsync(searchTerm);
+            archivedCategories = await CategoryService.GetArchivedCategoriesAsync(searchTerm, currentPage, pageSize);
+        }
+        catch (Exception)
+        {
+            archivedCategories = new List<IT13_Final.Services.Data.ArchivedCategoryModel>();
+            totalCount = 0;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            currentPage = 1;
+            await LoadArchivedCategoriesAsync();
+        }
+    }
+
+    private System.Threading.Timer? _searchTimer;
+    private void HandleSearchInput(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? string.Empty;
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            currentPage = 1;
+            await InvokeAsync(async () =>
+            {
+                await LoadArchivedCategoriesAsync();
+            });
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages && page != currentPage)
+        {
+            currentPage = page;
+            await LoadArchivedCategoriesAsync();
+        }
+    }
+
+    private void NavigateBack()
+    {
+        Nav.NavigateTo("/seller/Category");
+    }
+
+    private async Task HandleRestore(int categoryId)
+    {
+        var category = archivedCategories.FirstOrDefault(c => c.Id == categoryId);
+        var categoryName = category?.Name ?? "this category";
+        
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to restore {categoryName}?");
+        if (!confirmed) return;
+        
+        try
+        {
+            var success = await CategoryService.RestoreCategoryAsync(categoryId);
+            
+            if (success)
+            {
+                await LoadArchivedCategoriesAsync();
+                successMessageText = "Category restored successfully!";
+                showSuccessMessage = true;
+                
+                _successBannerTimer?.Dispose();
+                _successBannerTimer = new System.Threading.Timer(async _ =>
+                {
+                    await InvokeAsync(() =>
+                    {
+                        showSuccessMessage = false;
+                        successMessageText = string.Empty;
+                        StateHasChanged();
+                    });
+                }, null, 5000, Timeout.Infinite);
+            }
+        }
+        catch (Exception)
+        {
+            // Handle error
+        }
+        
+        StateHasChanged();
+    }
+
+    private async Task HandleRowClick(int categoryId)
+    {
+        showCategoryDetails = true;
+        StateHasChanged();
+
+        try
+        {
+            categoryDetails = await CategoryService.GetArchivedCategoryDetailsAsync(categoryId);
+        }
+        catch
+        {
+            categoryDetails = null;
+        }
+        finally
+        {
+            StateHasChanged();
+        }
+    }
+
+    private void CloseCategoryDetails()
+    {
+        showCategoryDetails = false;
+        categoryDetails = null;
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+        _successBannerTimer?.Dispose();
+    }
+}
+

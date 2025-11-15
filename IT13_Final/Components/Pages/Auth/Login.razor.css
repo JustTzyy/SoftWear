@@ -1,0 +1,32 @@
+/* All styles have been converted to Tailwind CSS utility classes */
+/* Custom color palette:
+   - Ivory: #F8FCEE
+   - Platinum: #E0E0E0
+   - Uranian Blue: #A7CCED
+   - YInMn Blue: #304D6D
+   - Air Superiority Blue: #82A0BC
+*/
+
+/* Blazor validation message styling */
+.validation-message {
+    color: #b04a4a;
+    font-size: 12px;
+    margin-top: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+

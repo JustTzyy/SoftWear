@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>IT13_Final</title>
+    <base href="/" />
+    <link rel="stylesheet" href="lib/bootstrap/dist/css/bootstrap.min.css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'light-blue-gray': '#A2B9CD',
+                        'platinum': '#E0E0E0',
+                        'uranian-blue': '#A7CCED',
+                        'yinmn-blue': '#304D6D',
+                        'air-blue': '#82A0BC',
+                    },
+                },
+            },
+        }
+    </script>
+    <link rel="stylesheet" href="app.css" />
+    <link rel="stylesheet" href="IT13_Final.styles.css" />
+    <link rel="icon" href="data:,">
+</head>
+
+<body>
+
+    <div class="status-bar-safe-area"></div>
+
+    <div id="app">Loading...</div>
+
+    <div id="blazor-error-ui" data-nosnippet>
+        An unhandled error has occurred.
+        <a href="." class="reload">Reload</a>
+        <span class="dismiss">🗙</span>
+    </div>
+
+    <script src="_framework/blazor.webview.js" autostart="false"></script>
+    
+    <!-- jsPDF Library for PDF Generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    
+    <script>
+        window.generateAndPrintPDF = function(logs, userName, fromDate, toDate) {
+            try {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                
+                // Header
+                doc.setFontSize(18);
+                doc.setTextColor(40, 40, 40);
+                doc.text('Activity Log Report', 14, 20);
+                
+                // User and Date Range Info
+                doc.setFontSize(10);
+                doc.setTextColor(100, 100, 100);
+                doc.text(`User: ${userName}`, 14, 30);
+                doc.text(`Date Range: ${fromDate} - ${toDate}`, 14, 36);
+                doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 42);
+                
+                // Table Data
+                const tableData = logs.map(log => [
+                    log.status || '',
+                    log.module || '',
+                    log.description || '',
+                    `${log.date || ''} ${log.time || ''}`
+                ]);
+                
+                // Create table
+                doc.autoTable({
+                    startY: 48,
+                    head: [['Status', 'Module', 'Description', 'Date']],
+                    body: tableData,
+                    theme: 'striped',
+                    headStyles: {
+                        fillColor: [144, 238, 145],
+                        textColor: [15, 63, 17],
+                        fontStyle: 'bold'
+                    },
+                    styles: {
+                        fontSize: 8,
+                        cellPadding: 3
+                    },
+                    columnStyles: {
+                        0: { cellWidth: 30 },
+                        1: { cellWidth: 35 },
+                        2: { cellWidth: 80 },
+                        3: { cellWidth: 40 }
+                    }
+                });
+                
+                // Footer
+                const pageCount = doc.internal.getNumberOfPages();
+                for (let i = 1; i <= pageCount; i++) {
+                    doc.setPage(i);
+                    doc.setFontSize(8);
+                    doc.setTextColor(150, 150, 150);
+                    doc.text(
+                        `Page ${i} of ${pageCount}`,
+                        doc.internal.pageSize.getWidth() / 2,
+                        doc.internal.pageSize.getHeight() - 10,
+                        { align: 'center' }
+                    );
+                }
+                
+                // Generate PDF blob
+                const pdfBlob = doc.output('blob');
+                
+                // Download PDF
+                doc.save('Activity_Log_Report.pdf');
+                
+                // Open PDF in new window for printing
+                const pdfUrl = URL.createObjectURL(pdfBlob);
+                const printWindow = window.open(pdfUrl);
+                
+                if (printWindow) {
+                    // Wait for PDF to load, then trigger print
+                    setTimeout(() => {
+                        printWindow.focus();
+                        printWindow.print();
+                        // Clean up the object URL after printing
+                        setTimeout(() => {
+                            URL.revokeObjectURL(pdfUrl);
+                        }, 1000);
+                    }, 1000);
+                } else {
+                    // If popup blocked, try alternative method
+                    const link = document.createElement('a');
+                    link.href = pdfUrl;
+                    link.target = '_blank';
+                    link.click();
+                }
+            } catch (error) {
+                console.error('Error generating PDF:', error);
+                // Fallback to regular print
+                window.print();
+            }
+        };
+
+        // Function to filter input to allow only letters and specific characters
+        window.filterNameInput = function(elementId) {
+            const element = document.getElementById(elementId);
+            if (element && !element.hasAttribute('data-filtered')) {
+                element.setAttribute('data-filtered', 'true');
+                
+                element.addEventListener('input', function(e) {
+                    const value = e.target.value;
+                    const filtered = value.replace(/[^a-zA-Z\s'.-]/g, '');
+                    if (value !== filtered) {
+                        e.target.value = filtered;
+                        // Trigger input event for Blazor binding
+                        e.target.dispatchEvent(new Event('input', { bubbles: true }));
+                    }
+                });
+                
+                element.addEventListener('keypress', function(e) {
+                    const char = String.fromCharCode(e.which || e.keyCode);
+                    if (/\d/.test(char)) {
+                        e.preventDefault();
+                        return false;
+                    }
+                });
+                
+                // Also handle paste
+                element.addEventListener('paste', function(e) {
+                    e.preventDefault();
+                    const paste = (e.clipboardData || window.clipboardData).getData('text');
+                    const filtered = paste.replace(/[^a-zA-Z\s'.-]/g, '');
+                    const start = this.selectionStart;
+                    const end = this.selectionEnd;
+                    const currentValue = this.value;
+                    this.value = currentValue.substring(0, start) + filtered + currentValue.substring(end);
+                    this.selectionStart = this.selectionEnd = start + filtered.length;
+                    this.dispatchEvent(new Event('input', { bubbles: true }));
+                });
+            }
+        };
+    </script>
+
+</body>
+
+</html>

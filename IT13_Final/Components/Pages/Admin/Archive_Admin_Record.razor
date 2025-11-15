@@ -1,0 +1,401 @@
+@page "/admin/Archive_Admin_Record"
+@layout IT13_Final.Components.Layout.Admin.Admin
+@inject IT13_Final.Services.Data.IUserService UserService
+@inject IJSRuntime JSRuntime
+@using System.Linq
+@implements IDisposable
+
+<h1 class="page-title">Archived Admin Records</h1>
+
+@if (showSuccessMessage && !string.IsNullOrEmpty(successMessageText))
+{
+    <div class="success-banner">
+        <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span>@successMessageText</span>
+    </div>
+}
+
+<div class="admin-records-container">
+    <div class="search-actions-row">
+        <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input type="text" class="search-input" placeholder="Search archived admins" value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        </div>
+
+        <div class="action-buttons">
+            <button class="back-btn" @onclick="NavigateToRecords">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+                <span>Back to Records</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <div class="table-header">List</div>
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Archived Date</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="5" class="loading-cell">Loading...</td>
+                    </tr>
+                }
+                else if (archivedUsers.Count == 0)
+                {
+                    <tr>
+                        <td colspan="5" class="empty-cell">No archived admin users found</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var user in archivedUsers)
+                    {
+                        <tr class="clickable-row" @onclick="() => HandleRowClick(user.Id)">
+                            <td>@user.Id</td>
+                            <td class="user-name">@user.Name</td>
+                            <td>@user.Email</td>
+                            <td>@user.ArchivedDate.ToString("MMM dd, yyyy")</td>
+                            <td class="actions-cell" @onclick:stopPropagation>
+                                <button class="action-btn restore-btn" @onclick="() => HandleRestore(user.Id)" title="Restore">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+                                        <path d="M21 3v5h-5"></path>
+                                        <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+                                        <path d="M8 16H3v5"></path>
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="pagination-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+            
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                @if (i == 1 || i == totalPages || (i >= currentPage - 2 && i <= currentPage + 2))
+                {
+                    <button class="pagination-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(i)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 3 || i == currentPage + 3)
+                {
+                    <span class="pagination-ellipsis">...</span>
+                }
+            }
+            
+            <button class="pagination-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+@if (showUserDetails && userDetails != null)
+{
+    <div class="modal-overlay" @onclick="CloseUserDetails">
+        <div class="modal-container" @onclick:stopPropagation>
+            <div class="modal-header">
+                <div class="modal-title">
+                    <svg class="modal-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                    <span>User Details</span>
+                </div>
+                <button class="modal-close" @onclick="CloseUserDetails">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-content">
+                <div class="details-column">
+                    <div class="details-section">
+                        <div class="details-section-header">
+                            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="12" cy="7" r="4"></circle>
+                            </svg>
+                            <span>Personal Information</span>
+                        </div>
+                        <div class="details-list">
+                            <div class="detail-item">
+                                <span class="detail-label">FULL NAME:</span>
+                                <span class="detail-value">@userDetails.FullName</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">EMAIL:</span>
+                                <span class="detail-value">@userDetails.Email</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">BIRTHDAY:</span>
+                                <span class="detail-value">@(userDetails.Birthday?.ToString("M/d/yyyy") ?? "N/A")</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">AGE:</span>
+                                <span class="detail-value">@(userDetails.Age?.ToString() ?? "N/A")</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">SEX:</span>
+                                <span class="detail-value">@(string.IsNullOrEmpty(userDetails.Sex) ? "N/A" : userDetails.Sex)</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">CONTACT NUMBER:</span>
+                                <span class="detail-value">@(string.IsNullOrEmpty(userDetails.Contact) ? "N/A" : userDetails.Contact)</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">STATUS:</span>
+                                <span class="detail-value status-badge @(userDetails.Status.ToUpper() == "ACTIVE" ? "active" : "inactive")">@userDetails.Status</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">DATE CREATED:</span>
+                                <span class="detail-value">@userDetails.DateCreated.ToString("M/d/yyyy")</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="details-column">
+                    <div class="details-section">
+                        <div class="details-section-header">
+                            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                                <circle cx="12" cy="10" r="3"></circle>
+                            </svg>
+                            <span>Address Information</span>
+                        </div>
+                        <div class="details-list">
+                            <div class="detail-item">
+                                <span class="detail-label">STREET ADDRESS:</span>
+                                <span class="detail-value">@(string.IsNullOrEmpty(userDetails.Street) ? "N/A" : userDetails.Street)</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">CITY:</span>
+                                <span class="detail-value">@(string.IsNullOrEmpty(userDetails.City) ? "N/A" : userDetails.City)</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">PROVINCE:</span>
+                                <span class="detail-value">@(string.IsNullOrEmpty(userDetails.Province) ? "N/A" : userDetails.Province)</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">ZIP CODE:</span>
+                                <span class="detail-value">@(string.IsNullOrEmpty(userDetails.Zip) ? "N/A" : userDetails.Zip)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="close-btn" @onclick="CloseUserDetails">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                    <span>CLOSE</span>
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<IT13_Final.Services.Data.ArchivedAdminUserModel> archivedUsers = new();
+    private string searchTerm = string.Empty;
+    private bool isLoading = true;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling((double)totalCount / pageSize);
+    private bool showSuccessMessage = false;
+    private string successMessageText = string.Empty;
+    private System.Threading.Timer? _successBannerTimer;
+    private System.Threading.Timer? _searchTimer;
+    private bool showUserDetails = false;
+    private IT13_Final.Services.Data.UserDetailsModel? userDetails = null;
+    private bool isLoadingDetails = false;
+
+    [Inject] private NavigationManager Nav { get; set; } = null!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadArchivedUsersAsync();
+    }
+
+    private async Task LoadArchivedUsersAsync()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            totalCount = await UserService.GetArchivedAdminUsersCountAsync(searchTerm);
+            archivedUsers = await UserService.GetArchivedAdminUsersAsync(searchTerm, currentPage, pageSize);
+        }
+        catch (Exception)
+        {
+            archivedUsers = new List<IT13_Final.Services.Data.ArchivedAdminUserModel>();
+            totalCount = 0;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            currentPage = 1;
+            await LoadArchivedUsersAsync();
+        }
+    }
+
+    private void HandleSearchInput(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? string.Empty;
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            currentPage = 1;
+            await InvokeAsync(async () =>
+            {
+                await LoadArchivedUsersAsync();
+            });
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages)
+        {
+            if (page != currentPage)
+            {
+                currentPage = page;
+                await LoadArchivedUsersAsync();
+            }
+        }
+    }
+
+    private void NavigateToRecords()
+    {
+        Nav.NavigateTo("/admin/Admin_Record");
+    }
+
+    private async Task HandleRowClick(int userId)
+    {
+        showUserDetails = true;
+        isLoadingDetails = true;
+        StateHasChanged();
+
+        try
+        {
+            userDetails = await UserService.GetArchivedUserDetailsAsync(userId);
+        }
+        catch
+        {
+            userDetails = null;
+        }
+        finally
+        {
+            isLoadingDetails = false;
+            StateHasChanged();
+        }
+    }
+
+    private void CloseUserDetails()
+    {
+        showUserDetails = false;
+        userDetails = null;
+        StateHasChanged();
+    }
+
+    private async Task HandleRestore(int userId)
+    {
+        // Get the admin name for the confirmation dialog
+        var admin = archivedUsers.FirstOrDefault(u => u.Id == userId);
+        var adminName = admin?.Name ?? "this admin";
+        
+        // Show confirmation dialog
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to restore {adminName}?");
+        
+        if (!confirmed)
+        {
+            return; // User cancelled
+        }
+        
+        try
+        {
+            var success = await UserService.RestoreAdminAsync(userId);
+            
+            if (success)
+            {
+                // Refresh the list to remove the restored admin
+                await LoadArchivedUsersAsync();
+                
+                // Show success message
+                successMessageText = "Admin restored successfully!";
+                showSuccessMessage = true;
+                
+                // Set timer to hide success message after 5 seconds
+                _successBannerTimer?.Dispose();
+                _successBannerTimer = new System.Threading.Timer(async _ =>
+                {
+                    await InvokeAsync(() =>
+                    {
+                        showSuccessMessage = false;
+                        successMessageText = string.Empty;
+                        StateHasChanged();
+                    });
+                }, null, 5000, Timeout.Infinite);
+            }
+        }
+        catch (Exception)
+        {
+            // Handle error - could show an error message here
+        }
+        
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+        _successBannerTimer?.Dispose();
+    }
+}
+

@@ -1,0 +1,928 @@
+@page "/seller/Variant"
+@layout IT13_Final.Components.Layout.Seller.Seller
+@inject IT13_Final.Services.Data.IVariantService VariantService
+@inject IT13_Final.Services.Data.IColorService ColorService
+@inject IT13_Final.Services.Data.ISizeService SizeService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Nav
+@implements IDisposable
+@using System.ComponentModel.DataAnnotations
+
+<h1 class="page-title">Variant Records</h1>
+
+@if (showSuccessMessage && !string.IsNullOrEmpty(successMessageText))
+{
+    <div class="success-banner">
+        <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span>@successMessageText</span>
+    </div>
+}
+
+<div class="variants-container">
+    <div class="search-actions-row">
+        <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input type="text" class="search-input" placeholder="Search variants" value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        </div>
+
+        <div class="action-buttons">
+            <button class="archive-btn" @onclick="NavigateToArchive">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                    <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                </svg>
+                <span>Archive</span>
+            </button>
+            <button class="add-variant-btn" @onclick="HandleAddVariant">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="16"></line>
+                    <line x1="8" y1="12" x2="16" y2="12"></line>
+                </svg>
+                <span>Add Variant</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <div class="table-header">List</div>
+        <table class="variants-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Product</th>
+                    <th>Price</th>
+                    <th>Date Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="6" class="loading-cell">Loading...</td>
+                    </tr>
+                }
+                else if (Variants.Count == 0)
+                {
+                    <tr>
+                        <td colspan="6" class="empty-cell">No Variants found</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var variant in Variants)
+                    {
+                        <tr class="clickable-row" @onclick="() => HandleRowClick(variant.Id)">
+                            <td>@variant.Id</td>
+                            <td class="variant-name">@variant.Name</td>
+                            <td>@variant.ProductName</td>
+                            <td>₱@variant.Price.ToString("N2")</td>
+                            <td>@variant.DateCreated.ToString("MMM dd, yyyy")</td>
+                            <td class="actions-cell" @onclick:stopPropagation>
+                                <button class="action-btn edit-btn" @onclick="() => HandleEdit(variant.Id)" title="Edit">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                    </svg>
+                                </button>
+                                <button class="action-btn delete-btn" @onclick="() => HandleDelete(variant.Id)" title="Delete">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="3 6 5 6 21 6"></polyline>
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="pagination-btn" @onclick="PreviousPage" disabled="@(currentPage == 1)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+            <span class="page-info">Page @currentPage of @totalPages</span>
+            <button class="pagination-btn" @onclick="NextPage" disabled="@(currentPage == totalPages)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+@* Variant Details Modal *@
+@if (showVariantDetails && variantDetails != null)
+{
+    <div class="modal-overlay" @onclick="CloseVariantDetails">
+        <div class="modal-container" @onclick:stopPropagation>
+            <div class="modal-header">
+                <div class="modal-title">
+                    <svg class="modal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    </svg>
+                    <span>Variant Details</span>
+                </div>
+                <button class="modal-close" @onclick="CloseVariantDetails" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                    <span class="modal-close-text">Close</span>
+                </button>
+            </div>
+
+            <div class="modal-content-variant">
+                @if (!string.IsNullOrEmpty(variantDetails.ProductImageBase64))
+                {
+                    <div class="product-image-large" style="background-color: @(selectedColorHex ?? "#FFFFFF");">
+                        <img src="data:image/jpeg;base64,@variantDetails.ProductImageBase64" alt="@variantDetails.ProductName" />
+                    </div>
+                }
+                else
+                {
+                    <div class="product-image-large no-image" style="background-color: @(selectedColorHex ?? "#F5F7FA");">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                            <polyline points="21 15 16 10 5 21"></polyline>
+                        </svg>
+                    </div>
+                }
+                <div class="details-list">
+                    <div class="detail-item">
+                        <span class="detail-label">VARIANT NAME:</span>
+                        <span class="detail-value">@variantDetails.Name</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">PRODUCT:</span>
+                        <span class="detail-value">@variantDetails.ProductName</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">PRICE:</span>
+                        <span class="detail-value">₱@variantDetails.Price.ToString("N2")</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">COST PRICE:</span>
+                        <span class="detail-value">@(variantDetails.CostPrice.HasValue ? $"₱{variantDetails.CostPrice.Value:N2}" : "N/A")</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">SIZES:</span>
+                        <span class="detail-value">
+                            @if (variantDetails.SizeNames.Count > 0)
+                            {
+                                @string.Join(", ", variantDetails.SizeNames)
+                            }
+                            else
+                            {
+                                <span>None</span>
+                            }
+                        </span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">COLORS:</span>
+                        <span class="detail-value">
+                            @if (variantDetails.ColorNames.Count > 0 && variantDetails.ColorHexValues.Count > 0)
+                            {
+                                <div class="color-swatches-container">
+                                    @for (int i = 0; i < variantDetails.ColorNames.Count && i < variantDetails.ColorHexValues.Count; i++)
+                                    {
+                                        var colorHex = variantDetails.ColorHexValues[i];
+                                        var colorName = variantDetails.ColorNames[i];
+                                        <div class="color-swatch-item @(selectedColorHex == colorHex ? "selected" : "")" 
+                                             @onclick="() => SelectColor(colorHex)"
+                                             style="cursor: pointer;">
+                                            <span class="color-swatch-large" style="background-color: @colorHex;"></span>
+                                            <span class="color-name">@colorName</span>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <span>None</span>
+                            }
+                        </span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">STATUS:</span>
+                        <span class="detail-value status-badge @(variantDetails.Status.ToUpper() == "ACTIVE" ? "active" : "inactive")">@variantDetails.Status</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">DATE CREATED:</span>
+                        <span class="detail-value">@variantDetails.DateCreated.ToString("M/d/yyyy")</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* Add Variant Modal *@
+@if (showAddVariantModal)
+{
+    <div class="modal-overlay" @onclick="CloseAddVariantModal">
+        <div class="add-variant-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Add Variant</h2>
+                <button class="modal-close-btn" @onclick="CloseAddVariantModal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <EditForm EditContext="@_addVariantEditContext" OnValidSubmit="SaveVariantAsync">
+                    <DataAnnotationsValidator />
+                    
+                    <div class="form-grid">
+                        <div class="form-field">
+                            <label class="field-label">Variant Name</label>
+                            <InputText class="form-input" @bind-Value="_addVariantModel.Name" placeholder="e.g., Standard Variant" />
+                            <ValidationMessage For="@(() => _addVariantModel.Name)" />
+                        </div>
+                        <div class="form-field product-select-field">
+                            <label class="field-label">Product</label>
+                            <InputSelect class="form-input" @bind-Value="_addVariantModel.ProductId" @bind-Value:after="OnProductSelected">
+                                <option value="0">Select a product</option>
+                                @foreach (var product in products)
+                                {
+                                    <option value="@product.Id">@product.Name</option>
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => _addVariantModel.ProductId)" />
+                            @if (_addVariantModel.ProductId > 0)
+                            {
+                                var selectedProduct = products.FirstOrDefault(p => p.Id == _addVariantModel.ProductId);
+                                @if (selectedProduct != null && !string.IsNullOrEmpty(selectedProduct.ImageBase64))
+                                {
+                                    <div class="product-image-preview">
+                                        <img src="data:image/jpeg;base64,@selectedProduct.ImageBase64" alt="@selectedProduct.Name" />
+                                    </div>
+                                }
+                                else if (selectedProduct != null)
+                                {
+                                    <div class="product-image-preview no-image">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                            <polyline points="21 15 16 10 5 21"></polyline>
+                                        </svg>
+                                    </div>
+                                }
+                            }
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Price</label>
+                            <InputNumber class="form-input" @bind-Value="_addVariantModel.Price" @bind-Value:after="OnAddPriceChanged" placeholder="0.00" step="0.01" />
+                            <ValidationMessage For="@(() => _addVariantModel.Price)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Cost Price (Auto-calculated: 50% of Price)</label>
+                            <InputNumber class="form-input" @bind-Value="_addVariantModel.CostPrice" placeholder="0.00" step="0.01" readonly />
+                        </div>
+                        <div class="form-field full-width">
+                            <label class="field-label">Sizes</label>
+                            <div class="checkbox-group">
+                                @foreach (var size in activeSizes)
+                                {
+                                    <label class="checkbox-item">
+                                        <input type="checkbox" 
+                                               checked="@_addSelectedSizeIds.Contains(size.Id)"
+                                               @onchange="@((ChangeEventArgs e) => ToggleSize(size.Id, (bool)(e.Value ?? false)))" />
+                                        <span>@size.Name</span>
+                                    </label>
+                                }
+                            </div>
+                        </div>
+                        <div class="form-field full-width">
+                            <label class="field-label">Colors</label>
+                            <div class="checkbox-group color-checkbox-group">
+                                @foreach (var color in activeColors)
+                                {
+                                    <label class="checkbox-item color-checkbox-item">
+                                        <input type="checkbox" 
+                                               checked="@_addSelectedColorIds.Contains(color.Id)"
+                                               @onchange="@((ChangeEventArgs e) => ToggleColor(color.Id, (bool)(e.Value ?? false)))" />
+                                        <span class="color-swatch" style="background-color: @color.HexValue;"></span>
+                                        <span>@color.Name</span>
+                                    </label>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-btn" @onclick="CloseAddVariantModal">
+                            <span>Cancel</span>
+                        </button>
+                        <button type="submit" class="save-variant-btn">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                <polyline points="7 3 7 8 15 8"></polyline>
+                            </svg>
+                            <span>Save Variant</span>
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@* Update Variant Modal *@
+@if (showUpdateVariantModal)
+{
+    <div class="modal-overlay" @onclick="CloseUpdateVariantModal">
+        <div class="update-variant-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Update Variant</h2>
+                <button class="modal-close-btn" @onclick="CloseUpdateVariantModal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <EditForm EditContext="@_updateVariantEditContext" OnValidSubmit="SaveUpdateVariantAsync">
+                    <DataAnnotationsValidator />
+                    
+                    <div class="form-grid">
+                        <div class="form-field">
+                            <label class="field-label">Variant Name</label>
+                            <InputText class="form-input" @bind-Value="_updateVariantModel.Name" placeholder="e.g., Standard Variant" />
+                            <ValidationMessage For="@(() => _updateVariantModel.Name)" />
+                        </div>
+                        <div class="form-field product-select-field">
+                            <label class="field-label">Product</label>
+                            <InputSelect class="form-input" @bind-Value="_updateVariantModel.ProductId" @bind-Value:after="OnUpdateProductSelected">
+                                <option value="0">Select a product</option>
+                                @foreach (var product in products)
+                                {
+                                    <option value="@product.Id">@product.Name</option>
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => _updateVariantModel.ProductId)" />
+                            @if (_updateVariantModel.ProductId > 0)
+                            {
+                                var selectedProduct = products.FirstOrDefault(p => p.Id == _updateVariantModel.ProductId);
+                                @if (selectedProduct != null && !string.IsNullOrEmpty(selectedProduct.ImageBase64))
+                                {
+                                    <div class="product-image-preview">
+                                        <img src="data:image/jpeg;base64,@selectedProduct.ImageBase64" alt="@selectedProduct.Name" />
+                                    </div>
+                                }
+                                else if (selectedProduct != null)
+                                {
+                                    <div class="product-image-preview no-image">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                            <polyline points="21 15 16 10 5 21"></polyline>
+                                        </svg>
+                                    </div>
+                                }
+                            }
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Price</label>
+                            <InputNumber class="form-input" @bind-Value="_updateVariantModel.Price" @bind-Value:after="OnUpdatePriceChanged" placeholder="0.00" step="0.01" />
+                            <ValidationMessage For="@(() => _updateVariantModel.Price)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Cost Price (Auto-calculated: 50% of Price)</label>
+                            <InputNumber class="form-input" @bind-Value="_updateVariantModel.CostPrice" placeholder="0.00" step="0.01" readonly />
+                        </div>
+                        <div class="form-field full-width">
+                            <label class="field-label">Sizes</label>
+                            <div class="checkbox-group">
+                                @foreach (var size in activeSizes)
+                                {
+                                    <label class="checkbox-item">
+                                        <input type="checkbox" 
+                                               checked="@_updateSelectedSizeIds.Contains(size.Id)"
+                                               @onchange="@((ChangeEventArgs e) => ToggleUpdateSize(size.Id, (bool)(e.Value ?? false)))" />
+                                        <span>@size.Name</span>
+                                    </label>
+                                }
+                            </div>
+                        </div>
+                        <div class="form-field full-width">
+                            <label class="field-label">Colors</label>
+                            <div class="checkbox-group color-checkbox-group">
+                                @foreach (var color in activeColors)
+                                {
+                                    <label class="checkbox-item color-checkbox-item">
+                                        <input type="checkbox" 
+                                               checked="@_updateSelectedColorIds.Contains(color.Id)"
+                                               @onchange="@((ChangeEventArgs e) => ToggleUpdateColor(color.Id, (bool)(e.Value ?? false)))" />
+                                        <span class="color-swatch" style="background-color: @color.HexValue;"></span>
+                                        <span>@color.Name</span>
+                                    </label>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-btn" @onclick="CloseUpdateVariantModal">
+                            <span>Cancel</span>
+                        </button>
+                        <button type="submit" class="save-variant-btn">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                <polyline points="7 3 7 8 15 8"></polyline>
+                            </svg>
+                            <span>Update Variant</span>
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<IT13_Final.Services.Data.VariantModel> Variants = new();
+    private List<IT13_Final.Services.Data.ProductOption> products = new();
+    private List<IT13_Final.Services.Data.SizeOption> activeSizes = new();
+    private List<IT13_Final.Services.Data.ColorOption> activeColors = new();
+    private string searchTerm = string.Empty;
+    private bool isLoading = true;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling((double)totalCount / pageSize);
+
+    private bool showVariantDetails = false;
+    private IT13_Final.Services.Data.VariantDetailsModel? variantDetails = null;
+    private string? selectedColorHex = null;
+
+    private bool showSuccessMessage = false;
+    private string successMessageText = string.Empty;
+    private System.Threading.Timer? _successBannerTimer;
+
+    private bool showAddVariantModal = false;
+    private AddVariantModel _addVariantModel = new();
+    private EditContext? _addVariantEditContext;
+    private List<int> _addSelectedSizeIds = new();
+    private List<int> _addSelectedColorIds = new();
+
+    private bool showUpdateVariantModal = false;
+    private UpdateVariantModel _updateVariantModel = new();
+    private EditContext? _updateVariantEditContext;
+    private int _updateVariantId;
+    private List<int> _updateSelectedSizeIds = new();
+    private List<int> _updateSelectedColorIds = new();
+
+    private System.Threading.Timer? _searchTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _addVariantEditContext = new EditContext(_addVariantModel);
+        _updateVariantEditContext = new EditContext(_updateVariantModel);
+        await LoadProductsAsync();
+        await LoadSizesAsync();
+        await LoadColorsAsync();
+        await LoadVariantsAsync();
+    }
+
+    private async Task LoadProductsAsync()
+    {
+        try
+        {
+            products = await VariantService.GetActiveProductsAsync();
+        }
+        catch (Exception)
+        {
+            products = new List<IT13_Final.Services.Data.ProductOption>();
+        }
+    }
+
+    private async Task LoadSizesAsync()
+    {
+        try
+        {
+            activeSizes = await SizeService.GetActiveSizesAsync();
+        }
+        catch (Exception)
+        {
+            activeSizes = new List<IT13_Final.Services.Data.SizeOption>();
+        }
+    }
+
+    private async Task LoadColorsAsync()
+    {
+        try
+        {
+            activeColors = await ColorService.GetActiveColorsAsync();
+        }
+        catch (Exception)
+        {
+            activeColors = new List<IT13_Final.Services.Data.ColorOption>();
+        }
+    }
+
+    private async Task LoadVariantsAsync()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            totalCount = await VariantService.GetVariantsCountAsync(searchTerm);
+            Variants = await VariantService.GetVariantsAsync(searchTerm, currentPage, pageSize);
+        }
+        catch (Exception)
+        {
+            Variants = new List<IT13_Final.Services.Data.VariantModel>();
+            totalCount = 0;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void HandleSearchInput(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? string.Empty;
+        
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            currentPage = 1;
+            await InvokeAsync(async () => await LoadVariantsAsync());
+        }, null, 300, Timeout.Infinite);
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _searchTimer?.Dispose();
+            currentPage = 1;
+            await LoadVariantsAsync();
+        }
+    }
+
+    private async Task PreviousPage()
+    {
+        if (currentPage > 1)
+        {
+            currentPage--;
+            await LoadVariantsAsync();
+        }
+    }
+
+    private async Task NextPage()
+    {
+        if (currentPage < totalPages)
+        {
+            currentPage++;
+            await LoadVariantsAsync();
+        }
+    }
+
+    private void NavigateToArchive()
+    {
+        Nav.NavigateTo("/seller/Archive_Variant_Record");
+    }
+
+    private void HandleAddVariant()
+    {
+        _addVariantModel = new AddVariantModel();
+        _addVariantEditContext = new EditContext(_addVariantModel);
+        _addSelectedSizeIds = new List<int>();
+        _addSelectedColorIds = new List<int>();
+        showAddVariantModal = true;
+    }
+
+    private void OnProductSelected()
+    {
+        StateHasChanged();
+    }
+
+    private void OnUpdateProductSelected()
+    {
+        StateHasChanged();
+    }
+
+    private void OnAddPriceChanged()
+    {
+        if (_addVariantModel.Price > 0)
+        {
+            _addVariantModel.CostPrice = _addVariantModel.Price * 0.5m;
+            StateHasChanged();
+        }
+    }
+
+    private void OnUpdatePriceChanged()
+    {
+        if (_updateVariantModel.Price > 0)
+        {
+            _updateVariantModel.CostPrice = _updateVariantModel.Price * 0.5m;
+            StateHasChanged();
+        }
+    }
+
+    private void ToggleSize(int sizeId, bool isChecked)
+    {
+        if (isChecked)
+        {
+            if (!_addSelectedSizeIds.Contains(sizeId))
+                _addSelectedSizeIds.Add(sizeId);
+        }
+        else
+        {
+            _addSelectedSizeIds.Remove(sizeId);
+        }
+        StateHasChanged();
+    }
+
+    private void ToggleColor(int colorId, bool isChecked)
+    {
+        if (isChecked)
+        {
+            if (!_addSelectedColorIds.Contains(colorId))
+                _addSelectedColorIds.Add(colorId);
+        }
+        else
+        {
+            _addSelectedColorIds.Remove(colorId);
+        }
+        StateHasChanged();
+    }
+
+    private async Task SaveVariantAsync()
+    {
+        if (!_addVariantEditContext.Validate())
+            return;
+
+        try
+        {
+            var result = await VariantService.CreateVariantAsync(
+                _addVariantModel.Name,
+                _addVariantModel.Price,
+                _addVariantModel.CostPrice,
+                _addVariantModel.ProductId,
+                _addSelectedSizeIds,
+                _addSelectedColorIds
+            );
+
+            if (result.HasValue)
+            {
+                ShowSuccessMessage("Variant added successfully!");
+                showAddVariantModal = false;
+                await LoadVariantsAsync();
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Failed to add variant.");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error adding variant: {ex.Message}");
+        }
+    }
+
+    private void CloseAddVariantModal()
+    {
+        showAddVariantModal = false;
+        _addSelectedSizeIds = new List<int>();
+        _addSelectedColorIds = new List<int>();
+    }
+
+    private async Task HandleEdit(int variantId)
+    {
+        try
+        {
+            var variantToUpdate = await VariantService.GetVariantDetailsAsync(variantId);
+            if (variantToUpdate != null)
+            {
+                _updateVariantModel = new UpdateVariantModel
+                {
+                    Name = variantToUpdate.Name,
+                    Price = variantToUpdate.Price,
+                    CostPrice = variantToUpdate.CostPrice ?? (variantToUpdate.Price * 0.5m),
+                    ProductId = variantToUpdate.ProductId
+                };
+                _updateVariantEditContext = new EditContext(_updateVariantModel);
+                _updateVariantId = variantId;
+                _updateSelectedSizeIds = new List<int>(variantToUpdate.SizeIds);
+                _updateSelectedColorIds = new List<int>(variantToUpdate.ColorIds);
+                showUpdateVariantModal = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading variant: {ex.Message}");
+        }
+    }
+
+    private void ToggleUpdateSize(int sizeId, bool isChecked)
+    {
+        if (isChecked)
+        {
+            if (!_updateSelectedSizeIds.Contains(sizeId))
+                _updateSelectedSizeIds.Add(sizeId);
+        }
+        else
+        {
+            _updateSelectedSizeIds.Remove(sizeId);
+        }
+        StateHasChanged();
+    }
+
+    private void ToggleUpdateColor(int colorId, bool isChecked)
+    {
+        if (isChecked)
+        {
+            if (!_updateSelectedColorIds.Contains(colorId))
+                _updateSelectedColorIds.Add(colorId);
+        }
+        else
+        {
+            _updateSelectedColorIds.Remove(colorId);
+        }
+        StateHasChanged();
+    }
+
+    private async Task SaveUpdateVariantAsync()
+    {
+        if (!_updateVariantEditContext.Validate())
+            return;
+
+        try
+        {
+            var success = await VariantService.UpdateVariantAsync(
+                _updateVariantId,
+                _updateVariantModel.Name,
+                _updateVariantModel.Price,
+                _updateVariantModel.CostPrice,
+                _updateVariantModel.ProductId,
+                _updateSelectedSizeIds,
+                _updateSelectedColorIds
+            );
+
+            if (success)
+            {
+                ShowSuccessMessage("Variant updated successfully!");
+                showUpdateVariantModal = false;
+                await LoadVariantsAsync();
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Failed to update variant.");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error updating variant: {ex.Message}");
+        }
+    }
+
+    private void CloseUpdateVariantModal()
+    {
+        showUpdateVariantModal = false;
+        _updateSelectedSizeIds = new List<int>();
+        _updateSelectedColorIds = new List<int>();
+    }
+
+    private async Task HandleDelete(int variantId)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to archive this variant?");
+        if (confirmed)
+        {
+            try
+            {
+                var success = await VariantService.ArchiveVariantAsync(variantId);
+                if (success)
+                {
+                    ShowSuccessMessage("Variant archived successfully!");
+                    await LoadVariantsAsync();
+                }
+                else
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", "Failed to archive variant.");
+                }
+            }
+            catch (Exception ex)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Error archiving variant: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task HandleRowClick(int variantId)
+    {
+        variantDetails = await VariantService.GetVariantDetailsAsync(variantId);
+        if (variantDetails != null)
+        {
+            showVariantDetails = true;
+            // Set first color as default if available
+            if (variantDetails.ColorHexValues.Count > 0)
+            {
+                selectedColorHex = variantDetails.ColorHexValues[0];
+            }
+            else
+            {
+                selectedColorHex = null;
+            }
+        }
+    }
+
+    private void SelectColor(string colorHex)
+    {
+        selectedColorHex = colorHex;
+        StateHasChanged();
+    }
+
+    private void CloseVariantDetails()
+    {
+        showVariantDetails = false;
+        variantDetails = null;
+        selectedColorHex = null;
+    }
+
+    private void ShowSuccessMessage(string message)
+    {
+        successMessageText = message;
+        showSuccessMessage = true;
+        StateHasChanged();
+
+        _successBannerTimer?.Dispose();
+        _successBannerTimer = new System.Threading.Timer(_ =>
+        {
+            showSuccessMessage = false;
+            InvokeAsync(StateHasChanged);
+        }, null, 3000, Timeout.Infinite);
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+        _successBannerTimer?.Dispose();
+    }
+
+    public class AddVariantModel
+    {
+        [Required(ErrorMessage = "Variant name is required")]
+        [StringLength(200, ErrorMessage = "Variant name cannot exceed 200 characters")]
+        public string Name { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Product is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Please select a valid product")]
+        public int ProductId { get; set; }
+
+        [Required(ErrorMessage = "Price is required")]
+        [Range(0.01, double.MaxValue, ErrorMessage = "Price must be greater than 0")]
+        public decimal Price { get; set; }
+
+        [Range(0, double.MaxValue, ErrorMessage = "Cost price must be 0 or greater")]
+        public decimal? CostPrice { get; set; }
+    }
+
+    public class UpdateVariantModel
+    {
+        [Required(ErrorMessage = "Variant name is required")]
+        [StringLength(200, ErrorMessage = "Variant name cannot exceed 200 characters")]
+        public string Name { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Product is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Please select a valid product")]
+        public int ProductId { get; set; }
+
+        [Required(ErrorMessage = "Price is required")]
+        [Range(0.01, double.MaxValue, ErrorMessage = "Price must be greater than 0")]
+        public decimal Price { get; set; }
+
+        [Range(0, double.MaxValue, ErrorMessage = "Cost price must be 0 or greater")]
+        public decimal? CostPrice { get; set; }
+    }
+}
+

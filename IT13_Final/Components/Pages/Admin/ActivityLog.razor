@@ -1,0 +1,346 @@
+@page "/admin/activitylog"
+@layout IT13_Final.Components.Layout.Admin.Admin
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IT13_Final.Services.Audit.IHistoryService HistoryService
+@inject IJSRuntime JSRuntime
+@implements IDisposable
+@using System.Linq
+
+<h1 class="page-title">My Activity Logs</h1>
+
+<div class="activity-log-container">
+    <div class="search-filters-row">
+        <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input type="text" class="search-input" placeholder="Search my activity logs" value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        </div>
+
+        <button class="print-btn" @onclick="PrintReport" disabled="@isGeneratingPDF">
+            @if (isGeneratingPDF)
+            {
+                <span>Generating PDF...</span>
+            }
+            else
+            {
+                <svg class="print-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+                <span>Print Report</span>
+            }
+        </button>
+    </div>
+
+    <div class="filters-section">
+        <div class="filter-content">
+            <div class="date-filters">
+                <div class="date-range-dropdown">
+                    <label>Quick Range</label>
+                    <select class="date-range-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+                        <option value="">Custom</option>
+                        <option value="today">Today</option>
+                        <option value="yesterday">Yesterday</option>
+                        <option value="lastweek">Last Week</option>
+                        <option value="thismonth">This Month</option>
+                        <option value="thisyear">This Year</option>
+                    </select>
+                </div>
+                <div class="date-filter">
+                    <label>From</label>
+                    <input type="date" class="date-input" value="@(fromDate?.ToString("yyyy-MM-dd"))" max="@(toDate?.ToString("yyyy-MM-dd"))" @onchange="HandleFromDateChange" />
+                </div>
+                <div class="date-filter">
+                    <label>To</label>
+                    <input type="date" class="date-input" value="@(toDate?.ToString("yyyy-MM-dd"))" min="@(fromDate?.ToString("yyyy-MM-dd"))" @onchange="HandleToDateChange" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <table class="activity-table">
+            <thead>
+                <tr>
+                    <th>Status</th>
+                    <th>Module</th>
+                    <th>Description</th>
+                    <th>Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="4" class="loading-cell">Loading...</td>
+                    </tr>
+                }
+                else if (logs.Count == 0)
+                {
+                    <tr>
+                        <td colspan="4" class="empty-cell">No activity logs found</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var log in logs)
+                    {
+                        <tr>
+                            <td class="activity-status">@log.Status</td>
+                            <td class="activity-module">@log.Module</td>
+                            <td class="activity-desc">@log.Description</td>
+                            <td>
+                                <div class="timestamp-info">
+                                    <div class="timestamp-date">@log.Timestamp.ToString("MMM dd, yyyy")</div>
+                                    <div class="timestamp-time">@log.Timestamp.ToString("HH:mm:ss")</div>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                var pageNum = i; // Capture loop variable for lambda
+                @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
+                {
+                    <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 2 || i == currentPage + 2)
+                {
+                    <span class="page-ellipsis">...</span>
+                }
+            }
+
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    private List<IT13_Final.Services.Audit.HistoryLog> logs = new();
+    private string searchTerm = string.Empty;
+    private DateTime? fromDate;
+    private DateTime? toDate;
+    private string selectedDateRange = string.Empty;
+    private bool isLoading = true;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling((double)totalCount / pageSize);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLogsAsync();
+    }
+
+    private async Task LoadLogsAsync()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var userId = AuthState.CurrentUser?.Id;
+            
+            var count = await HistoryService.GetLogsCountAsync(userId, searchTerm, null, null, fromDate, toDate);
+            totalCount = count;
+
+            logs = await HistoryService.GetLogsAsync(userId, searchTerm, null, null, fromDate, toDate, currentPage, pageSize);
+        }
+        catch (Exception)
+        {
+            logs = new List<IT13_Final.Services.Audit.HistoryLog>();
+            totalCount = 0;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            currentPage = 1;
+            await LoadLogsAsync();
+        }
+    }
+
+    // Debounce search to avoid too many queries
+    private System.Threading.Timer? _searchTimer;
+    private void HandleSearchInput(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? string.Empty;
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            currentPage = 1;
+            await InvokeAsync(async () =>
+            {
+                await LoadLogsAsync();
+            });
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task HandleFromDateChange(ChangeEventArgs e)
+    {
+        selectedDateRange = string.Empty; // Reset dropdown when manually changing dates
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        {
+            fromDate = date.Date;
+            // If toDate is before fromDate, reset toDate
+            if (toDate.HasValue && toDate.Value < fromDate.Value)
+            {
+                toDate = null;
+            }
+        }
+        else
+        {
+            fromDate = null;
+        }
+        await ApplyFilters();
+    }
+
+    private async Task HandleToDateChange(ChangeEventArgs e)
+    {
+        selectedDateRange = string.Empty; // Reset dropdown when manually changing dates
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        {
+            var dateValue = date.Date;
+            // Ensure toDate is not before fromDate
+            if (fromDate.HasValue && dateValue < fromDate.Value)
+            {
+                // Don't allow toDate to be set before fromDate
+                return;
+            }
+            toDate = dateValue;
+        }
+        else
+        {
+            toDate = null;
+        }
+        await ApplyFilters();
+    }
+
+    private async Task HandleDateRangeChange()
+    {
+        var today = DateTime.Today;
+        
+        switch (selectedDateRange)
+        {
+            case "today":
+                fromDate = today;
+                toDate = today;
+                break;
+            case "yesterday":
+                fromDate = today.AddDays(-1);
+                toDate = today.AddDays(-1);
+                break;
+            case "lastweek":
+                fromDate = today.AddDays(-7);
+                toDate = today;
+                break;
+            case "thismonth":
+                fromDate = new DateTime(today.Year, today.Month, 1);
+                toDate = today;
+                break;
+            case "thisyear":
+                fromDate = new DateTime(today.Year, 1, 1);
+                toDate = today;
+                break;
+            default:
+                // Custom - don't change dates
+                break;
+        }
+        
+        await ApplyFilters();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages)
+        {
+            if (page != currentPage)
+            {
+                currentPage = page;
+                await LoadLogsAsync();
+            }
+        }
+    }
+
+    private async Task ApplyFilters()
+    {
+        currentPage = 1;
+        await LoadLogsAsync();
+    }
+
+    private List<IT13_Final.Services.Audit.HistoryLog> allLogsForPrint = new();
+    private bool isGeneratingPDF = false;
+
+    private async Task PrintReport()
+    {
+        try
+        {
+            isGeneratingPDF = true;
+            StateHasChanged();
+
+            // Fetch all logs without pagination (using a large page size)
+            var userId = AuthState.CurrentUser?.Id;
+            allLogsForPrint = await HistoryService.GetLogsAsync(userId, searchTerm, null, null, fromDate, toDate, 1, 10000);
+            
+            // Generate PDF and print
+            await JSRuntime.InvokeVoidAsync("generateAndPrintPDF", 
+                allLogsForPrint.Select(log => new {
+                    status = log.Status,
+                    module = log.Module,
+                    description = log.Description,
+                    date = log.Timestamp.ToString("MMM dd, yyyy"),
+                    time = log.Timestamp.ToString("HH:mm:ss")
+                }).ToArray(),
+                AuthState.CurrentUser?.FullName ?? "User",
+                fromDate?.ToString("MMM dd, yyyy") ?? "All Time",
+                toDate?.ToString("MMM dd, yyyy") ?? "Today"
+            );
+        }
+        catch (Exception ex)
+        {
+            // Fallback to regular print if PDF generation fails
+            await JSRuntime.InvokeVoidAsync("window.print");
+        }
+        finally
+        {
+            isGeneratingPDF = false;
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+    }
+}
+

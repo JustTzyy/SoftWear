@@ -1,0 +1,1615 @@
+@page "/admin/Seller_Record"
+@layout IT13_Final.Components.Layout.Admin.Admin
+@inject IT13_Final.Services.Data.IUserService UserService
+@inject IT13_Final.Services.Data.IAddressService AddressService
+@inject IT13_Final.Services.Data.IPhilippineAddressService PhilippineAddressService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Nav
+@using System.Linq
+@implements IDisposable
+
+<h1 class="page-title">Seller Records</h1>
+
+@if (showSuccessMessage && !string.IsNullOrEmpty(successMessageText))
+{
+    <div class="success-banner">
+        <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span>@successMessageText</span>
+    </div>
+}
+
+<div class="admin-records-container">
+    <div class="search-actions-row">
+        <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input type="text" class="search-input" placeholder="Search sellers" value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        </div>
+
+        <div class="action-buttons">
+            <button class="archive-btn" @onclick="NavigateToArchive">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                    <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                </svg>
+                <span>Archive</span>
+            </button>
+            <button class="add-admin-btn" @onclick="HandleAddSeller">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <line x1="19" y1="8" x2="19" y2="14"></line>
+                    <line x1="22" y1="11" x2="16" y2="11"></line>
+                </svg>
+                <span>Add Seller</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <div class="table-header">List</div>
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Date Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="5" class="loading-cell">Loading...</td>
+                    </tr>
+                }
+                else if (sellerUsers.Count == 0)
+                {
+                    <tr>
+                        <td colspan="5" class="empty-cell">No seller users found</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var user in sellerUsers)
+                    {
+                        <tr class="clickable-row" @onclick="() => HandleRowClick(user.Id)">
+                            <td>@user.Id</td>
+                            <td class="user-name">@user.Name</td>
+                            <td>@user.Email</td>
+                            <td>@user.DateCreated.ToString("MMM dd, yyyy")</td>
+                            <td class="actions-cell" @onclick:stopPropagation>
+                                <button class="action-btn edit-btn" @onclick="() => HandleEdit(user.Id)" title="Edit">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                    </svg>
+                                </button>
+                                <button class="action-btn delete-btn" @onclick="() => HandleDelete(user.Id)" title="Delete">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="3 6 5 6 21 6"></polyline>
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                var pageNum = i; // Capture loop variable for lambda
+                @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
+                {
+                    <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 2 || i == currentPage + 2)
+                {
+                    <span class="page-ellipsis">...</span>
+                }
+            }
+
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+@if (showUserDetails && userDetails != null)
+{
+    <div class="modal-overlay" @onclick="CloseUserDetails">
+        <div class="modal-container" @onclick:stopPropagation>
+            <div class="modal-header">
+                <div class="modal-title">
+                    <svg class="modal-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                    <span>User Details</span>
+                </div>
+                <button class="modal-close" @onclick="CloseUserDetails" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                    <span class="modal-close-text">Close</span>
+                </button>
+            </div>
+
+            <div class="modal-content">
+                <div class="details-column">
+                    <div class="details-section">
+                        <div class="details-section-header">
+                            <span class="section-icon-emoji">👤</span>
+                            <span class="section-title">Personal Information</span>
+                        </div>
+                        <div class="details-list">
+                            <div class="detail-item">
+                                <span class="detail-label">Full name</span>
+                                <span class="detail-value">@userDetails.FullName</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Email</span>
+                                <span class="detail-value">@userDetails.Email</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Birthday</span>
+                                <span class="detail-value">@(userDetails.Birthday?.ToString("M/d/yyyy") ?? "N/A")</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Age</span>
+                                <span class="detail-value">@(userDetails.Age?.ToString() ?? "N/A")</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Sex</span>
+                                <span class="detail-value">@(string.IsNullOrEmpty(userDetails.Sex) ? "N/A" : userDetails.Sex)</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Contact number</span>
+                                <span class="detail-value">@(string.IsNullOrEmpty(userDetails.Contact) ? "N/A" : userDetails.Contact)</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Status</span>
+                                <span class="detail-value status-badge @(userDetails.Status.ToUpper() == "ACTIVE" ? "active" : "inactive")">@userDetails.Status</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Date created</span>
+                                <span class="detail-value">@userDetails.DateCreated.ToString("M/d/yyyy")</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="details-column">
+                    <div class="details-section">
+                        <div class="details-section-header">
+                            <span class="section-icon-emoji">📍</span>
+                            <span class="section-title">Address Information</span>
+                        </div>
+                        <div class="details-list">
+                            <div class="detail-item">
+                                <span class="detail-label">Street address</span>
+                                <span class="detail-value">@(string.IsNullOrEmpty(userDetails.Street) ? "N/A" : userDetails.Street)</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">City</span>
+                                <span class="detail-value">@(string.IsNullOrEmpty(userDetails.City) ? "N/A" : userDetails.City)</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Province</span>
+                                <span class="detail-value">@(string.IsNullOrEmpty(userDetails.Province) ? "N/A" : userDetails.Province)</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Zip code</span>
+                                <span class="detail-value">@(string.IsNullOrEmpty(userDetails.Zip) ? "N/A" : userDetails.Zip)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* Add Seller Modal *@
+@if (showAddSellerModal)
+{
+    <div class="modal-overlay" @onclick="CloseAddSellerModal">
+        <div class="add-admin-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Add Seller</h2>
+                <button class="modal-close-btn" @onclick="CloseAddSellerModal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-tabs">
+                <button class="modal-tab @(activeAddSellerTab == "user" ? "active" : "")" @onclick='() => SetActiveAddSellerTab("user")'>
+                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                    <span>User Information</span>
+                </button>
+                <button class="modal-tab @(activeAddSellerTab == "address" ? "active" : "")" @onclick='() => SetActiveAddSellerTab("address")'>
+                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                        <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                    <span>Address Information</span>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <EditForm EditContext="@_AddSellerEditContext" OnValidSubmit="SaveSellerAsync" OnInvalidSubmit="HandleInvalidSubmit">
+                    <DataAnnotationsValidator />
+                    
+                    @if (activeAddSellerTab == "user")
+                    {
+                        <div class="form-grid">
+                            <div class="form-field">
+                                <label class="field-label">First Name</label>
+                                <input id="AddSellerFirstName" class="form-input" value="@_AddSellerModel.FirstName" @oninput="FilterAddSellerFirstNameInput" placeholder="Enter first name" />
+                                <ValidationMessage For="@(() => _AddSellerModel.FirstName)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Middle Name</label>
+                                <input id="AddSellerMiddleName" class="form-input" value="@_AddSellerModel.MiddleName" @oninput="FilterAddSellerMiddleNameInput" placeholder="Enter middle name (optional)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Last Name</label>
+                                <input id="AddSellerLastName" class="form-input" value="@_AddSellerModel.LastName" @oninput="FilterAddSellerLastNameInput" placeholder="Enter last name" />
+                                <ValidationMessage For="@(() => _AddSellerModel.LastName)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Email</label>
+                                <InputText class="form-input" @bind-Value="_AddSellerModel.Email" placeholder="Enter email address" />
+                                <ValidationMessage For="@(() => _AddSellerModel.Email)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Birthday</label>
+                                <input type="date" class="form-input" value="@(_AddSellerModel.Birthday?.ToString("yyyy-MM-dd") ?? "")" max="@MaxBirthdayDate.ToString("yyyy-MM-dd")" @onchange="@((ChangeEventArgs e) => { if (DateTime.TryParse(e.Value?.ToString(), out var date)) { AddSellerBirthday = DateOnly.FromDateTime(date); } else { AddSellerBirthday = null; } })" />
+                                <ValidationMessage For="@(() => _AddSellerModel.Birthday)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Age</label>
+                                <InputNumber TValue="int?" class="form-input" @bind-Value="_AddSellerModel.Age" disabled />
+                                <ValidationMessage For="@(() => _AddSellerModel.Age)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Sex</label>
+                                <select class="form-input sex-select" value="@_AddSellerModel.Sex" @onchange="@((ChangeEventArgs e) => { 
+                                    _AddSellerModel.Sex = e.Value?.ToString() ?? string.Empty; 
+                                    if (_AddSellerEditContext != null)
+                                    {
+                                        _AddSellerEditContext.NotifyFieldChanged(_AddSellerEditContext.Field(nameof(_AddSellerModel.Sex)));
+                                    }
+                                    StateHasChanged(); 
+                                })">
+                                    <option value="">Select Sex</option>
+                                    <option value="Male">Male</option>
+                                    <option value="Female">Female</option>
+                                </select>
+                                <ValidationMessage For="@(() => _AddSellerModel.Sex)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Contact Number</label>
+                                <InputText class="form-input" @bind-Value="_AddSellerModel.Contact" placeholder="+63 912 345 6789" />
+                                <ValidationMessage For="@(() => _AddSellerModel.Contact)" />
+                            </div>
+                        </div>
+                    }
+                    else if (activeAddSellerTab == "address")
+                    {
+                        <div class="form-grid">
+                            <div class="form-field full-width">
+                                <label class="field-label">Street Address</label>
+                                <InputText class="form-input" @bind-Value="_AddSellerAddressModel.Street" placeholder="123 Main Street, Barangay Name" />
+                                <ValidationMessage For="@(() => _AddSellerAddressModel.Street)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Province</label>
+                                <select class="form-input province-select" value="@_AddSellerAddressModel.Province" @onchange="OnProvinceChanged">
+                                    <option value="">Select Province</option>
+                                    @foreach (var province in _AddSellerProvinces)
+                                    {
+                                        <option value="@province">@province</option>
+                                    }
+                                </select>
+                                <ValidationMessage For="@(() => _AddSellerAddressModel.Province)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">City</label>
+                                <select class="form-input city-select" value="@_AddSellerAddressModel.City" @onchange="OnCityChanged" disabled="@(string.IsNullOrEmpty(_AddSellerAddressModel.Province))">
+                                    <option value="">Select City</option>
+                                    @foreach (var city in _AddSellerCities)
+                                    {
+                                        <option value="@city">@city</option>
+                                    }
+                                </select>
+                                <ValidationMessage For="@(() => _AddSellerAddressModel.City)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Zip Code</label>
+                                <input class="form-input" value="@_AddSellerAddressModel.Zip" disabled placeholder="Auto-filled" />
+                                <ValidationMessage For="@(() => _AddSellerAddressModel.Zip)" />
+                            </div>
+                        </div>
+                    }
+
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-btn" @onclick="CloseAddSellerModal">Cancel</button>
+                        <button type="submit" class="save-admin-btn">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                <polyline points="7 3 7 8 15 8"></polyline>
+                            </svg>
+                            <span>Save Seller</span>
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@* Update Seller Modal *@
+@if (showUpdateSellerModal)
+{
+    <div class="modal-overlay" @onclick="CloseUpdateSellerModal">
+        <div class="add-admin-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Update Seller</h2>
+                <button class="modal-close-btn" @onclick="CloseUpdateSellerModal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-tabs">
+                <button class="modal-tab @(activeUpdateSellerTab == "user" ? "active" : "")" @onclick='() => SetActiveUpdateSellerTab("user")'>
+                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                    <span>User Information</span>
+                </button>
+                <button class="modal-tab @(activeUpdateSellerTab == "address" ? "active" : "")" @onclick='() => SetActiveUpdateSellerTab("address")'>
+                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                        <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                    <span>Address Information</span>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <EditForm EditContext="@_UpdateSellerEditContext" OnValidSubmit="SaveUpdateSellerAsync" OnInvalidSubmit="HandleUpdateInvalidSubmit">
+                    <DataAnnotationsValidator />
+                    
+                    @if (activeUpdateSellerTab == "user")
+                    {
+                        <div class="form-grid">
+                            <div class="form-field">
+                                <label class="field-label">First Name</label>
+                                <input id="UpdateSellerFirstName" class="form-input" value="@_UpdateSellerModel.FirstName" @oninput="FilterUpdateSellerFirstNameInput" placeholder="Enter first name" />
+                                <ValidationMessage For="@(() => _UpdateSellerModel.FirstName)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Middle Name</label>
+                                <input id="UpdateSellerMiddleName" class="form-input" value="@_UpdateSellerModel.MiddleName" @oninput="FilterUpdateSellerMiddleNameInput" placeholder="Enter middle name (optional)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Last Name</label>
+                                <input id="UpdateSellerLastName" class="form-input" value="@_UpdateSellerModel.LastName" @oninput="FilterUpdateSellerLastNameInput" placeholder="Enter last name" />
+                                <ValidationMessage For="@(() => _UpdateSellerModel.LastName)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Email</label>
+                                <InputText class="form-input" @bind-Value="_UpdateSellerModel.Email" placeholder="Enter email address" />
+                                <ValidationMessage For="@(() => _UpdateSellerModel.Email)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Birthday</label>
+                                <input type="date" class="form-input" value="@(_UpdateSellerModel.Birthday?.ToString("yyyy-MM-dd") ?? "")" max="@MaxBirthdayDate.ToString("yyyy-MM-dd")" @onchange="@((ChangeEventArgs e) => { if (DateTime.TryParse(e.Value?.ToString(), out var date)) { UpdateSellerBirthday = DateOnly.FromDateTime(date); } else { UpdateSellerBirthday = null; } })" />
+                                <ValidationMessage For="@(() => _UpdateSellerModel.Birthday)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Age</label>
+                                <InputNumber TValue="int?" class="form-input" @bind-Value="_UpdateSellerModel.Age" disabled />
+                                <ValidationMessage For="@(() => _UpdateSellerModel.Age)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Sex</label>
+                                <select class="form-input sex-select" value="@_UpdateSellerModel.Sex" @onchange="@((ChangeEventArgs e) => { 
+                                    _UpdateSellerModel.Sex = e.Value?.ToString() ?? string.Empty; 
+                                    if (_UpdateSellerEditContext != null)
+                                    {
+                                        _UpdateSellerEditContext.NotifyFieldChanged(_UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.Sex)));
+                                    }
+                                    StateHasChanged(); 
+                                })">
+                                    <option value="">Select Sex</option>
+                                    <option value="Male">Male</option>
+                                    <option value="Female">Female</option>
+                                </select>
+                                <ValidationMessage For="@(() => _UpdateSellerModel.Sex)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Contact Number</label>
+                                <InputText class="form-input" @bind-Value="_UpdateSellerModel.Contact" placeholder="+63 912 345 6789" />
+                                <ValidationMessage For="@(() => _UpdateSellerModel.Contact)" />
+                            </div>
+                        </div>
+                    }
+                    else if (activeUpdateSellerTab == "address")
+                    {
+                        <div class="form-grid">
+                            <div class="form-field full-width">
+                                <label class="field-label">Street Address</label>
+                                <InputText class="form-input" @bind-Value="_UpdateSellerAddressModel.Street" placeholder="123 Main Street, Barangay Name" />
+                                <ValidationMessage For="@(() => _UpdateSellerAddressModel.Street)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Province</label>
+                                <select class="form-input province-select" value="@_UpdateSellerAddressModel.Province" @onchange="OnUpdateProvinceChanged">
+                                    <option value="">Select Province</option>
+                                    @foreach (var province in _UpdateSellerProvinces)
+                                    {
+                                        <option value="@province">@province</option>
+                                    }
+                                </select>
+                                <ValidationMessage For="@(() => _UpdateSellerAddressModel.Province)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">City</label>
+                                <select class="form-input city-select" value="@_UpdateSellerAddressModel.City" @onchange="OnUpdateCityChanged" disabled="@(string.IsNullOrEmpty(_UpdateSellerAddressModel.Province))">
+                                    <option value="">Select City</option>
+                                    @foreach (var city in _UpdateSellerCities)
+                                    {
+                                        <option value="@city">@city</option>
+                                    }
+                                </select>
+                                <ValidationMessage For="@(() => _UpdateSellerAddressModel.City)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Zip Code</label>
+                                <input class="form-input" value="@_UpdateSellerAddressModel.Zip" disabled placeholder="Auto-filled" />
+                                <ValidationMessage For="@(() => _UpdateSellerAddressModel.Zip)" />
+                            </div>
+                        </div>
+                    }
+
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-btn" @onclick="CloseUpdateSellerModal">Cancel</button>
+                        <button type="submit" class="save-admin-btn">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                <polyline points="7 3 7 8 15 8"></polyline>
+                            </svg>
+                            <span>Update Seller</span>
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<IT13_Final.Services.Data.AdminUserModel> sellerUsers = new();
+    private string searchTerm = string.Empty;
+    private bool isLoading = true;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling((double)totalCount / pageSize);
+    private bool showUserDetails = false;
+    private IT13_Final.Services.Data.UserDetailsModel? userDetails = null;
+    private bool isLoadingDetails = false;
+
+    // Add Seller Modal
+    private bool showAddSellerModal = false;
+    private string activeAddSellerTab = "user";
+    private readonly AddSellerModel _AddSellerModel = new();
+    private EditContext _AddSellerEditContext;
+    private ValidationMessageStore? _validationMessageStore;
+    private readonly IT13_Final.Services.Data.AddressModel _AddSellerAddressModel = new();
+    private List<string> _AddSellerProvinces = new();
+    private List<string> _AddSellerCities = new();
+    private string? _AddSellerMessage;
+    private bool _AddSellerSuccess = false;
+    private System.Threading.Timer? _successMessageTimer;
+    private bool showSuccessMessage = false;
+    private string successMessageText = string.Empty;
+    private System.Threading.Timer? _successBannerTimer;
+
+    // Update Seller Modal
+    private bool showUpdateSellerModal = false;
+    private string activeUpdateSellerTab = "user";
+    private readonly AddSellerModel _UpdateSellerModel = new();
+    private EditContext _UpdateSellerEditContext;
+    private ValidationMessageStore? _updateValidationMessageStore;
+    private readonly IT13_Final.Services.Data.AddressModel _UpdateSellerAddressModel = new();
+    private List<string> _UpdateSellerProvinces = new();
+    private List<string> _UpdateSellerCities = new();
+    private int? _UpdateSellerUserId = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Initialize EditContext with the model
+        _AddSellerEditContext = new EditContext(_AddSellerModel);
+        _validationMessageStore = new ValidationMessageStore(_AddSellerEditContext);
+        
+        // Initialize Update EditContext
+        _UpdateSellerEditContext = new EditContext(_UpdateSellerModel);
+        _updateValidationMessageStore = new ValidationMessageStore(_UpdateSellerEditContext);
+        
+        await LoadsellerUsersAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (showAddSellerModal)
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("filterNameInput", "AddSellerFirstName");
+                await JSRuntime.InvokeVoidAsync("filterNameInput", "AddSellerMiddleName");
+                await JSRuntime.InvokeVoidAsync("filterNameInput", "AddSellerLastName");
+            }
+            catch (Exception)
+            {
+                // JavaScript interop might not be available yet, ignore
+            }
+        }
+        
+        if (showUpdateSellerModal)
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("filterNameInput", "UpdateSellerFirstName");
+                await JSRuntime.InvokeVoidAsync("filterNameInput", "UpdateSellerMiddleName");
+                await JSRuntime.InvokeVoidAsync("filterNameInput", "UpdateSellerLastName");
+            }
+            catch (Exception)
+            {
+                // JavaScript interop might not be available yet, ignore
+            }
+        }
+    }
+
+    private async Task LoadsellerUsersAsync()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            totalCount = await UserService.GetSellerUsersCountAsync(searchTerm);
+            sellerUsers = await UserService.GetSellerUsersAsync(searchTerm, currentPage, pageSize);
+        }
+        catch (Exception)
+        {
+            sellerUsers = new List<IT13_Final.Services.Data.AdminUserModel>();
+            totalCount = 0;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            currentPage = 1;
+            await LoadsellerUsersAsync();
+        }
+    }
+
+    // Debounce search to avoid too many queries
+    private System.Threading.Timer? _searchTimer;
+    private void HandleSearchInput(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? string.Empty;
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            currentPage = 1;
+            await InvokeAsync(async () =>
+            {
+                await LoadsellerUsersAsync();
+            });
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages)
+        {
+            if (page != currentPage)
+            {
+                currentPage = page;
+                await LoadsellerUsersAsync();
+            }
+        }
+    }
+
+    private void NavigateToArchive()
+    {
+        Nav.NavigateTo("/admin/Archive_Seller_Record");
+    }
+
+    private void HandleAddSeller()
+    {
+        showAddSellerModal = true;
+        activeAddSellerTab = "user";
+        _AddSellerModel.Reset();
+        _AddSellerModel.Role = "seller"; // Set default role to seller
+        _AddSellerAddressModel.Id = 0;
+        _AddSellerAddressModel.Street = string.Empty;
+        _AddSellerAddressModel.City = string.Empty;
+        _AddSellerAddressModel.Province = string.Empty;
+        _AddSellerAddressModel.Zip = string.Empty;
+        _AddSellerMessage = null;
+        _AddSellerSuccess = false;
+        
+        // Reinitialize EditContext and ValidationMessageStore with the reset model
+        _AddSellerEditContext = new EditContext(_AddSellerModel);
+        _validationMessageStore = new ValidationMessageStore(_AddSellerEditContext);
+        
+        StateHasChanged();
+        
+        // Load provinces when opening modal
+        _AddSellerProvinces = PhilippineAddressService.GetProvinces();
+        _AddSellerProvinces.Sort();
+        _AddSellerCities = new List<string>();
+    }
+
+    private void CloseAddSellerModal()
+    {
+        showAddSellerModal = false;
+        _AddSellerModel.Reset();
+        _AddSellerAddressModel.Id = 0;
+        _AddSellerAddressModel.Street = string.Empty;
+        _AddSellerAddressModel.City = string.Empty;
+        _AddSellerAddressModel.Province = string.Empty;
+        _AddSellerAddressModel.Zip = string.Empty;
+        _AddSellerMessage = null;
+        _AddSellerSuccess = false;
+        _successMessageTimer?.Dispose();
+        _successMessageTimer = null;
+        _successBannerTimer?.Dispose();
+        _successBannerTimer = null;
+        // Reset EditContext and ValidationMessageStore
+        _AddSellerEditContext = new EditContext(_AddSellerModel);
+        _validationMessageStore = new ValidationMessageStore(_AddSellerEditContext);
+        StateHasChanged();
+    }
+
+    private void SetActiveAddSellerTab(string tab)
+    {
+        activeAddSellerTab = tab;
+        StateHasChanged();
+    }
+
+    private DateOnly MaxBirthdayDate
+    {
+        get
+        {
+            // Maximum birthday is 24 years ago from today
+            var today = DateOnly.FromDateTime(DateTime.Today);
+            return today.AddYears(-24);
+        }
+    }
+
+    private DateOnly? AddSellerBirthday
+    {
+        get => _AddSellerModel.Birthday;
+        set
+        {
+            // Clear any previous validation messages for birthday
+            if (_validationMessageStore != null && _AddSellerEditContext != null)
+            {
+                _validationMessageStore.Clear(_AddSellerEditContext.Field(nameof(_AddSellerModel.Birthday)));
+            }
+            
+            if (value.HasValue)
+            {
+                var today = DateOnly.FromDateTime(DateTime.Today);
+                var age = today.Year - value.Value.Year;
+                
+                // Adjust if birthday hasn't occurred this year
+                if (value.Value > today.AddYears(-age))
+                {
+                    age--;
+                }
+                
+                // Validate minimum age requirement (must be at least 24)
+                if (age < 24)
+                {
+                    // Add validation error directly to the Birthday field
+                    if (_validationMessageStore != null && _AddSellerEditContext != null)
+                    {
+                        _validationMessageStore.Add(
+                            _AddSellerEditContext.Field(nameof(_AddSellerModel.Birthday)),
+                            "Seller users must be at least 24 years old.");
+                        _AddSellerEditContext.NotifyValidationStateChanged();
+                    }
+                    StateHasChanged();
+                    return;
+                }
+                
+                _AddSellerModel.Birthday = value;
+                _AddSellerModel.Age = age;
+                
+                // Notify EditContext of field changes
+                if (_AddSellerEditContext != null)
+                {
+                    _AddSellerEditContext.NotifyFieldChanged(_AddSellerEditContext.Field(nameof(_AddSellerModel.Birthday)));
+                    _AddSellerEditContext.NotifyFieldChanged(_AddSellerEditContext.Field(nameof(_AddSellerModel.Age)));
+                }
+            }
+            else
+            {
+                _AddSellerModel.Birthday = null;
+                _AddSellerModel.Age = null;
+                
+                // Notify EditContext of field changes
+                if (_AddSellerEditContext != null)
+                {
+                    _AddSellerEditContext.NotifyFieldChanged(_AddSellerEditContext.Field(nameof(_AddSellerModel.Birthday)));
+                    _AddSellerEditContext.NotifyFieldChanged(_AddSellerEditContext.Field(nameof(_AddSellerModel.Age)));
+                }
+            }
+            StateHasChanged();
+        }
+    }
+
+    private void OnProvinceChanged(ChangeEventArgs e)
+    {
+        _AddSellerAddressModel.Province = e.Value?.ToString() ?? string.Empty;
+        _AddSellerAddressModel.City = string.Empty;
+        _AddSellerAddressModel.Zip = string.Empty;
+
+        if (!string.IsNullOrEmpty(_AddSellerAddressModel.Province))
+        {
+            _AddSellerCities = PhilippineAddressService.GetCities(_AddSellerAddressModel.Province);
+            _AddSellerCities.Sort();
+        }
+        else
+        {
+            _AddSellerCities = new List<string>();
+        }
+
+        StateHasChanged();
+    }
+
+    private void OnCityChanged(ChangeEventArgs e)
+    {
+        _AddSellerAddressModel.City = e.Value?.ToString() ?? string.Empty;
+
+        if (!string.IsNullOrEmpty(_AddSellerAddressModel.Province) && !string.IsNullOrEmpty(_AddSellerAddressModel.City))
+        {
+            _AddSellerAddressModel.Zip = PhilippineAddressService.GetZipCode(_AddSellerAddressModel.Province, _AddSellerAddressModel.City);
+        }
+        else
+        {
+            _AddSellerAddressModel.Zip = string.Empty;
+        }
+
+        StateHasChanged();
+    }
+
+    private void FilterAddSellerFirstNameInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        _AddSellerModel.FirstName = filtered;
+        
+        // Notify EditContext of field change
+        if (_AddSellerEditContext != null)
+        {
+            _AddSellerEditContext.NotifyFieldChanged(_AddSellerEditContext.Field(nameof(_AddSellerModel.FirstName)));
+        }
+        
+        // Auto-generate password as FirstName123
+        if (!string.IsNullOrWhiteSpace(filtered))
+        {
+            // Remove spaces and take only letters for password
+            var firstNameForPassword = new string(filtered.Where(char.IsLetter).ToArray());
+            if (!string.IsNullOrWhiteSpace(firstNameForPassword))
+            {
+                _AddSellerModel.Password = firstNameForPassword + "123";
+                _AddSellerModel.ConfirmPassword = firstNameForPassword + "123";
+                
+                // Notify EditContext of password field changes
+                if (_AddSellerEditContext != null)
+                {
+                    _AddSellerEditContext.NotifyFieldChanged(_AddSellerEditContext.Field(nameof(_AddSellerModel.Password)));
+                    _AddSellerEditContext.NotifyFieldChanged(_AddSellerEditContext.Field(nameof(_AddSellerModel.ConfirmPassword)));
+                }
+            }
+        }
+        else
+        {
+            _AddSellerModel.Password = string.Empty;
+            _AddSellerModel.ConfirmPassword = string.Empty;
+            
+            // Notify EditContext of password field changes
+            if (_AddSellerEditContext != null)
+            {
+                _AddSellerEditContext.NotifyFieldChanged(_AddSellerEditContext.Field(nameof(_AddSellerModel.Password)));
+                _AddSellerEditContext.NotifyFieldChanged(_AddSellerEditContext.Field(nameof(_AddSellerModel.ConfirmPassword)));
+            }
+        }
+        
+        StateHasChanged();
+    }
+
+    private void FilterAddSellerMiddleNameInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        _AddSellerModel.MiddleName = filtered;
+        
+        // Notify EditContext of field change
+        if (_AddSellerEditContext != null)
+        {
+            _AddSellerEditContext.NotifyFieldChanged(_AddSellerEditContext.Field(nameof(_AddSellerModel.MiddleName)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void FilterAddSellerLastNameInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        _AddSellerModel.LastName = filtered;
+        
+        // Notify EditContext of field change
+        if (_AddSellerEditContext != null)
+        {
+            _AddSellerEditContext.NotifyFieldChanged(_AddSellerEditContext.Field(nameof(_AddSellerModel.LastName)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void HandleInvalidSubmit()
+    {
+        // Show validation errors when form submission fails
+        StateHasChanged();
+    }
+
+    private async Task SaveSellerAsync()
+    {
+        // Build admin name for confirmation
+        var adminName = $"{_AddSellerModel.FirstName} {_AddSellerModel.LastName}".Trim();
+        if (string.IsNullOrWhiteSpace(adminName))
+        {
+            adminName = _AddSellerModel.Email;
+        }
+        
+        // Show confirmation dialog
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to add {adminName} as a seller?");
+        
+        if (!confirmed)
+        {
+            return; // User cancelled
+        }
+        
+        _AddSellerMessage = null;
+        
+        // Auto-generate password if first name exists but password is empty
+        if (string.IsNullOrWhiteSpace(_AddSellerModel.Password) && !string.IsNullOrWhiteSpace(_AddSellerModel.FirstName))
+        {
+            var firstNameForPassword = new string(_AddSellerModel.FirstName.Where(char.IsLetter).ToArray());
+            if (!string.IsNullOrWhiteSpace(firstNameForPassword))
+            {
+                _AddSellerModel.Password = firstNameForPassword + "123";
+                _AddSellerModel.ConfirmPassword = firstNameForPassword + "123";
+            }
+        }
+        
+        // Validate passwords match
+        if (_AddSellerModel.Password != _AddSellerModel.ConfirmPassword)
+        {
+            _AddSellerMessage = "Passwords do not match.";
+            _AddSellerSuccess = false;
+            StateHasChanged();
+            return;
+        }
+
+        // Validate password length
+        if (string.IsNullOrWhiteSpace(_AddSellerModel.Password) || _AddSellerModel.Password.Length < 6)
+        {
+            _AddSellerMessage = "Password must be at least 6 characters long.";
+            _AddSellerSuccess = false;
+            StateHasChanged();
+            return;
+        }
+        
+        // Ensure role is set to seller
+        _AddSellerModel.Role = "seller";
+
+        // Validate seller age requirement (must be at least 24 years old)
+        if (!_AddSellerModel.Age.HasValue || _AddSellerModel.Age.Value < 24)
+        {
+            _AddSellerMessage = "Seller users must be at least 24 years old.";
+            _AddSellerSuccess = false;
+            StateHasChanged();
+            return;
+        }
+
+        // Clear any previous validation messages
+        _validationMessageStore?.Clear();
+
+        try
+        {
+            // Create the admin user
+            var newUserId = await UserService.CreateSellerAsync(
+                _AddSellerModel.Email,
+                _AddSellerModel.Password,
+                _AddSellerModel.FirstName,
+                string.IsNullOrWhiteSpace(_AddSellerModel.MiddleName) ? null : _AddSellerModel.MiddleName,
+                _AddSellerModel.LastName,
+                string.IsNullOrWhiteSpace(_AddSellerModel.Contact) ? null : _AddSellerModel.Contact,
+                _AddSellerModel.Birthday,
+                _AddSellerModel.Age,
+                string.IsNullOrWhiteSpace(_AddSellerModel.Sex) ? null : _AddSellerModel.Sex
+            );
+
+            if (newUserId.HasValue && newUserId.Value > 0)
+            {
+                // Save address if provided
+                if (!string.IsNullOrWhiteSpace(_AddSellerAddressModel.Street) ||
+                    !string.IsNullOrWhiteSpace(_AddSellerAddressModel.City) ||
+                    !string.IsNullOrWhiteSpace(_AddSellerAddressModel.Province) ||
+                    !string.IsNullOrWhiteSpace(_AddSellerAddressModel.Zip))
+                {
+                    _AddSellerAddressModel.Id = 0; // New address
+                    await AddressService.SaveAddressAsync(newUserId.Value, _AddSellerAddressModel);
+                }
+
+                // Refresh list
+                await LoadsellerUsersAsync();
+                
+                // Show success message
+                successMessageText = "Seller created successfully!";
+                showSuccessMessage = true;
+                
+                // Close modal immediately
+                CloseAddSellerModal();
+                
+                // Set timer to hide success message after 5 seconds
+                _successBannerTimer?.Dispose();
+                _successBannerTimer = new System.Threading.Timer(async _ =>
+                {
+                    await InvokeAsync(() =>
+                    {
+                        showSuccessMessage = false;
+                        successMessageText = string.Empty;
+                        StateHasChanged();
+                    });
+                }, null, 5000, Timeout.Infinite);
+            }
+            else
+            {
+                _AddSellerMessage = "Failed to create admin. No user ID returned.";
+                _AddSellerSuccess = false;
+            }
+        }
+        catch (IT13_Final.Services.Data.EmailAlreadyExistsException)
+        {
+            // Add email validation error directly to the Email field
+            if (_validationMessageStore != null && _AddSellerEditContext != null)
+            {
+                _validationMessageStore.Add(
+                    _AddSellerEditContext.Field(nameof(_AddSellerModel.Email)),
+                    "Email address already exists.");
+                _AddSellerEditContext.NotifyValidationStateChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            _AddSellerMessage = $"Failed to create admin: {ex.Message}";
+            _AddSellerSuccess = false;
+        }
+        finally
+        {
+            StateHasChanged();
+        }
+    }
+
+    private sealed class AddSellerModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "First Name is required")]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^[a-zA-Z\s'.-]+$", ErrorMessage = "First Name must contain only letters")]
+        public string FirstName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^[a-zA-Z\s'.-]*$", ErrorMessage = "Middle Name must contain only letters")]
+        public string MiddleName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Last Name is required")]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^[a-zA-Z\s'.-]+$", ErrorMessage = "Last Name must contain only letters")]
+        public string LastName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Email is required")]
+        [System.ComponentModel.DataAnnotations.EmailAddress(ErrorMessage = "Invalid email format")]
+        public string Email { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Birthday is required")]
+        public DateOnly? Birthday { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Age is required")]
+        [System.ComponentModel.DataAnnotations.Range(24, 150, ErrorMessage = "Seller must be at least 24 years old")]
+        public int? Age { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Sex is required")]
+        public string Sex { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Contact Number is required")]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^(\+63\s?)?9\d{2}[\s-]?\d{3}[\s-]?\d{4}$|^09\d{9}$|^\(?0[2-9]\d\)?[\s-]?\d{3}[\s-]?\d{4}$", ErrorMessage = "Contact Number must be a valid Philippine phone number")]
+        public string Contact { get; set; } = string.Empty;
+
+        // Password is auto-generated, so we don't need Required validation here
+        [System.ComponentModel.DataAnnotations.MinLength(6, ErrorMessage = "Password must be at least 6 characters")]
+        public string Password { get; set; } = string.Empty;
+
+        // Confirm Password is auto-generated, so we don't need Required validation here
+        public string ConfirmPassword { get; set; } = string.Empty;
+
+        public string Role { get; set; } = "seller";
+
+        public void Reset()
+        {
+            FirstName = string.Empty;
+            MiddleName = string.Empty;
+            LastName = string.Empty;
+            Email = string.Empty;
+            Birthday = null;
+            Age = null;
+            Sex = string.Empty;
+            Contact = string.Empty;
+            Password = string.Empty;
+            ConfirmPassword = string.Empty;
+            Role = "seller";
+        }
+    }
+
+    private async Task HandleDelete(int userId)
+    {
+        // Get the admin name for the confirmation dialog
+        var admin = sellerUsers.FirstOrDefault(u => u.Id == userId);
+        var adminName = admin?.Name ?? "this seller";
+        
+        // Show confirmation dialog
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to archive {adminName}?");
+        
+        if (!confirmed)
+        {
+            return; // User cancelled
+        }
+        
+        try
+        {
+            var success = await UserService.ArchiveSellerAsync(userId);
+            
+            if (success)
+            {
+                // Refresh the list to remove the archived admin
+                await LoadsellerUsersAsync();
+                
+                // Show success message
+                successMessageText = "Seller archived successfully!";
+                showSuccessMessage = true;
+                
+                // Set timer to hide success message after 5 seconds
+                _successBannerTimer?.Dispose();
+                _successBannerTimer = new System.Threading.Timer(async _ =>
+                {
+                    await InvokeAsync(() =>
+                    {
+                        showSuccessMessage = false;
+                        successMessageText = string.Empty;
+                        StateHasChanged();
+                    });
+                }, null, 5000, Timeout.Infinite);
+            }
+        }
+        catch (Exception)
+        {
+            // Handle error - could show an error message here
+        }
+        
+        StateHasChanged();
+    }
+
+    private async Task HandleRowClick(int userId)
+    {
+        showUserDetails = true;
+        isLoadingDetails = true;
+        StateHasChanged();
+
+        try
+        {
+            userDetails = await UserService.GetUserDetailsAsync(userId);
+        }
+        catch
+        {
+            userDetails = null;
+        }
+        finally
+        {
+            isLoadingDetails = false;
+            StateHasChanged();
+        }
+    }
+
+    private void CloseUserDetails()
+    {
+        showUserDetails = false;
+        userDetails = null;
+        StateHasChanged();
+    }
+
+    private DateOnly? UpdateSellerBirthday
+    {
+        get => _UpdateSellerModel.Birthday;
+        set
+        {
+            // Clear any previous validation messages for birthday
+            if (_updateValidationMessageStore != null && _UpdateSellerEditContext != null)
+            {
+                _updateValidationMessageStore.Clear(_UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.Birthday)));
+            }
+            
+            if (value.HasValue)
+            {
+                var today = DateOnly.FromDateTime(DateTime.Today);
+                var age = today.Year - value.Value.Year;
+                
+                // Adjust if birthday hasn't occurred this year
+                if (value.Value > today.AddYears(-age))
+                {
+                    age--;
+                }
+                
+                // Validate minimum age requirement (must be at least 24)
+                if (age < 24)
+                {
+                    // Add validation error directly to the Birthday field
+                    if (_updateValidationMessageStore != null && _UpdateSellerEditContext != null)
+                    {
+                        _updateValidationMessageStore.Add(
+                            _UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.Birthday)),
+                            "Seller users must be at least 24 years old.");
+                        _UpdateSellerEditContext.NotifyValidationStateChanged();
+                    }
+                    StateHasChanged();
+                    return;
+                }
+                
+                _UpdateSellerModel.Birthday = value;
+                _UpdateSellerModel.Age = age;
+                
+                // Notify EditContext of field changes
+                if (_UpdateSellerEditContext != null)
+                {
+                    _UpdateSellerEditContext.NotifyFieldChanged(_UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.Birthday)));
+                    _UpdateSellerEditContext.NotifyFieldChanged(_UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.Age)));
+                }
+            }
+            else
+            {
+                _UpdateSellerModel.Birthday = null;
+                _UpdateSellerModel.Age = null;
+                
+                // Notify EditContext of field changes
+                if (_UpdateSellerEditContext != null)
+                {
+                    _UpdateSellerEditContext.NotifyFieldChanged(_UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.Birthday)));
+                    _UpdateSellerEditContext.NotifyFieldChanged(_UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.Age)));
+                }
+            }
+            StateHasChanged();
+        }
+    }
+
+    private void OnUpdateProvinceChanged(ChangeEventArgs e)
+    {
+        _UpdateSellerAddressModel.Province = e.Value?.ToString() ?? string.Empty;
+        _UpdateSellerAddressModel.City = string.Empty;
+        _UpdateSellerAddressModel.Zip = string.Empty;
+
+        if (!string.IsNullOrEmpty(_UpdateSellerAddressModel.Province))
+        {
+            _UpdateSellerCities = PhilippineAddressService.GetCities(_UpdateSellerAddressModel.Province);
+            _UpdateSellerCities.Sort();
+        }
+        else
+        {
+            _UpdateSellerCities = new List<string>();
+        }
+
+        StateHasChanged();
+    }
+
+    private void OnUpdateCityChanged(ChangeEventArgs e)
+    {
+        _UpdateSellerAddressModel.City = e.Value?.ToString() ?? string.Empty;
+
+        if (!string.IsNullOrEmpty(_UpdateSellerAddressModel.Province) && !string.IsNullOrEmpty(_UpdateSellerAddressModel.City))
+        {
+            _UpdateSellerAddressModel.Zip = PhilippineAddressService.GetZipCode(_UpdateSellerAddressModel.Province, _UpdateSellerAddressModel.City);
+        }
+        else
+        {
+            _UpdateSellerAddressModel.Zip = string.Empty;
+        }
+
+        StateHasChanged();
+    }
+
+    private void FilterUpdateSellerFirstNameInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        _UpdateSellerModel.FirstName = filtered;
+        
+        // Notify EditContext of field change
+        if (_UpdateSellerEditContext != null)
+        {
+            _UpdateSellerEditContext.NotifyFieldChanged(_UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.FirstName)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void FilterUpdateSellerMiddleNameInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        _UpdateSellerModel.MiddleName = filtered;
+        
+        // Notify EditContext of field change
+        if (_UpdateSellerEditContext != null)
+        {
+            _UpdateSellerEditContext.NotifyFieldChanged(_UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.MiddleName)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void FilterUpdateSellerLastNameInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        _UpdateSellerModel.LastName = filtered;
+        
+        // Notify EditContext of field change
+        if (_UpdateSellerEditContext != null)
+        {
+            _UpdateSellerEditContext.NotifyFieldChanged(_UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.LastName)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void HandleUpdateInvalidSubmit()
+    {
+        // Show validation errors when form submission fails
+        StateHasChanged();
+    }
+
+    private async Task HandleEdit(int userId)
+    {
+        _UpdateSellerUserId = userId;
+        
+        try
+        {
+            var userDetails = await UserService.GetUserDetailsAsync(userId);
+            if (userDetails == null)
+            {
+                return;
+            }
+
+            // Load personal info to get first/middle/last name separately
+            var personalInfo = await UserService.GetPersonalInfoAsync(userId);
+            
+            // Populate user information
+            _UpdateSellerModel.FirstName = personalInfo?.FirstName ?? string.Empty;
+            _UpdateSellerModel.MiddleName = personalInfo?.MiddleName ?? string.Empty;
+            _UpdateSellerModel.LastName = personalInfo?.LastName ?? string.Empty;
+            _UpdateSellerModel.Email = userDetails.Email;
+            _UpdateSellerModel.Birthday = userDetails.Birthday;
+            _UpdateSellerModel.Age = userDetails.Age;
+            _UpdateSellerModel.Sex = userDetails.Sex;
+            _UpdateSellerModel.Contact = userDetails.Contact;
+            
+            // Set dummy password values to satisfy validation (password is not changed in update)
+            _UpdateSellerModel.Password = "Dummy123";
+            _UpdateSellerModel.ConfirmPassword = "Dummy123";
+
+            // Load address information with ID for updates
+            var existingAddress = await AddressService.GetAddressAsync(userId);
+            if (existingAddress != null)
+            {
+                _UpdateSellerAddressModel.Id = existingAddress.Id;
+                _UpdateSellerAddressModel.Street = existingAddress.Street;
+                _UpdateSellerAddressModel.Province = existingAddress.Province;
+                _UpdateSellerAddressModel.City = existingAddress.City;
+                _UpdateSellerAddressModel.Zip = existingAddress.Zip;
+            }
+            else
+            {
+                // If no address exists, use data from userDetails (might be empty)
+                _UpdateSellerAddressModel.Id = 0;
+                _UpdateSellerAddressModel.Street = userDetails.Street ?? string.Empty;
+                _UpdateSellerAddressModel.Province = userDetails.Province ?? string.Empty;
+                _UpdateSellerAddressModel.City = userDetails.City ?? string.Empty;
+                _UpdateSellerAddressModel.Zip = userDetails.Zip ?? string.Empty;
+            }
+
+            // Load provinces and cities
+            _UpdateSellerProvinces = PhilippineAddressService.GetProvinces().ToList();
+            _UpdateSellerProvinces.Sort();
+            
+            if (!string.IsNullOrEmpty(_UpdateSellerAddressModel.Province))
+            {
+                _UpdateSellerCities = PhilippineAddressService.GetCities(_UpdateSellerAddressModel.Province);
+                _UpdateSellerCities.Sort();
+            }
+            else
+            {
+                _UpdateSellerCities = new List<string>();
+            }
+
+            // Reinitialize EditContext with populated model
+            _UpdateSellerEditContext = new EditContext(_UpdateSellerModel);
+            _updateValidationMessageStore = new ValidationMessageStore(_UpdateSellerEditContext);
+
+            activeUpdateSellerTab = "user";
+            showUpdateSellerModal = true;
+            StateHasChanged();
+        }
+        catch (Exception)
+        {
+            // Handle error
+        }
+    }
+
+    private void SetActiveUpdateSellerTab(string tab)
+    {
+        activeUpdateSellerTab = tab;
+        StateHasChanged();
+    }
+
+    private void CloseUpdateSellerModal()
+    {
+        showUpdateSellerModal = false;
+        activeUpdateSellerTab = "user";
+        _UpdateSellerModel.Reset();
+        _UpdateSellerAddressModel.Id = 0;
+        _UpdateSellerAddressModel.Street = string.Empty;
+        _UpdateSellerAddressModel.City = string.Empty;
+        _UpdateSellerAddressModel.Province = string.Empty;
+        _UpdateSellerAddressModel.Zip = string.Empty;
+        _UpdateSellerProvinces = new List<string>();
+        _UpdateSellerCities = new List<string>();
+        _UpdateSellerUserId = null;
+        
+        // Reset EditContext and ValidationMessageStore
+        _UpdateSellerEditContext = new EditContext(_UpdateSellerModel);
+        _updateValidationMessageStore = new ValidationMessageStore(_UpdateSellerEditContext);
+        StateHasChanged();
+    }
+
+    private async Task SaveUpdateSellerAsync()
+    {
+        if (!_UpdateSellerUserId.HasValue)
+        {
+            return;
+        }
+        
+        // Clear any previous validation messages
+        _updateValidationMessageStore?.Clear();
+        
+        // Validate required fields manually since we're using native inputs
+        bool hasErrors = false;
+        
+        if (string.IsNullOrWhiteSpace(_UpdateSellerModel.FirstName))
+        {
+            _updateValidationMessageStore?.Add(_UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.FirstName)), "First Name is required.");
+            hasErrors = true;
+        }
+        
+        if (string.IsNullOrWhiteSpace(_UpdateSellerModel.LastName))
+        {
+            _updateValidationMessageStore?.Add(_UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.LastName)), "Last Name is required.");
+            hasErrors = true;
+        }
+        
+        if (string.IsNullOrWhiteSpace(_UpdateSellerModel.Email))
+        {
+            _updateValidationMessageStore?.Add(_UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.Email)), "Email is required.");
+            hasErrors = true;
+        }
+        else if (!System.Text.RegularExpressions.Regex.IsMatch(_UpdateSellerModel.Email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+        {
+            _updateValidationMessageStore?.Add(_UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.Email)), "Invalid email format.");
+            hasErrors = true;
+        }
+        
+        if (!_UpdateSellerModel.Birthday.HasValue)
+        {
+            _updateValidationMessageStore?.Add(_UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.Birthday)), "Birthday is required.");
+            hasErrors = true;
+        }
+        
+        // Validate seller age requirement (must be at least 24 years old)
+        if (!_UpdateSellerModel.Age.HasValue || _UpdateSellerModel.Age.Value < 24)
+        {
+            _updateValidationMessageStore?.Add(_UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.Age)), "Seller users must be at least 24 years old.");
+            hasErrors = true;
+        }
+        
+        if (string.IsNullOrWhiteSpace(_UpdateSellerModel.Sex))
+        {
+            _updateValidationMessageStore?.Add(_UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.Sex)), "Sex is required.");
+            hasErrors = true;
+        }
+        
+        if (string.IsNullOrWhiteSpace(_UpdateSellerModel.Contact))
+        {
+            _updateValidationMessageStore?.Add(_UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.Contact)), "Contact Number is required.");
+            hasErrors = true;
+        }
+
+        // No minimum age requirement for sellers
+        
+        if (hasErrors)
+        {
+            _UpdateSellerEditContext?.NotifyValidationStateChanged();
+            StateHasChanged();
+            return;
+        }
+        
+        // Build admin name for confirmation
+        var adminName = $"{_UpdateSellerModel.FirstName} {_UpdateSellerModel.LastName}".Trim();
+        if (string.IsNullOrWhiteSpace(adminName))
+        {
+            adminName = _UpdateSellerModel.Email;
+        }
+        
+        // Show confirmation dialog
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to update {adminName}?");
+        
+        if (!confirmed)
+        {
+            return; // User cancelled
+        }
+        
+        // All validation passed - proceed with update
+
+        try
+        {
+            // Update the admin user
+            var success = await UserService.UpdateSellerAsync(
+                _UpdateSellerUserId.Value,
+                _UpdateSellerModel.Email,
+                _UpdateSellerModel.FirstName,
+                string.IsNullOrWhiteSpace(_UpdateSellerModel.MiddleName) ? null : _UpdateSellerModel.MiddleName,
+                _UpdateSellerModel.LastName,
+                string.IsNullOrWhiteSpace(_UpdateSellerModel.Contact) ? null : _UpdateSellerModel.Contact,
+                _UpdateSellerModel.Birthday,
+                _UpdateSellerModel.Age,
+                string.IsNullOrWhiteSpace(_UpdateSellerModel.Sex) ? null : _UpdateSellerModel.Sex
+            );
+
+            if (success)
+            {
+                // Save/update address if provided
+                if (!string.IsNullOrWhiteSpace(_UpdateSellerAddressModel.Street) ||
+                    !string.IsNullOrWhiteSpace(_UpdateSellerAddressModel.City) ||
+                    !string.IsNullOrWhiteSpace(_UpdateSellerAddressModel.Province) ||
+                    !string.IsNullOrWhiteSpace(_UpdateSellerAddressModel.Zip))
+                {
+                    await AddressService.SaveAddressAsync(_UpdateSellerUserId.Value, _UpdateSellerAddressModel);
+                }
+
+                // Refresh list
+                await LoadsellerUsersAsync();
+                
+                // Show success message
+                successMessageText = "Seller updated successfully!";
+                showSuccessMessage = true;
+                
+                // Close modal immediately
+                CloseUpdateSellerModal();
+                
+                // Set timer to hide success message after 5 seconds
+                _successBannerTimer?.Dispose();
+                _successBannerTimer = new System.Threading.Timer(async _ =>
+                {
+                    await InvokeAsync(() =>
+                    {
+                        showSuccessMessage = false;
+                        successMessageText = string.Empty;
+                        StateHasChanged();
+                    });
+                }, null, 5000, Timeout.Infinite);
+            }
+        }
+        catch (IT13_Final.Services.Data.EmailAlreadyExistsException)
+        {
+            // Add email validation error directly to the Email field
+            if (_updateValidationMessageStore != null && _UpdateSellerEditContext != null)
+            {
+                _updateValidationMessageStore.Add(
+                    _UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.Email)),
+                    "Email address already exists.");
+                _UpdateSellerEditContext.NotifyValidationStateChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            // Handle other errors
+            if (_updateValidationMessageStore != null && _UpdateSellerEditContext != null)
+            {
+                _updateValidationMessageStore.Add(
+                    _UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.Email)),
+                    $"Error: {ex.Message}");
+                _UpdateSellerEditContext.NotifyValidationStateChanged();
+            }
+        }
+        finally
+        {
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+        _successMessageTimer?.Dispose();
+        _successBannerTimer?.Dispose();
+    }
+}
+

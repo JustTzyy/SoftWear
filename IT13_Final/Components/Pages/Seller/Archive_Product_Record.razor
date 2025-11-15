@@ -1,0 +1,341 @@
+@page "/seller/Archive_Product_Record"
+@layout IT13_Final.Components.Layout.Seller.Seller
+@inject IT13_Final.Services.Data.IProductService ProductService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Nav
+@implements IDisposable
+
+<h1 class="page-title">Archived Products</h1>
+
+@if (showSuccessMessage && !string.IsNullOrEmpty(successMessageText))
+{
+    <div class="success-banner">
+        <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span>@successMessageText</span>
+    </div>
+}
+
+<div class="admin-records-container">
+    <div class="search-actions-row">
+        <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input type="text" class="search-input" placeholder="Search archived products" value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        </div>
+
+        <div class="action-buttons">
+            <button class="back-btn" @onclick="NavigateBack">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="19" y1="12" x2="5" y2="12"></line>
+                    <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+                <span>Back to Products</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <div class="table-header">List</div>
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Image</th>
+                    <th>Name</th>
+                    <th>Category</th>
+                    <th>Archived Date</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="6" class="loading-cell">Loading...</td>
+                    </tr>
+                }
+                else if (archivedProducts.Count == 0)
+                {
+                    <tr>
+                        <td colspan="6" class="empty-cell">No archived products found</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var product in archivedProducts)
+                    {
+                        <tr class="clickable-row" @onclick="() => HandleRowClick(product.Id)">
+                            <td>@product.Id</td>
+                            <td class="image-cell">
+                                @if (!string.IsNullOrEmpty(product.ImageBase64))
+                                {
+                                    <img src="data:image/jpeg;base64,@product.ImageBase64" alt="Product" class="product-thumbnail" />
+                                }
+                                else
+                                {
+                                    <div class="no-image-placeholder">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                            <polyline points="21 15 16 10 5 21"></polyline>
+                                        </svg>
+                                    </div>
+                                }
+                            </td>
+                            <td class="product-name">@product.Name</td>
+                            <td>@product.CategoryName</td>
+                            <td>@product.ArchivedDate.ToString("MMM dd, yyyy")</td>
+                            <td class="actions-cell" @onclick:stopPropagation>
+                                <button class="action-btn restore-btn" @onclick="() => HandleRestore(product.Id)" title="Restore">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="23 4 23 10 17 10"></polyline>
+                                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="pagination-btn" @onclick="PreviousPage" disabled="@(currentPage == 1)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+            <span class="page-info">Page @currentPage of @totalPages</span>
+            <button class="pagination-btn" @onclick="NextPage" disabled="@(currentPage == totalPages)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+@* Product Details Modal *@
+@if (showProductDetails && productDetails != null)
+{
+    <div class="modal-overlay" @onclick="CloseProductDetails">
+        <div class="modal-container" @onclick:stopPropagation>
+            <div class="modal-header">
+                <div class="modal-title">
+                    <svg class="modal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    </svg>
+                    <span>Archived Product Details</span>
+                </div>
+                <button class="modal-close" @onclick="CloseProductDetails">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-content-product">
+                @if (!string.IsNullOrEmpty(productDetails.ImageBase64))
+                {
+                    <div class="product-image-large">
+                        <img src="data:image/jpeg;base64,@productDetails.ImageBase64" alt="Product Image" />
+                    </div>
+                }
+                <div class="details-list">
+                    <div class="detail-item">
+                        <span class="detail-label">PRODUCT NAME:</span>
+                        <span class="detail-value">@productDetails.Name</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">CATEGORY:</span>
+                        <span class="detail-value">@productDetails.CategoryName</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">DESCRIPTION:</span>
+                        <span class="detail-value">@(string.IsNullOrEmpty(productDetails.Description) ? "N/A" : productDetails.Description)</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">STATUS:</span>
+                        <span class="detail-value status-badge inactive">@productDetails.Status</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">DATE CREATED:</span>
+                        <span class="detail-value">@productDetails.DateCreated.ToString("M/d/yyyy")</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<IT13_Final.Services.Data.ArchivedProductModel> archivedProducts = new();
+    private string searchTerm = string.Empty;
+    private bool isLoading = true;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling((double)totalCount / pageSize);
+    private bool showProductDetails = false;
+    private IT13_Final.Services.Data.ProductDetailsModel? productDetails = null;
+
+    private bool showSuccessMessage = false;
+    private string successMessageText = string.Empty;
+    private System.Threading.Timer? _successBannerTimer;
+
+    private System.Threading.Timer? _searchTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadArchivedProductsAsync();
+    }
+
+    private async Task LoadArchivedProductsAsync()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            totalCount = await ProductService.GetArchivedProductsCountAsync(searchTerm);
+            archivedProducts = await ProductService.GetArchivedProductsAsync(searchTerm, currentPage, pageSize);
+        }
+        catch (Exception)
+        {
+            archivedProducts = new List<IT13_Final.Services.Data.ArchivedProductModel>();
+            totalCount = 0;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void HandleSearchInput(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? string.Empty;
+        
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            currentPage = 1;
+            await InvokeAsync(async () => await LoadArchivedProductsAsync());
+        }, null, 300, Timeout.Infinite);
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _searchTimer?.Dispose();
+            currentPage = 1;
+            await LoadArchivedProductsAsync();
+        }
+    }
+
+    private async Task PreviousPage()
+    {
+        if (currentPage > 1)
+        {
+            currentPage--;
+            await LoadArchivedProductsAsync();
+        }
+    }
+
+    private async Task NextPage()
+    {
+        if (currentPage < totalPages)
+        {
+            currentPage++;
+            await LoadArchivedProductsAsync();
+        }
+    }
+
+    private void NavigateBack()
+    {
+        Nav.NavigateTo("/seller/Product");
+    }
+
+    private async Task HandleRestore(int productId)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to restore this product?");
+        if (confirmed)
+        {
+            try
+            {
+                var success = await ProductService.RestoreProductAsync(productId);
+                if (success)
+                {
+                    ShowSuccessMessage("Product restored successfully!");
+                    await LoadArchivedProductsAsync();
+                }
+                else
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", "Failed to restore product.");
+                }
+            }
+            catch (Exception ex)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Error restoring product: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task HandleRowClick(int productId)
+    {
+        showProductDetails = true;
+        StateHasChanged();
+
+        try
+        {
+            productDetails = await ProductService.GetArchivedProductDetailsAsync(productId);
+        }
+        catch
+        {
+            productDetails = null;
+        }
+        finally
+        {
+            StateHasChanged();
+        }
+    }
+
+    private void CloseProductDetails()
+    {
+        showProductDetails = false;
+        productDetails = null;
+        StateHasChanged();
+    }
+
+    private void ShowSuccessMessage(string message)
+    {
+        successMessageText = message;
+        showSuccessMessage = true;
+        StateHasChanged();
+
+        _successBannerTimer?.Dispose();
+        _successBannerTimer = new System.Threading.Timer(_ =>
+        {
+            showSuccessMessage = false;
+            InvokeAsync(StateHasChanged);
+        }, null, 3000, Timeout.Infinite);
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+        _successBannerTimer?.Dispose();
+    }
+}
+

@@ -1,0 +1,1613 @@
+@page "/admin/Admin_Record"
+@layout IT13_Final.Components.Layout.Admin.Admin
+@inject IT13_Final.Services.Data.IUserService UserService
+@inject IT13_Final.Services.Data.IAddressService AddressService
+@inject IT13_Final.Services.Data.IPhilippineAddressService PhilippineAddressService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Nav
+@using System.Linq
+@implements IDisposable
+
+<h1 class="page-title">Admin Records</h1>
+
+@if (showSuccessMessage && !string.IsNullOrEmpty(successMessageText))
+{
+    <div class="success-banner">
+        <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span>@successMessageText</span>
+    </div>
+}
+
+<div class="admin-records-container">
+    <div class="search-actions-row">
+        <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input type="text" class="search-input" placeholder="Search admins" value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        </div>
+
+        <div class="action-buttons">
+            <button class="archive-btn" @onclick="NavigateToArchive">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                    <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                </svg>
+                <span>Archive</span>
+            </button>
+            <button class="add-admin-btn" @onclick="HandleAddAdmin">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <line x1="19" y1="8" x2="19" y2="14"></line>
+                    <line x1="22" y1="11" x2="16" y2="11"></line>
+                </svg>
+                <span>Add Admin</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <div class="table-header">List</div>
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Date Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="5" class="loading-cell">Loading...</td>
+                    </tr>
+                }
+                else if (adminUsers.Count == 0)
+                {
+                    <tr>
+                        <td colspan="5" class="empty-cell">No admin users found</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var user in adminUsers)
+                    {
+                        <tr class="clickable-row" @onclick="() => HandleRowClick(user.Id)">
+                            <td>@user.Id</td>
+                            <td class="user-name">@user.Name</td>
+                            <td>@user.Email</td>
+                            <td>@user.DateCreated.ToString("MMM dd, yyyy")</td>
+                            <td class="actions-cell" @onclick:stopPropagation>
+                                <button class="action-btn edit-btn" @onclick="() => HandleEdit(user.Id)" title="Edit">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                    </svg>
+                                </button>
+                                <button class="action-btn delete-btn" @onclick="() => HandleDelete(user.Id)" title="Delete">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="3 6 5 6 21 6"></polyline>
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                var pageNum = i; // Capture loop variable for lambda
+                @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
+                {
+                    <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 2 || i == currentPage + 2)
+                {
+                    <span class="page-ellipsis">...</span>
+                }
+            }
+
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+@if (showUserDetails && userDetails != null)
+{
+    <div class="modal-overlay" @onclick="CloseUserDetails">
+        <div class="modal-container" @onclick:stopPropagation>
+            <div class="modal-header">
+                <div class="modal-title">
+                    <svg class="modal-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                    <span>User Details</span>
+                </div>
+                <button class="modal-close" @onclick="CloseUserDetails" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                    <span class="modal-close-text">Close</span>
+                </button>
+            </div>
+
+            <div class="modal-content">
+                <div class="details-column">
+                    <div class="details-section">
+                        <div class="details-section-header">
+                            <span class="section-icon-emoji">👤</span>
+                            <span class="section-title">Personal Information</span>
+                        </div>
+                        <div class="details-list">
+                            <div class="detail-item">
+                                <span class="detail-label">Full name</span>
+                                <span class="detail-value">@userDetails.FullName</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Email</span>
+                                <span class="detail-value">@userDetails.Email</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Birthday</span>
+                                <span class="detail-value">@(userDetails.Birthday?.ToString("M/d/yyyy") ?? "N/A")</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Age</span>
+                                <span class="detail-value">@(userDetails.Age?.ToString() ?? "N/A")</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Sex</span>
+                                <span class="detail-value">@(string.IsNullOrEmpty(userDetails.Sex) ? "N/A" : userDetails.Sex)</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Contact number</span>
+                                <span class="detail-value">@(string.IsNullOrEmpty(userDetails.Contact) ? "N/A" : userDetails.Contact)</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Status</span>
+                                <span class="detail-value status-badge @(userDetails.Status.ToUpper() == "ACTIVE" ? "active" : "inactive")">@userDetails.Status</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Date created</span>
+                                <span class="detail-value">@userDetails.DateCreated.ToString("M/d/yyyy")</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="details-column">
+                    <div class="details-section">
+                        <div class="details-section-header">
+                            <span class="section-icon-emoji">📍</span>
+                            <span class="section-title">Address Information</span>
+                        </div>
+                        <div class="details-list">
+                            <div class="detail-item">
+                                <span class="detail-label">Street address</span>
+                                <span class="detail-value">@(string.IsNullOrEmpty(userDetails.Street) ? "N/A" : userDetails.Street)</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">City</span>
+                                <span class="detail-value">@(string.IsNullOrEmpty(userDetails.City) ? "N/A" : userDetails.City)</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Province</span>
+                                <span class="detail-value">@(string.IsNullOrEmpty(userDetails.Province) ? "N/A" : userDetails.Province)</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Zip code</span>
+                                <span class="detail-value">@(string.IsNullOrEmpty(userDetails.Zip) ? "N/A" : userDetails.Zip)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* Add Admin Modal *@
+@if (showAddAdminModal)
+{
+    <div class="modal-overlay" @onclick="CloseAddAdminModal">
+        <div class="add-admin-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Add Admin</h2>
+                <button class="modal-close-btn" @onclick="CloseAddAdminModal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-tabs">
+                <button class="modal-tab @(activeAddAdminTab == "user" ? "active" : "")" @onclick='() => SetActiveAddAdminTab("user")'>
+                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                    <span>User Information</span>
+                </button>
+                <button class="modal-tab @(activeAddAdminTab == "address" ? "active" : "")" @onclick='() => SetActiveAddAdminTab("address")'>
+                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                        <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                    <span>Address Information</span>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <EditForm EditContext="@_addAdminEditContext" OnValidSubmit="SaveAdminAsync" OnInvalidSubmit="HandleInvalidSubmit">
+                    <DataAnnotationsValidator />
+                    
+                    @if (activeAddAdminTab == "user")
+                    {
+                        <div class="form-grid">
+                            <div class="form-field">
+                                <label class="field-label">First Name</label>
+                                <input id="addAdminFirstName" class="form-input" value="@_addAdminModel.FirstName" @oninput="FilterAddAdminFirstNameInput" placeholder="Enter first name" />
+                                <ValidationMessage For="@(() => _addAdminModel.FirstName)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Middle Name</label>
+                                <input id="addAdminMiddleName" class="form-input" value="@_addAdminModel.MiddleName" @oninput="FilterAddAdminMiddleNameInput" placeholder="Enter middle name (optional)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Last Name</label>
+                                <input id="addAdminLastName" class="form-input" value="@_addAdminModel.LastName" @oninput="FilterAddAdminLastNameInput" placeholder="Enter last name" />
+                                <ValidationMessage For="@(() => _addAdminModel.LastName)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Email</label>
+                                <InputText class="form-input" @bind-Value="_addAdminModel.Email" placeholder="Enter email address" />
+                                <ValidationMessage For="@(() => _addAdminModel.Email)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Birthday</label>
+                                <input type="date" class="form-input" value="@(_addAdminModel.Birthday?.ToString("yyyy-MM-dd") ?? "")" max="@MaxBirthdayDate.ToString("yyyy-MM-dd")" @onchange="@((ChangeEventArgs e) => { if (DateTime.TryParse(e.Value?.ToString(), out var date)) { AddAdminBirthday = DateOnly.FromDateTime(date); } else { AddAdminBirthday = null; } })" />
+                                <ValidationMessage For="@(() => _addAdminModel.Birthday)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Age</label>
+                                <InputNumber TValue="int?" class="form-input" @bind-Value="_addAdminModel.Age" disabled />
+                                <ValidationMessage For="@(() => _addAdminModel.Age)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Sex</label>
+                                <select class="form-input sex-select" value="@_addAdminModel.Sex" @onchange="@((ChangeEventArgs e) => { 
+                                    _addAdminModel.Sex = e.Value?.ToString() ?? string.Empty; 
+                                    if (_addAdminEditContext != null)
+                                    {
+                                        _addAdminEditContext.NotifyFieldChanged(_addAdminEditContext.Field(nameof(_addAdminModel.Sex)));
+                                    }
+                                    StateHasChanged(); 
+                                })">
+                                    <option value="">Select Sex</option>
+                                    <option value="Male">Male</option>
+                                    <option value="Female">Female</option>
+                                </select>
+                                <ValidationMessage For="@(() => _addAdminModel.Sex)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Contact Number</label>
+                                <InputText class="form-input" @bind-Value="_addAdminModel.Contact" placeholder="+63 912 345 6789" />
+                                <ValidationMessage For="@(() => _addAdminModel.Contact)" />
+                            </div>
+                        </div>
+                    }
+                    else if (activeAddAdminTab == "address")
+                    {
+                        <div class="form-grid">
+                            <div class="form-field full-width">
+                                <label class="field-label">Street Address</label>
+                                <InputText class="form-input" @bind-Value="_addAdminAddressModel.Street" placeholder="123 Main Street, Barangay Name" />
+                                <ValidationMessage For="@(() => _addAdminAddressModel.Street)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Province</label>
+                                <select class="form-input province-select" value="@_addAdminAddressModel.Province" @onchange="OnProvinceChanged">
+                                    <option value="">Select Province</option>
+                                    @foreach (var province in _addAdminProvinces)
+                                    {
+                                        <option value="@province">@province</option>
+                                    }
+                                </select>
+                                <ValidationMessage For="@(() => _addAdminAddressModel.Province)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">City</label>
+                                <select class="form-input city-select" value="@_addAdminAddressModel.City" @onchange="OnCityChanged" disabled="@(string.IsNullOrEmpty(_addAdminAddressModel.Province))">
+                                    <option value="">Select City</option>
+                                    @foreach (var city in _addAdminCities)
+                                    {
+                                        <option value="@city">@city</option>
+                                    }
+                                </select>
+                                <ValidationMessage For="@(() => _addAdminAddressModel.City)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Zip Code</label>
+                                <input class="form-input" value="@_addAdminAddressModel.Zip" disabled placeholder="Auto-filled" />
+                                <ValidationMessage For="@(() => _addAdminAddressModel.Zip)" />
+                            </div>
+                        </div>
+                    }
+
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-btn" @onclick="CloseAddAdminModal">Cancel</button>
+                        <button type="submit" class="save-admin-btn">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                <polyline points="7 3 7 8 15 8"></polyline>
+                            </svg>
+                            <span>Save Admin</span>
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@* Update Admin Modal *@
+@if (showUpdateAdminModal)
+{
+    <div class="modal-overlay" @onclick="CloseUpdateAdminModal">
+        <div class="add-admin-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Update Admin</h2>
+                <button class="modal-close-btn" @onclick="CloseUpdateAdminModal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-tabs">
+                <button class="modal-tab @(activeUpdateAdminTab == "user" ? "active" : "")" @onclick='() => SetActiveUpdateAdminTab("user")'>
+                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                    <span>User Information</span>
+                </button>
+                <button class="modal-tab @(activeUpdateAdminTab == "address" ? "active" : "")" @onclick='() => SetActiveUpdateAdminTab("address")'>
+                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                        <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                    <span>Address Information</span>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <EditForm EditContext="@_updateAdminEditContext" OnValidSubmit="SaveUpdateAdminAsync" OnInvalidSubmit="HandleUpdateInvalidSubmit">
+                    <DataAnnotationsValidator />
+                    
+                    @if (activeUpdateAdminTab == "user")
+                    {
+                        <div class="form-grid">
+                            <div class="form-field">
+                                <label class="field-label">First Name</label>
+                                <input id="updateAdminFirstName" class="form-input" value="@_updateAdminModel.FirstName" @oninput="FilterUpdateAdminFirstNameInput" placeholder="Enter first name" />
+                                <ValidationMessage For="@(() => _updateAdminModel.FirstName)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Middle Name</label>
+                                <input id="updateAdminMiddleName" class="form-input" value="@_updateAdminModel.MiddleName" @oninput="FilterUpdateAdminMiddleNameInput" placeholder="Enter middle name (optional)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Last Name</label>
+                                <input id="updateAdminLastName" class="form-input" value="@_updateAdminModel.LastName" @oninput="FilterUpdateAdminLastNameInput" placeholder="Enter last name" />
+                                <ValidationMessage For="@(() => _updateAdminModel.LastName)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Email</label>
+                                <InputText class="form-input" @bind-Value="_updateAdminModel.Email" placeholder="Enter email address" />
+                                <ValidationMessage For="@(() => _updateAdminModel.Email)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Birthday</label>
+                                <input type="date" class="form-input" value="@(_updateAdminModel.Birthday?.ToString("yyyy-MM-dd") ?? "")" max="@MaxBirthdayDate.ToString("yyyy-MM-dd")" @onchange="@((ChangeEventArgs e) => { if (DateTime.TryParse(e.Value?.ToString(), out var date)) { UpdateAdminBirthday = DateOnly.FromDateTime(date); } else { UpdateAdminBirthday = null; } })" />
+                                <ValidationMessage For="@(() => _updateAdminModel.Birthday)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Age</label>
+                                <InputNumber TValue="int?" class="form-input" @bind-Value="_updateAdminModel.Age" disabled />
+                                <ValidationMessage For="@(() => _updateAdminModel.Age)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Sex</label>
+                                <select class="form-input sex-select" value="@_updateAdminModel.Sex" @onchange="@((ChangeEventArgs e) => { 
+                                    _updateAdminModel.Sex = e.Value?.ToString() ?? string.Empty; 
+                                    if (_updateAdminEditContext != null)
+                                    {
+                                        _updateAdminEditContext.NotifyFieldChanged(_updateAdminEditContext.Field(nameof(_updateAdminModel.Sex)));
+                                    }
+                                    StateHasChanged(); 
+                                })">
+                                    <option value="">Select Sex</option>
+                                    <option value="Male">Male</option>
+                                    <option value="Female">Female</option>
+                                </select>
+                                <ValidationMessage For="@(() => _updateAdminModel.Sex)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Contact Number</label>
+                                <InputText class="form-input" @bind-Value="_updateAdminModel.Contact" placeholder="+63 912 345 6789" />
+                                <ValidationMessage For="@(() => _updateAdminModel.Contact)" />
+                            </div>
+                        </div>
+                    }
+                    else if (activeUpdateAdminTab == "address")
+                    {
+                        <div class="form-grid">
+                            <div class="form-field full-width">
+                                <label class="field-label">Street Address</label>
+                                <InputText class="form-input" @bind-Value="_updateAdminAddressModel.Street" placeholder="123 Main Street, Barangay Name" />
+                                <ValidationMessage For="@(() => _updateAdminAddressModel.Street)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Province</label>
+                                <select class="form-input province-select" value="@_updateAdminAddressModel.Province" @onchange="OnUpdateProvinceChanged">
+                                    <option value="">Select Province</option>
+                                    @foreach (var province in _updateAdminProvinces)
+                                    {
+                                        <option value="@province">@province</option>
+                                    }
+                                </select>
+                                <ValidationMessage For="@(() => _updateAdminAddressModel.Province)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">City</label>
+                                <select class="form-input city-select" value="@_updateAdminAddressModel.City" @onchange="OnUpdateCityChanged" disabled="@(string.IsNullOrEmpty(_updateAdminAddressModel.Province))">
+                                    <option value="">Select City</option>
+                                    @foreach (var city in _updateAdminCities)
+                                    {
+                                        <option value="@city">@city</option>
+                                    }
+                                </select>
+                                <ValidationMessage For="@(() => _updateAdminAddressModel.City)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Zip Code</label>
+                                <input class="form-input" value="@_updateAdminAddressModel.Zip" disabled placeholder="Auto-filled" />
+                                <ValidationMessage For="@(() => _updateAdminAddressModel.Zip)" />
+                            </div>
+                        </div>
+                    }
+
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-btn" @onclick="CloseUpdateAdminModal">Cancel</button>
+                        <button type="submit" class="save-admin-btn">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                <polyline points="7 3 7 8 15 8"></polyline>
+                            </svg>
+                            <span>Update Admin</span>
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<IT13_Final.Services.Data.AdminUserModel> adminUsers = new();
+    private string searchTerm = string.Empty;
+    private bool isLoading = true;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling((double)totalCount / pageSize);
+    private bool showUserDetails = false;
+    private IT13_Final.Services.Data.UserDetailsModel? userDetails = null;
+    private bool isLoadingDetails = false;
+
+    // Add Admin Modal
+    private bool showAddAdminModal = false;
+    private string activeAddAdminTab = "user";
+    private readonly AddAdminModel _addAdminModel = new();
+    private EditContext _addAdminEditContext;
+    private ValidationMessageStore? _validationMessageStore;
+    private readonly IT13_Final.Services.Data.AddressModel _addAdminAddressModel = new();
+    private List<string> _addAdminProvinces = new();
+    private List<string> _addAdminCities = new();
+    private string? _addAdminMessage;
+    private bool _addAdminSuccess = false;
+    private System.Threading.Timer? _successMessageTimer;
+    private bool showSuccessMessage = false;
+    private string successMessageText = string.Empty;
+    private System.Threading.Timer? _successBannerTimer;
+
+    // Update Admin Modal
+    private bool showUpdateAdminModal = false;
+    private string activeUpdateAdminTab = "user";
+    private readonly AddAdminModel _updateAdminModel = new();
+    private EditContext _updateAdminEditContext;
+    private ValidationMessageStore? _updateValidationMessageStore;
+    private readonly IT13_Final.Services.Data.AddressModel _updateAdminAddressModel = new();
+    private List<string> _updateAdminProvinces = new();
+    private List<string> _updateAdminCities = new();
+    private int? _updateAdminUserId = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Initialize EditContext with the model
+        _addAdminEditContext = new EditContext(_addAdminModel);
+        _validationMessageStore = new ValidationMessageStore(_addAdminEditContext);
+        
+        // Initialize Update EditContext
+        _updateAdminEditContext = new EditContext(_updateAdminModel);
+        _updateValidationMessageStore = new ValidationMessageStore(_updateAdminEditContext);
+        
+        await LoadAdminUsersAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (showAddAdminModal)
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("filterNameInput", "addAdminFirstName");
+                await JSRuntime.InvokeVoidAsync("filterNameInput", "addAdminMiddleName");
+                await JSRuntime.InvokeVoidAsync("filterNameInput", "addAdminLastName");
+            }
+            catch (Exception)
+            {
+                // JavaScript interop might not be available yet, ignore
+            }
+        }
+        
+        if (showUpdateAdminModal)
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("filterNameInput", "updateAdminFirstName");
+                await JSRuntime.InvokeVoidAsync("filterNameInput", "updateAdminMiddleName");
+                await JSRuntime.InvokeVoidAsync("filterNameInput", "updateAdminLastName");
+            }
+            catch (Exception)
+            {
+                // JavaScript interop might not be available yet, ignore
+            }
+        }
+    }
+
+    private async Task LoadAdminUsersAsync()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            totalCount = await UserService.GetAdminUsersCountAsync(searchTerm);
+            adminUsers = await UserService.GetAdminUsersAsync(searchTerm, currentPage, pageSize);
+        }
+        catch (Exception)
+        {
+            adminUsers = new List<IT13_Final.Services.Data.AdminUserModel>();
+            totalCount = 0;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            currentPage = 1;
+            await LoadAdminUsersAsync();
+        }
+    }
+
+    // Debounce search to avoid too many queries
+    private System.Threading.Timer? _searchTimer;
+    private void HandleSearchInput(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? string.Empty;
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            currentPage = 1;
+            await InvokeAsync(async () =>
+            {
+                await LoadAdminUsersAsync();
+            });
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages)
+        {
+            if (page != currentPage)
+            {
+                currentPage = page;
+                await LoadAdminUsersAsync();
+            }
+        }
+    }
+
+    private void NavigateToArchive()
+    {
+        Nav.NavigateTo("/admin/Archive_Admin_Record");
+    }
+
+    private void HandleAddAdmin()
+    {
+        showAddAdminModal = true;
+        activeAddAdminTab = "user";
+        _addAdminModel.Reset();
+        _addAdminModel.Role = "admin"; // Set default role to admin
+        _addAdminAddressModel.Id = 0;
+        _addAdminAddressModel.Street = string.Empty;
+        _addAdminAddressModel.City = string.Empty;
+        _addAdminAddressModel.Province = string.Empty;
+        _addAdminAddressModel.Zip = string.Empty;
+        _addAdminMessage = null;
+        _addAdminSuccess = false;
+        
+        // Reinitialize EditContext and ValidationMessageStore with the reset model
+        _addAdminEditContext = new EditContext(_addAdminModel);
+        _validationMessageStore = new ValidationMessageStore(_addAdminEditContext);
+        
+        StateHasChanged();
+        
+        // Load provinces when opening modal
+        _addAdminProvinces = PhilippineAddressService.GetProvinces();
+        _addAdminProvinces.Sort();
+        _addAdminCities = new List<string>();
+    }
+
+    private void CloseAddAdminModal()
+    {
+        showAddAdminModal = false;
+        _addAdminModel.Reset();
+        _addAdminAddressModel.Id = 0;
+        _addAdminAddressModel.Street = string.Empty;
+        _addAdminAddressModel.City = string.Empty;
+        _addAdminAddressModel.Province = string.Empty;
+        _addAdminAddressModel.Zip = string.Empty;
+        _addAdminMessage = null;
+        _addAdminSuccess = false;
+        _successMessageTimer?.Dispose();
+        _successMessageTimer = null;
+        _successBannerTimer?.Dispose();
+        _successBannerTimer = null;
+        // Reset EditContext and ValidationMessageStore
+        _addAdminEditContext = new EditContext(_addAdminModel);
+        _validationMessageStore = new ValidationMessageStore(_addAdminEditContext);
+        StateHasChanged();
+    }
+
+    private void SetActiveAddAdminTab(string tab)
+    {
+        activeAddAdminTab = tab;
+        StateHasChanged();
+    }
+
+    private DateOnly MaxBirthdayDate
+    {
+        get
+        {
+            // Maximum birthday is 24 years ago from today
+            var today = DateOnly.FromDateTime(DateTime.Today);
+            return today.AddYears(-24);
+        }
+    }
+
+    private DateOnly? AddAdminBirthday
+    {
+        get => _addAdminModel.Birthday;
+        set
+        {
+            // Clear any previous validation messages for birthday
+            if (_validationMessageStore != null && _addAdminEditContext != null)
+            {
+                _validationMessageStore.Clear(_addAdminEditContext.Field(nameof(_addAdminModel.Birthday)));
+            }
+            
+            if (value.HasValue)
+            {
+                var today = DateOnly.FromDateTime(DateTime.Today);
+                var age = today.Year - value.Value.Year;
+                
+                // Adjust if birthday hasn't occurred this year
+                if (value.Value > today.AddYears(-age))
+                {
+                    age--;
+                }
+                
+                // Validate minimum age requirement (must be at least 24)
+                if (age < 24)
+                {
+                    // Add validation error directly to the Birthday field
+                    if (_validationMessageStore != null && _addAdminEditContext != null)
+                    {
+                        _validationMessageStore.Add(
+                            _addAdminEditContext.Field(nameof(_addAdminModel.Birthday)),
+                            "Admin users must be at least 24 years old.");
+                        _addAdminEditContext.NotifyValidationStateChanged();
+                    }
+                    StateHasChanged();
+                    return;
+                }
+                
+                _addAdminModel.Birthday = value;
+                _addAdminModel.Age = age;
+                
+                // Notify EditContext of field changes
+                if (_addAdminEditContext != null)
+                {
+                    _addAdminEditContext.NotifyFieldChanged(_addAdminEditContext.Field(nameof(_addAdminModel.Birthday)));
+                    _addAdminEditContext.NotifyFieldChanged(_addAdminEditContext.Field(nameof(_addAdminModel.Age)));
+                }
+            }
+            else
+            {
+                _addAdminModel.Birthday = null;
+                _addAdminModel.Age = null;
+                
+                // Notify EditContext of field changes
+                if (_addAdminEditContext != null)
+                {
+                    _addAdminEditContext.NotifyFieldChanged(_addAdminEditContext.Field(nameof(_addAdminModel.Birthday)));
+                    _addAdminEditContext.NotifyFieldChanged(_addAdminEditContext.Field(nameof(_addAdminModel.Age)));
+                }
+            }
+            StateHasChanged();
+        }
+    }
+
+    private void OnProvinceChanged(ChangeEventArgs e)
+    {
+        _addAdminAddressModel.Province = e.Value?.ToString() ?? string.Empty;
+        _addAdminAddressModel.City = string.Empty;
+        _addAdminAddressModel.Zip = string.Empty;
+
+        if (!string.IsNullOrEmpty(_addAdminAddressModel.Province))
+        {
+            _addAdminCities = PhilippineAddressService.GetCities(_addAdminAddressModel.Province);
+            _addAdminCities.Sort();
+        }
+        else
+        {
+            _addAdminCities = new List<string>();
+        }
+
+        StateHasChanged();
+    }
+
+    private void OnCityChanged(ChangeEventArgs e)
+    {
+        _addAdminAddressModel.City = e.Value?.ToString() ?? string.Empty;
+
+        if (!string.IsNullOrEmpty(_addAdminAddressModel.Province) && !string.IsNullOrEmpty(_addAdminAddressModel.City))
+        {
+            _addAdminAddressModel.Zip = PhilippineAddressService.GetZipCode(_addAdminAddressModel.Province, _addAdminAddressModel.City);
+        }
+        else
+        {
+            _addAdminAddressModel.Zip = string.Empty;
+        }
+
+        StateHasChanged();
+    }
+
+    private void FilterAddAdminFirstNameInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        _addAdminModel.FirstName = filtered;
+        
+        // Notify EditContext of field change
+        if (_addAdminEditContext != null)
+        {
+            _addAdminEditContext.NotifyFieldChanged(_addAdminEditContext.Field(nameof(_addAdminModel.FirstName)));
+        }
+        
+        // Auto-generate password as FirstName123
+        if (!string.IsNullOrWhiteSpace(filtered))
+        {
+            // Remove spaces and take only letters for password
+            var firstNameForPassword = new string(filtered.Where(char.IsLetter).ToArray());
+            if (!string.IsNullOrWhiteSpace(firstNameForPassword))
+            {
+                _addAdminModel.Password = firstNameForPassword + "123";
+                _addAdminModel.ConfirmPassword = firstNameForPassword + "123";
+                
+                // Notify EditContext of password field changes
+                if (_addAdminEditContext != null)
+                {
+                    _addAdminEditContext.NotifyFieldChanged(_addAdminEditContext.Field(nameof(_addAdminModel.Password)));
+                    _addAdminEditContext.NotifyFieldChanged(_addAdminEditContext.Field(nameof(_addAdminModel.ConfirmPassword)));
+                }
+            }
+        }
+        else
+        {
+            _addAdminModel.Password = string.Empty;
+            _addAdminModel.ConfirmPassword = string.Empty;
+            
+            // Notify EditContext of password field changes
+            if (_addAdminEditContext != null)
+            {
+                _addAdminEditContext.NotifyFieldChanged(_addAdminEditContext.Field(nameof(_addAdminModel.Password)));
+                _addAdminEditContext.NotifyFieldChanged(_addAdminEditContext.Field(nameof(_addAdminModel.ConfirmPassword)));
+            }
+        }
+        
+        StateHasChanged();
+    }
+
+    private void FilterAddAdminMiddleNameInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        _addAdminModel.MiddleName = filtered;
+        
+        // Notify EditContext of field change
+        if (_addAdminEditContext != null)
+        {
+            _addAdminEditContext.NotifyFieldChanged(_addAdminEditContext.Field(nameof(_addAdminModel.MiddleName)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void FilterAddAdminLastNameInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        _addAdminModel.LastName = filtered;
+        
+        // Notify EditContext of field change
+        if (_addAdminEditContext != null)
+        {
+            _addAdminEditContext.NotifyFieldChanged(_addAdminEditContext.Field(nameof(_addAdminModel.LastName)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void HandleInvalidSubmit()
+    {
+        // Show validation errors when form submission fails
+        StateHasChanged();
+    }
+
+    private async Task SaveAdminAsync()
+    {
+        // Build admin name for confirmation
+        var adminName = $"{_addAdminModel.FirstName} {_addAdminModel.LastName}".Trim();
+        if (string.IsNullOrWhiteSpace(adminName))
+        {
+            adminName = _addAdminModel.Email;
+        }
+        
+        // Show confirmation dialog
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to add {adminName} as an admin?");
+        
+        if (!confirmed)
+        {
+            return; // User cancelled
+        }
+        
+        _addAdminMessage = null;
+        
+        // Auto-generate password if first name exists but password is empty
+        if (string.IsNullOrWhiteSpace(_addAdminModel.Password) && !string.IsNullOrWhiteSpace(_addAdminModel.FirstName))
+        {
+            var firstNameForPassword = new string(_addAdminModel.FirstName.Where(char.IsLetter).ToArray());
+            if (!string.IsNullOrWhiteSpace(firstNameForPassword))
+            {
+                _addAdminModel.Password = firstNameForPassword + "123";
+                _addAdminModel.ConfirmPassword = firstNameForPassword + "123";
+            }
+        }
+        
+        // Validate passwords match
+        if (_addAdminModel.Password != _addAdminModel.ConfirmPassword)
+        {
+            _addAdminMessage = "Passwords do not match.";
+            _addAdminSuccess = false;
+            StateHasChanged();
+            return;
+        }
+
+        // Validate password length
+        if (string.IsNullOrWhiteSpace(_addAdminModel.Password) || _addAdminModel.Password.Length < 6)
+        {
+            _addAdminMessage = "Password must be at least 6 characters long.";
+            _addAdminSuccess = false;
+            StateHasChanged();
+            return;
+        }
+        
+        // Ensure role is set to admin
+        _addAdminModel.Role = "admin";
+
+        // Validate admin age requirement (must be at least 24 years old)
+        if (!_addAdminModel.Age.HasValue || _addAdminModel.Age.Value < 24)
+        {
+            _addAdminMessage = "Admin users must be at least 24 years old.";
+            _addAdminSuccess = false;
+            StateHasChanged();
+            return;
+        }
+
+        // Clear any previous validation messages
+        _validationMessageStore?.Clear();
+
+        try
+        {
+            // Create the admin user
+            var newUserId = await UserService.CreateAdminAsync(
+                _addAdminModel.Email,
+                _addAdminModel.Password,
+                _addAdminModel.FirstName,
+                string.IsNullOrWhiteSpace(_addAdminModel.MiddleName) ? null : _addAdminModel.MiddleName,
+                _addAdminModel.LastName,
+                string.IsNullOrWhiteSpace(_addAdminModel.Contact) ? null : _addAdminModel.Contact,
+                _addAdminModel.Birthday,
+                _addAdminModel.Age,
+                string.IsNullOrWhiteSpace(_addAdminModel.Sex) ? null : _addAdminModel.Sex
+            );
+
+            if (newUserId.HasValue && newUserId.Value > 0)
+            {
+                // Save address if provided
+                if (!string.IsNullOrWhiteSpace(_addAdminAddressModel.Street) ||
+                    !string.IsNullOrWhiteSpace(_addAdminAddressModel.City) ||
+                    !string.IsNullOrWhiteSpace(_addAdminAddressModel.Province) ||
+                    !string.IsNullOrWhiteSpace(_addAdminAddressModel.Zip))
+                {
+                    _addAdminAddressModel.Id = 0; // New address
+                    await AddressService.SaveAddressAsync(newUserId.Value, _addAdminAddressModel);
+                }
+
+                // Refresh list
+                await LoadAdminUsersAsync();
+                
+                // Show success message
+                successMessageText = "Admin created successfully!";
+                showSuccessMessage = true;
+                
+                // Close modal immediately
+                CloseAddAdminModal();
+                
+                // Set timer to hide success message after 5 seconds
+                _successBannerTimer?.Dispose();
+                _successBannerTimer = new System.Threading.Timer(async _ =>
+                {
+                    await InvokeAsync(() =>
+                    {
+                        showSuccessMessage = false;
+                        successMessageText = string.Empty;
+                        StateHasChanged();
+                    });
+                }, null, 5000, Timeout.Infinite);
+            }
+            else
+            {
+                _addAdminMessage = "Failed to create admin. No user ID returned.";
+                _addAdminSuccess = false;
+            }
+        }
+        catch (IT13_Final.Services.Data.EmailAlreadyExistsException)
+        {
+            // Add email validation error directly to the Email field
+            if (_validationMessageStore != null && _addAdminEditContext != null)
+            {
+                _validationMessageStore.Add(
+                    _addAdminEditContext.Field(nameof(_addAdminModel.Email)),
+                    "Email address already exists.");
+                _addAdminEditContext.NotifyValidationStateChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            _addAdminMessage = $"Failed to create admin: {ex.Message}";
+            _addAdminSuccess = false;
+        }
+        finally
+        {
+            StateHasChanged();
+        }
+    }
+
+    private sealed class AddAdminModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "First Name is required")]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^[a-zA-Z\s'.-]+$", ErrorMessage = "First Name must contain only letters")]
+        public string FirstName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^[a-zA-Z\s'.-]*$", ErrorMessage = "Middle Name must contain only letters")]
+        public string MiddleName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Last Name is required")]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^[a-zA-Z\s'.-]+$", ErrorMessage = "Last Name must contain only letters")]
+        public string LastName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Email is required")]
+        [System.ComponentModel.DataAnnotations.EmailAddress(ErrorMessage = "Invalid email format")]
+        public string Email { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Birthday is required")]
+        public DateOnly? Birthday { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Age is required")]
+        [System.ComponentModel.DataAnnotations.Range(24, 150, ErrorMessage = "Admin must be at least 24 years old")]
+        public int? Age { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Sex is required")]
+        public string Sex { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Contact Number is required")]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^(\+63\s?)?9\d{2}[\s-]?\d{3}[\s-]?\d{4}$|^09\d{9}$|^\(?0[2-9]\d\)?[\s-]?\d{3}[\s-]?\d{4}$", ErrorMessage = "Contact Number must be a valid Philippine phone number")]
+        public string Contact { get; set; } = string.Empty;
+
+        // Password is auto-generated, so we don't need Required validation here
+        [System.ComponentModel.DataAnnotations.MinLength(6, ErrorMessage = "Password must be at least 6 characters")]
+        public string Password { get; set; } = string.Empty;
+
+        // Confirm Password is auto-generated, so we don't need Required validation here
+        public string ConfirmPassword { get; set; } = string.Empty;
+
+        public string Role { get; set; } = "admin";
+
+        public void Reset()
+        {
+            FirstName = string.Empty;
+            MiddleName = string.Empty;
+            LastName = string.Empty;
+            Email = string.Empty;
+            Birthday = null;
+            Age = null;
+            Sex = string.Empty;
+            Contact = string.Empty;
+            Password = string.Empty;
+            ConfirmPassword = string.Empty;
+            Role = "admin";
+        }
+    }
+
+    private async Task HandleDelete(int userId)
+    {
+        // Get the admin name for the confirmation dialog
+        var admin = adminUsers.FirstOrDefault(u => u.Id == userId);
+        var adminName = admin?.Name ?? "this admin";
+        
+        // Show confirmation dialog
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to archive {adminName}?");
+        
+        if (!confirmed)
+        {
+            return; // User cancelled
+        }
+        
+        try
+        {
+            var success = await UserService.ArchiveAdminAsync(userId);
+            
+            if (success)
+            {
+                // Refresh the list to remove the archived admin
+                await LoadAdminUsersAsync();
+                
+                // Show success message
+                successMessageText = "Admin archived successfully!";
+                showSuccessMessage = true;
+                
+                // Set timer to hide success message after 5 seconds
+                _successBannerTimer?.Dispose();
+                _successBannerTimer = new System.Threading.Timer(async _ =>
+                {
+                    await InvokeAsync(() =>
+                    {
+                        showSuccessMessage = false;
+                        successMessageText = string.Empty;
+                        StateHasChanged();
+                    });
+                }, null, 5000, Timeout.Infinite);
+            }
+        }
+        catch (Exception)
+        {
+            // Handle error - could show an error message here
+        }
+        
+        StateHasChanged();
+    }
+
+    private async Task HandleRowClick(int userId)
+    {
+        showUserDetails = true;
+        isLoadingDetails = true;
+        StateHasChanged();
+
+        try
+        {
+            userDetails = await UserService.GetUserDetailsAsync(userId);
+        }
+        catch
+        {
+            userDetails = null;
+        }
+        finally
+        {
+            isLoadingDetails = false;
+            StateHasChanged();
+        }
+    }
+
+    private void CloseUserDetails()
+    {
+        showUserDetails = false;
+        userDetails = null;
+        StateHasChanged();
+    }
+
+    private DateOnly? UpdateAdminBirthday
+    {
+        get => _updateAdminModel.Birthday;
+        set
+        {
+            // Clear any previous validation messages for birthday
+            if (_updateValidationMessageStore != null && _updateAdminEditContext != null)
+            {
+                _updateValidationMessageStore.Clear(_updateAdminEditContext.Field(nameof(_updateAdminModel.Birthday)));
+            }
+            
+            if (value.HasValue)
+            {
+                var today = DateOnly.FromDateTime(DateTime.Today);
+                var age = today.Year - value.Value.Year;
+                
+                // Adjust if birthday hasn't occurred this year
+                if (value.Value > today.AddYears(-age))
+                {
+                    age--;
+                }
+                
+                // Validate minimum age requirement (must be at least 24)
+                if (age < 24)
+                {
+                    // Add validation error directly to the Birthday field
+                    if (_updateValidationMessageStore != null && _updateAdminEditContext != null)
+                    {
+                        _updateValidationMessageStore.Add(
+                            _updateAdminEditContext.Field(nameof(_updateAdminModel.Birthday)),
+                            "Admin users must be at least 24 years old.");
+                        _updateAdminEditContext.NotifyValidationStateChanged();
+                    }
+                    StateHasChanged();
+                    return;
+                }
+                
+                _updateAdminModel.Birthday = value;
+                _updateAdminModel.Age = age;
+                
+                // Notify EditContext of field changes
+                if (_updateAdminEditContext != null)
+                {
+                    _updateAdminEditContext.NotifyFieldChanged(_updateAdminEditContext.Field(nameof(_updateAdminModel.Birthday)));
+                    _updateAdminEditContext.NotifyFieldChanged(_updateAdminEditContext.Field(nameof(_updateAdminModel.Age)));
+                }
+            }
+            else
+            {
+                _updateAdminModel.Birthday = null;
+                _updateAdminModel.Age = null;
+                
+                // Notify EditContext of field changes
+                if (_updateAdminEditContext != null)
+                {
+                    _updateAdminEditContext.NotifyFieldChanged(_updateAdminEditContext.Field(nameof(_updateAdminModel.Birthday)));
+                    _updateAdminEditContext.NotifyFieldChanged(_updateAdminEditContext.Field(nameof(_updateAdminModel.Age)));
+                }
+            }
+            StateHasChanged();
+        }
+    }
+
+    private void OnUpdateProvinceChanged(ChangeEventArgs e)
+    {
+        _updateAdminAddressModel.Province = e.Value?.ToString() ?? string.Empty;
+        _updateAdminAddressModel.City = string.Empty;
+        _updateAdminAddressModel.Zip = string.Empty;
+
+        if (!string.IsNullOrEmpty(_updateAdminAddressModel.Province))
+        {
+            _updateAdminCities = PhilippineAddressService.GetCities(_updateAdminAddressModel.Province);
+            _updateAdminCities.Sort();
+        }
+        else
+        {
+            _updateAdminCities = new List<string>();
+        }
+
+        StateHasChanged();
+    }
+
+    private void OnUpdateCityChanged(ChangeEventArgs e)
+    {
+        _updateAdminAddressModel.City = e.Value?.ToString() ?? string.Empty;
+
+        if (!string.IsNullOrEmpty(_updateAdminAddressModel.Province) && !string.IsNullOrEmpty(_updateAdminAddressModel.City))
+        {
+            _updateAdminAddressModel.Zip = PhilippineAddressService.GetZipCode(_updateAdminAddressModel.Province, _updateAdminAddressModel.City);
+        }
+        else
+        {
+            _updateAdminAddressModel.Zip = string.Empty;
+        }
+
+        StateHasChanged();
+    }
+
+    private void FilterUpdateAdminFirstNameInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        _updateAdminModel.FirstName = filtered;
+        
+        // Notify EditContext of field change
+        if (_updateAdminEditContext != null)
+        {
+            _updateAdminEditContext.NotifyFieldChanged(_updateAdminEditContext.Field(nameof(_updateAdminModel.FirstName)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void FilterUpdateAdminMiddleNameInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        _updateAdminModel.MiddleName = filtered;
+        
+        // Notify EditContext of field change
+        if (_updateAdminEditContext != null)
+        {
+            _updateAdminEditContext.NotifyFieldChanged(_updateAdminEditContext.Field(nameof(_updateAdminModel.MiddleName)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void FilterUpdateAdminLastNameInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        _updateAdminModel.LastName = filtered;
+        
+        // Notify EditContext of field change
+        if (_updateAdminEditContext != null)
+        {
+            _updateAdminEditContext.NotifyFieldChanged(_updateAdminEditContext.Field(nameof(_updateAdminModel.LastName)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void HandleUpdateInvalidSubmit()
+    {
+        // Show validation errors when form submission fails
+        StateHasChanged();
+    }
+
+    private async Task HandleEdit(int userId)
+    {
+        _updateAdminUserId = userId;
+        
+        try
+        {
+            var userDetails = await UserService.GetUserDetailsAsync(userId);
+            if (userDetails == null)
+            {
+                return;
+            }
+
+            // Load personal info to get first/middle/last name separately
+            var personalInfo = await UserService.GetPersonalInfoAsync(userId);
+            
+            // Populate user information
+            _updateAdminModel.FirstName = personalInfo?.FirstName ?? string.Empty;
+            _updateAdminModel.MiddleName = personalInfo?.MiddleName ?? string.Empty;
+            _updateAdminModel.LastName = personalInfo?.LastName ?? string.Empty;
+            _updateAdminModel.Email = userDetails.Email;
+            _updateAdminModel.Birthday = userDetails.Birthday;
+            _updateAdminModel.Age = userDetails.Age;
+            _updateAdminModel.Sex = userDetails.Sex;
+            _updateAdminModel.Contact = userDetails.Contact;
+            
+            // Set dummy password values to satisfy validation (password is not changed in update)
+            _updateAdminModel.Password = "Dummy123";
+            _updateAdminModel.ConfirmPassword = "Dummy123";
+
+            // Load address information with ID for updates
+            var existingAddress = await AddressService.GetAddressAsync(userId);
+            if (existingAddress != null)
+            {
+                _updateAdminAddressModel.Id = existingAddress.Id;
+                _updateAdminAddressModel.Street = existingAddress.Street;
+                _updateAdminAddressModel.Province = existingAddress.Province;
+                _updateAdminAddressModel.City = existingAddress.City;
+                _updateAdminAddressModel.Zip = existingAddress.Zip;
+            }
+            else
+            {
+                // If no address exists, use data from userDetails (might be empty)
+                _updateAdminAddressModel.Id = 0;
+                _updateAdminAddressModel.Street = userDetails.Street ?? string.Empty;
+                _updateAdminAddressModel.Province = userDetails.Province ?? string.Empty;
+                _updateAdminAddressModel.City = userDetails.City ?? string.Empty;
+                _updateAdminAddressModel.Zip = userDetails.Zip ?? string.Empty;
+            }
+
+            // Load provinces and cities
+            _updateAdminProvinces = PhilippineAddressService.GetProvinces().ToList();
+            _updateAdminProvinces.Sort();
+            
+            if (!string.IsNullOrEmpty(_updateAdminAddressModel.Province))
+            {
+                _updateAdminCities = PhilippineAddressService.GetCities(_updateAdminAddressModel.Province);
+                _updateAdminCities.Sort();
+            }
+            else
+            {
+                _updateAdminCities = new List<string>();
+            }
+
+            // Reinitialize EditContext with populated model
+            _updateAdminEditContext = new EditContext(_updateAdminModel);
+            _updateValidationMessageStore = new ValidationMessageStore(_updateAdminEditContext);
+
+            activeUpdateAdminTab = "user";
+            showUpdateAdminModal = true;
+            StateHasChanged();
+        }
+        catch (Exception)
+        {
+            // Handle error
+        }
+    }
+
+    private void SetActiveUpdateAdminTab(string tab)
+    {
+        activeUpdateAdminTab = tab;
+        StateHasChanged();
+    }
+
+    private void CloseUpdateAdminModal()
+    {
+        showUpdateAdminModal = false;
+        activeUpdateAdminTab = "user";
+        _updateAdminModel.Reset();
+        _updateAdminAddressModel.Id = 0;
+        _updateAdminAddressModel.Street = string.Empty;
+        _updateAdminAddressModel.City = string.Empty;
+        _updateAdminAddressModel.Province = string.Empty;
+        _updateAdminAddressModel.Zip = string.Empty;
+        _updateAdminProvinces = new List<string>();
+        _updateAdminCities = new List<string>();
+        _updateAdminUserId = null;
+        
+        // Reset EditContext and ValidationMessageStore
+        _updateAdminEditContext = new EditContext(_updateAdminModel);
+        _updateValidationMessageStore = new ValidationMessageStore(_updateAdminEditContext);
+        StateHasChanged();
+    }
+
+    private async Task SaveUpdateAdminAsync()
+    {
+        if (!_updateAdminUserId.HasValue)
+        {
+            return;
+        }
+        
+        // Clear any previous validation messages
+        _updateValidationMessageStore?.Clear();
+        
+        // Validate required fields manually since we're using native inputs
+        bool hasErrors = false;
+        
+        if (string.IsNullOrWhiteSpace(_updateAdminModel.FirstName))
+        {
+            _updateValidationMessageStore?.Add(_updateAdminEditContext.Field(nameof(_updateAdminModel.FirstName)), "First Name is required.");
+            hasErrors = true;
+        }
+        
+        if (string.IsNullOrWhiteSpace(_updateAdminModel.LastName))
+        {
+            _updateValidationMessageStore?.Add(_updateAdminEditContext.Field(nameof(_updateAdminModel.LastName)), "Last Name is required.");
+            hasErrors = true;
+        }
+        
+        if (string.IsNullOrWhiteSpace(_updateAdminModel.Email))
+        {
+            _updateValidationMessageStore?.Add(_updateAdminEditContext.Field(nameof(_updateAdminModel.Email)), "Email is required.");
+            hasErrors = true;
+        }
+        else if (!System.Text.RegularExpressions.Regex.IsMatch(_updateAdminModel.Email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+        {
+            _updateValidationMessageStore?.Add(_updateAdminEditContext.Field(nameof(_updateAdminModel.Email)), "Invalid email format.");
+            hasErrors = true;
+        }
+        
+        if (!_updateAdminModel.Birthday.HasValue)
+        {
+            _updateValidationMessageStore?.Add(_updateAdminEditContext.Field(nameof(_updateAdminModel.Birthday)), "Birthday is required.");
+            hasErrors = true;
+        }
+        
+        if (string.IsNullOrWhiteSpace(_updateAdminModel.Sex))
+        {
+            _updateValidationMessageStore?.Add(_updateAdminEditContext.Field(nameof(_updateAdminModel.Sex)), "Sex is required.");
+            hasErrors = true;
+        }
+        
+        if (string.IsNullOrWhiteSpace(_updateAdminModel.Contact))
+        {
+            _updateValidationMessageStore?.Add(_updateAdminEditContext.Field(nameof(_updateAdminModel.Contact)), "Contact Number is required.");
+            hasErrors = true;
+        }
+
+        // Validate admin age requirement (must be at least 24 years old)
+        if (!_updateAdminModel.Age.HasValue || _updateAdminModel.Age.Value < 24)
+        {
+            _updateValidationMessageStore?.Add(_updateAdminEditContext.Field(nameof(_updateAdminModel.Age)), "Admin users must be at least 24 years old.");
+            hasErrors = true;
+        }
+        
+        if (hasErrors)
+        {
+            _updateAdminEditContext?.NotifyValidationStateChanged();
+            StateHasChanged();
+            return;
+        }
+        
+        // Build admin name for confirmation
+        var adminName = $"{_updateAdminModel.FirstName} {_updateAdminModel.LastName}".Trim();
+        if (string.IsNullOrWhiteSpace(adminName))
+        {
+            adminName = _updateAdminModel.Email;
+        }
+        
+        // Show confirmation dialog
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to update {adminName}?");
+        
+        if (!confirmed)
+        {
+            return; // User cancelled
+        }
+        
+        // All validation passed - proceed with update
+
+        try
+        {
+            // Update the admin user
+            var success = await UserService.UpdateAdminAsync(
+                _updateAdminUserId.Value,
+                _updateAdminModel.Email,
+                _updateAdminModel.FirstName,
+                string.IsNullOrWhiteSpace(_updateAdminModel.MiddleName) ? null : _updateAdminModel.MiddleName,
+                _updateAdminModel.LastName,
+                string.IsNullOrWhiteSpace(_updateAdminModel.Contact) ? null : _updateAdminModel.Contact,
+                _updateAdminModel.Birthday,
+                _updateAdminModel.Age,
+                string.IsNullOrWhiteSpace(_updateAdminModel.Sex) ? null : _updateAdminModel.Sex
+            );
+
+            if (success)
+            {
+                // Save/update address if provided
+                if (!string.IsNullOrWhiteSpace(_updateAdminAddressModel.Street) ||
+                    !string.IsNullOrWhiteSpace(_updateAdminAddressModel.City) ||
+                    !string.IsNullOrWhiteSpace(_updateAdminAddressModel.Province) ||
+                    !string.IsNullOrWhiteSpace(_updateAdminAddressModel.Zip))
+                {
+                    await AddressService.SaveAddressAsync(_updateAdminUserId.Value, _updateAdminAddressModel);
+                }
+
+                // Refresh list
+                await LoadAdminUsersAsync();
+                
+                // Show success message
+                successMessageText = "Admin updated successfully!";
+                showSuccessMessage = true;
+                
+                // Close modal immediately
+                CloseUpdateAdminModal();
+                
+                // Set timer to hide success message after 5 seconds
+                _successBannerTimer?.Dispose();
+                _successBannerTimer = new System.Threading.Timer(async _ =>
+                {
+                    await InvokeAsync(() =>
+                    {
+                        showSuccessMessage = false;
+                        successMessageText = string.Empty;
+                        StateHasChanged();
+                    });
+                }, null, 5000, Timeout.Infinite);
+            }
+        }
+        catch (IT13_Final.Services.Data.EmailAlreadyExistsException)
+        {
+            // Add email validation error directly to the Email field
+            if (_updateValidationMessageStore != null && _updateAdminEditContext != null)
+            {
+                _updateValidationMessageStore.Add(
+                    _updateAdminEditContext.Field(nameof(_updateAdminModel.Email)),
+                    "Email address already exists.");
+                _updateAdminEditContext.NotifyValidationStateChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            // Handle other errors
+            if (_updateValidationMessageStore != null && _updateAdminEditContext != null)
+            {
+                _updateValidationMessageStore.Add(
+                    _updateAdminEditContext.Field(nameof(_updateAdminModel.Email)),
+                    $"Error: {ex.Message}");
+                _updateAdminEditContext.NotifyValidationStateChanged();
+            }
+        }
+        finally
+        {
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+        _successMessageTimer?.Dispose();
+        _successBannerTimer?.Dispose();
+    }
+}
+

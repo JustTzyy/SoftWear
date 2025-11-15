@@ -1,0 +1,191 @@
+@page "/seller/dashboard"
+@layout IT13_Final.Components.Layout.Seller.Seller
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IT13_Final.Services.Data.IUserService UserService
+@inject NavigationManager Nav
+
+<h1 class="page-title">Dashboard Reports</h1>
+
+@if (showSecurityAlert)
+{
+    <div class="security-alert-overlay" @onclick="HandleLater">
+        <div class="security-alert-modal" @onclick:stopPropagation>
+            <div class="security-alert-header">
+                <svg class="shield-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                    <path d="M9 12l2 2 4-4"></path>
+                </svg>
+                <span>Security Alert</span>
+                <button class="alert-close" @onclick="HandleLater">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="security-alert-body">
+                <svg class="warning-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                    <line x1="12" y1="9" x2="12" y2="13"></line>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+                <p class="alert-message">You are currently using a default password. For security reasons, please change your password immediately.</p>
+            </div>
+
+            <div class="security-alert-footer">
+                <button class="alert-btn later-btn" @onclick="HandleLater">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                    <span>Later</span>
+                </button>
+                <button class="alert-btn change-password-btn" @onclick="HandleChangePassword">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>  
+                    </svg>
+                    <span>Change Password</span>
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="search-row">
+    <input class="search" placeholder="Search dashboard data" />
+    <button class="print">Print Report</button>
+    <div class="fill"></div>
+</div>
+
+<section class="card">
+    <h2 class="card-title">Financial Revenue Summary</h2>
+    <div class="subtext">Overview of total revenue, payments, and financial performance</div>
+
+    <div class="grid-5">
+        <div class="metric">
+            <div class="label">SUBTOTAL</div>
+            <div class="value">₱230,807.50</div>
+        </div>
+        <div class="metric">
+            <div class="label">TAX</div>
+            <div class="value">₱27,690.00</div>
+        </div>
+        <div class="metric">
+            <div class="label">TOTAL AMOUNT</div>
+            <div class="value">₱258,497.50</div>
+        </div>
+        <div class="metric">
+            <div class="label">PAYMENTS</div>
+            <div class="value">173</div>
+        </div>
+        <div class="metric">
+            <div class="label">AVERAGE PER PAYMENT</div>
+            <div class="value">₱1,494.21</div>
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    <h2 class="card-title">Staff Management Overview</h2>
+    <div class="subtext">Summary of active staff members across all departments</div>
+    <div class="grid-4">
+        <div class="metric sm">
+            <div class="label">ACCOUNTING STAFF</div>
+            <div class="value">@accountingCount</div>
+        </div>
+        <div class="metric sm">
+            <div class="label">CASHIER STAFF</div>
+            <div class="value">@cashierCount</div>
+        </div>
+        <div class="metric sm">
+            <div class="label">STOCK CLERK STAFF</div>
+            <div class="value">@stockClerkCount</div>
+        </div>
+        <div class="metric sm">
+            <div class="label">TOTAL STAFF</div>
+            <div class="value">@(accountingCount + cashierCount + stockClerkCount)</div>
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    <h2 class="card-title">Hotel Operations KPIs</h2>
+    <div class="grid-4">
+        <div class="metric sm"><div class="label">ROOMS AVAILABLE</div><div class="value">23</div></div>
+        <div class="metric sm"><div class="label">ROOMS OCCUPIED</div><div class="value">0</div></div>
+        <div class="metric sm"><div class="label">OCCUPANCY RATE</div><div class="value">0%</div></div>
+        <div class="metric sm"><div class="label">CHECK-INS</div><div class="value">124</div></div>
+    </div>
+</section>
+
+@code {
+    private bool showSecurityAlert = false;
+    private int accountingCount = 0;
+    private int cashierCount = 0;
+    private int stockClerkCount = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckPasswordChangeRequired();
+        await LoadStaffCounts();
+    }
+
+    private async Task CheckPasswordChangeRequired()
+    {
+        if (AuthState.CurrentUser != null)
+        {
+            try
+            {
+                showSecurityAlert = await UserService.MustChangePasswordAsync(AuthState.CurrentUser.Id);
+                StateHasChanged();
+            }
+            catch
+            {
+                showSecurityAlert = false;
+            }
+        }
+    }
+
+    private async Task LoadStaffCounts()
+    {
+        if (AuthState.CurrentUser != null)
+        {
+            try
+            {
+                var sellerUserId = AuthState.CurrentUser.Id;
+                accountingCount = await UserService.GetAccountingUsersCountAsync(sellerUserId);
+                cashierCount = await UserService.GetCashierUsersCountAsync(sellerUserId);
+                stockClerkCount = await UserService.GetStockClerkUsersCountAsync(sellerUserId);
+                StateHasChanged();
+            }
+            catch
+            {
+                // Handle error silently
+            }
+        }
+    }
+
+    private void HandleLater()
+    {
+        showSecurityAlert = false;
+        StateHasChanged();
+    }
+
+    private void HandleChangePassword()
+    {
+        showSecurityAlert = false;
+        Nav.NavigateTo("/seller/settings?tab=password");
+        StateHasChanged();
+    }
+}
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,281 @@
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IT13_Final.Services.Audit.IHistoryService HistoryService
+@inject NavigationManager Nav
+@inherits LayoutComponentBase
+@implements IDisposable
+
+<div class="grid min-h-screen transition-all duration-300 ease-in-out" style="grid-template-columns: @(sidebarCollapsed ? "80px" : "260px") 1fr; background-color: #E0E0E0;">
+    <aside class="bg-white transition-all duration-300 ease-in-out overflow-hidden" style="border-right: 1px solid #E0E0E0;">
+        <div class="flex items-start gap-3 py-4 px-4" style="min-height: 64px;">
+            <a href="/admin/dashboard" class="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style="border: 2px solid #5C7CFA; padding: 6px; background-color: #1a2332;">
+                <img src="/images/logo.png" alt="Logo" class="w-full h-full object-contain" style="display: block; margin: auto;" />
+            </a>
+            <div class="transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">
+                <div class="font-extrabold tracking-wide text-sm leading-tight">SOFTWEAR</div>
+                <div class="text-gray-500 text-xs -mt-0.5">Admin</div>
+            </div>
+        </div>
+
+        <nav class="grid gap-1 px-2 mt-1">
+            <a class="@GetNavItemClass("/admin/dashboard")" href="/admin/dashboard" title="Dashboard">
+                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/admin/dashboard")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+                <span class="transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">Dashboard</span>
+                @if (IsActive("/admin/dashboard"))
+                {
+                    <div class="absolute left-0 top-0 bottom-0 w-1 bg-yinmn-blue rounded-r"></div>
+                }
+            </a>
+
+            <button class="@GetUserMgmtButtonClass()" @onclick="() => userMgmtOpen = !userMgmtOpen" aria-expanded="@userMgmtOpen" title="User Management">
+                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/admin/Admin_Record", "/admin/Seller_Record", "/admin/Permission_Requests")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                <span class="flex-1 transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">User Management</span>
+                <span class="@GetIconClass("/admin/Admin_Record", "/admin/Seller_Record", "/admin/Permission_Requests") transition-all duration-300 ease-in-out" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">@(userMgmtOpen ? "▾" : "▸")</span>
+                @if (IsUserMgmtActive())
+                {
+                    <div class="absolute left-0 top-0 bottom-0 w-1 bg-yinmn-blue rounded-r"></div>
+                }
+            </button>
+            @if (userMgmtOpen && !sidebarCollapsed)
+            {
+                <div class="grid gap-1 py-1 pl-4">
+                    <a class="@GetSubNavItemClass("/admin/Admin_Record")" href="/admin/Admin_Record">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/admin/Admin_Record")"></span>
+                        <span>Admin</span>
+                    </a>
+                    <a class="@GetSubNavItemClass("/admin/Seller_Record")" href="/admin/Seller_Record">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/admin/Seller_Record")"></span>
+                        <span>Seller</span>
+                    </a>
+                    <a class="@GetSubNavItemClass("/admin/Permission_Requests")" href="/admin/Permission_Requests">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/admin/Permission_Requests")"></span>
+                        <span>Permission Requests</span>
+                    </a>
+                </div>
+            }
+
+            <a class="@GetNavItemClass("/admin/room")" href="#" title="Room Management">
+                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/admin/room")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+                <span class="transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">Room Management</span>
+                @if (IsActive("/admin/room"))
+                {
+                    <div class="absolute left-0 top-0 bottom-0 w-1 bg-yinmn-blue rounded-r"></div>
+                }
+            </a>
+            <a class="@GetNavItemClass("/admin/reports")" href="#" title="Reports">
+                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/admin/reports")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span class="transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">Reports</span>
+                @if (IsActive("/admin/reports"))
+                {
+                    <div class="absolute left-0 top-0 bottom-0 w-1 bg-yinmn-blue rounded-r"></div>
+                }
+            </a>
+        </nav>
+    </aside>
+
+    <div class="grid grid-rows-[64px_1fr]">
+        <header class="flex items-center gap-3 px-5 bg-white" style="border-bottom: 1px solid #E0E0E0;">
+            <button class="bg-transparent border-none text-xl cursor-pointer text-yinmn-blue transition-all duration-200 ease-in-out hover:opacity-70" @onclick="ToggleSidebar" aria-label="Toggle menu">≡</button>
+            <div class="flex-1"></div>
+            <div class="relative flex items-center gap-2.5" @onclick="ToggleProfileMenu">
+                <div class="w-9 h-9 rounded-full bg-gradient-to-br from-uranian-blue to-white text-yinmn-blue flex items-center justify-center font-extrabold">@GetInitials()</div>
+                <button class="flex items-center gap-2 py-1.5 px-2.5 rounded-[10px] bg-white cursor-pointer text-gray-700 transition-all duration-200 ease-in-out hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)]" style="border: 1px solid #E0E0E0;">
+                    <span class="text-sm">@DisplayName()</span>
+                    <span class="text-yinmn-blue text-xs">▾</span>
+                </button>
+                @if (profileOpen)
+                {
+                    <div class="absolute top-14 right-0 bg-white rounded-xl shadow-[0_12px_28px_rgba(0,0,0,0.12)] p-2 w-60 z-10" style="border: 1px solid #E0E0E0;" @onclick:stopPropagation>
+                        <a class="grid grid-cols-[22px_1fr] items-center gap-2.5 py-2.5 px-3 no-underline text-gray-800 rounded-[10px] border-none bg-transparent w-full text-left transition-all duration-200 ease-in-out hover:bg-platinum" href="/admin/settings" @onclick="CloseProfileMenu">
+                            <svg class="w-[18px] h-[18px] stroke-yinmn-blue stroke-2 fill-none" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none"/><path d="M12 8v8M8 12h8"/></svg>
+                            <span>Settings</span>
+                        </a>
+                        <a class="grid grid-cols-[22px_1fr] items-center gap-2.5 py-2.5 px-3 no-underline text-gray-800 rounded-[10px] border-none bg-transparent w-full text-left transition-all duration-200 ease-in-out hover:bg-platinum" href="/admin/activitylog" @onclick="CloseProfileMenu">
+                            <svg class="w-[18px] h-[18px] stroke-yinmn-blue stroke-2 fill-none" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M5 12h14"/></svg>
+                            <span>My Activity Log</span>
+                        </a>
+                        <button class="grid grid-cols-[22px_1fr] items-center gap-2.5 py-2.5 px-3 no-underline text-gray-800 rounded-[10px] border-none bg-transparent w-full text-left transition-all duration-200 ease-in-out hover:bg-platinum" @onclick="OnSignOut">
+                            <svg class="w-[18px] h-[18px] stroke-yinmn-blue stroke-2 fill-none" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 7l5 5-5 5"/><path d="M4 12h11"/></svg>
+                            <span>Signout</span>
+                        </button>
+                    </div>
+                }
+            </div>
+        </header>
+
+        <main class="p-6">
+            @Body
+        </main>
+    </div>
+</div>
+
+
+@code {
+    private bool userMgmtOpen = false;
+    private bool profileOpen;
+    private bool sidebarCollapsed = false;
+    private string currentUri = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        currentUri = Nav.Uri;
+        CheckUserMgmtExpansion();
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        currentUri = e.Location;
+        CheckUserMgmtExpansion();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void CheckUserMgmtExpansion()
+    {
+        if (IsActive("/admin/Admin_Record") || IsActive("/admin/Seller_Record") || IsActive("/admin/Permission_Requests"))
+        {
+            userMgmtOpen = true;
+        }
+    }
+
+    private bool IsActive(string path)
+    {
+        if (string.IsNullOrEmpty(currentUri)) return false;
+        
+        try
+        {
+            var uri = Nav.ToAbsoluteUri(currentUri);
+            var currentPath = uri.AbsolutePath.ToLowerInvariant().TrimEnd('/');
+            var checkPath = path.ToLowerInvariant().TrimEnd('/');
+            
+            // Exact match
+            if (currentPath == checkPath) return true;
+            
+            // Check if current path starts with the check path (for sub-routes)
+            if (currentPath.StartsWith(checkPath + "/", StringComparison.OrdinalIgnoreCase)) return true;
+            
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private string GetNavItemClass(string path)
+    {
+        var baseClass = "relative py-2.5 px-3 rounded-lg no-underline flex items-center gap-3 transition-all duration-200 ease-in-out whitespace-nowrap";
+        if (IsActive(path))
+        {
+            return $"{baseClass} bg-uranian-blue text-yinmn-blue";
+        }
+        return $"{baseClass} text-gray-800 hover:bg-uranian-blue hover:bg-opacity-30";
+    }
+
+    private bool IsUserMgmtActive()
+    {
+        return IsActive("/admin/Admin_Record") || IsActive("/admin/Seller_Record") || IsActive("/admin/Permission_Requests");
+    }
+
+    private string GetUserMgmtButtonClass()
+    {
+        var baseClass = "relative w-full text-left cursor-pointer py-2.5 px-3 rounded-lg no-underline flex items-center gap-3 transition-all duration-200 ease-in-out";
+        
+        if (IsUserMgmtActive())
+        {
+            return $"{baseClass} bg-uranian-blue text-yinmn-blue";
+        }
+        return $"{baseClass} bg-transparent text-gray-800 hover:bg-uranian-blue hover:bg-opacity-30";
+    }
+
+    private string GetSubNavItemClass(string path)
+    {
+        var baseClass = "py-2 px-3 rounded-lg no-underline flex items-center gap-3 transition-all duration-200 ease-in-out whitespace-nowrap";
+        if (IsActive(path))
+        {
+            return $"{baseClass} bg-uranian-blue bg-opacity-30 text-yinmn-blue font-medium";
+        }
+        return $"{baseClass} text-gray-700 hover:bg-platinum";
+    }
+
+    private string GetSubNavDotClass(string path)
+    {
+        if (IsActive(path))
+        {
+            return "bg-yinmn-blue";
+        }
+        return "bg-gray-400";
+    }
+
+    private string GetIconClass(params string[] paths)
+    {
+        foreach (var path in paths)
+        {
+            if (IsActive(path))
+            {
+                return "text-yinmn-blue";
+            }
+        }
+        return "text-gray-600";
+    }
+
+    private void ToggleSidebar()
+    {
+        sidebarCollapsed = !sidebarCollapsed;
+        if (sidebarCollapsed)
+        {
+            userMgmtOpen = false;
+        }
+        else
+        {
+            CheckUserMgmtExpansion();
+        }
+    }
+
+    private void ToggleProfileMenu()
+    {
+        profileOpen = !profileOpen;
+    }
+
+    private void CloseProfileMenu()
+    {
+        profileOpen = false;
+    }
+
+    private string DisplayName()
+    {
+        return AuthState.CurrentUser?.FullName ?? AuthState.CurrentUser?.Email ?? "User";
+    }
+
+    private string GetInitials()
+    {
+        var name = AuthState.CurrentUser?.FullName ?? AuthState.CurrentUser?.Email ?? "U";
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2) return (parts[0][0].ToString() + parts[1][0]).ToUpperInvariant();
+        return name[0].ToString().ToUpperInvariant();
+    }
+
+    private async void OnSignOut()
+    {
+        if (AuthState.CurrentUser is not null)
+        {
+            try { await HistoryService.LogAsync(AuthState.CurrentUser.Id, "logout", "Authentication", "User signed out"); } catch {}
+        }
+        AuthState.Logout();
+        profileOpen = false;
+        Nav.NavigateTo("/");
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+    }
+}
+

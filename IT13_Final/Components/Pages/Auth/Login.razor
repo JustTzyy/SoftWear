@@ -1,0 +1,132 @@
+@page "/auth/login"
+@page "/"
+@layout IT13_Final.Components.Layout.Auth.Auth
+
+@inject IT13_Final.Services.Auth.IAuthService AuthService
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IT13_Final.Services.Audit.IHistoryService HistoryService
+@inject NavigationManager Nav
+
+<div class="min-h-screen flex items-center justify-center p-6 bg-[radial-gradient(60%_60%_at_15%_20%,#A7CCED_0%,rgba(167,204,237,0)_60%),radial-gradient(60%_60%_at_85%_30%,#82A0BC_0%,rgba(130,160,188,0)_60%),#F8FCEE]">
+    <div class="w-[420px] max-w-[420px] bg-white rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.06)] p-10 px-8 text-center h-[540px] overflow-hidden">
+        <div class="w-28 h-28 mx-auto rounded-full flex items-center justify-center border-2 border-[#5C7CFA] p-4" style="background-color: #1a2332;">
+            <img src="/images/logo.png" alt="Logo" style="width: 100%; height: 100%; object-fit: contain;" />
+        </div>
+
+        <h1 class="mt-2 mb-0 text-[26px] tracking-[2px] font-extrabold text-gray-800">SOFTWEAR</h1>
+        <p class="mt-2 mb-0 text-gray-500 text-sm">Welcome back!</p>
+        <p class="mt-0.5 mb-0 text-gray-400 text-sm">Please sign in to your account</p>
+
+        <EditForm Model="_loginModel" OnValidSubmit="HandleLoginAsync">
+            <DataAnnotationsValidator />
+
+            <div class="relative mt-[18px] mb-[30px]">
+                <input @bind-value="_loginModel.Email" @bind-value:event="oninput" placeholder="Email" class="w-full h-[46px] px-[14px] pr-[52px] rounded-[10px] border-2 border-air-blue bg-white outline-none transition-[border-color,box-shadow] duration-200 text-[15px] focus:border-yinmn-blue focus:shadow-[0_0_0_4px_rgba(48,77,109,0.25)]" />
+                <div class="absolute top-[calc(100%+6px)] left-[14px] h-[18px] leading-[18px] text-left">
+                    <ValidationMessage For="@(() => _loginModel.Email)" />
+                </div>
+            </div>
+
+            <div class="relative mt-[18px] mb-[30px]">
+                <input type="@(isPasswordVisible ? "text" : "password")" @bind-value="_loginModel.Password" @bind-value:event="oninput" placeholder="Password" class="w-full h-[46px] px-[14px] pr-[52px] rounded-[10px] border-2 border-air-blue bg-white outline-none transition-[border-color,box-shadow] duration-200 text-[15px] focus:border-yinmn-blue focus:shadow-[0_0_0_4px_rgba(48,77,109,0.25)]" />
+                <button type="button" class="absolute right-0 top-0 h-[46px] w-[46px] border-none bg-transparent cursor-pointer grid place-items-center" @onclick="TogglePasswordVisibility" aria-label="@(isPasswordVisible ? "Hide password" : "Show password")">
+                    @if (isPasswordVisible)
+                    {
+                        <!-- eye-off icon -->
+                        <svg class="w-5 h-5 stroke-yinmn-blue stroke-2 fill-none" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M3 3l18 18" stroke-linecap="round" stroke-linejoin="round"></path>
+                            <path d="M10.6 10.6A3 3 0 0012 15a3 3 0 002.4-4.4M9.9 5.1A10.7 10.7 0 0112 5c6 0 9.5 5.5 9.5 7-.
+                                     2.8-.9 1.7-1.6 2.4M4.1 6.5C2.9 7.8 2.5 9 2.5 12c0 1.5 3.5 7 9.5 7 1.3 0 2.6-.3 3.7-.8" stroke-linecap="round" stroke-linejoin="round"></path>
+                        </svg>
+                    }
+                    else
+                    {
+                        <!-- eye icon -->
+                        <svg class="w-5 h-5 stroke-yinmn-blue stroke-2 fill-none" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M1.5 12S5 5 12 5s10.5 7 10.5 7-3.5 7-10.5 7S1.5 12 1.5 12z" fill="none" stroke-linecap="round" stroke-linejoin="round"></path>
+                            <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                    }
+                </button>
+                <div class="absolute top-[calc(100%+6px)] left-[14px] h-[18px] leading-[18px] text-left">
+                    <ValidationMessage For="@(() => _loginModel.Password)" />
+                </div>
+            </div>
+
+            <button type="submit" class="w-full mt-6 h-12 rounded-xl border-none text-yinmn-blue font-bold tracking-wide bg-[#A2B9CD] shadow-[0_6px_16px_rgba(167,204,237,0.35)] cursor-pointer transition-[filter,transform] duration-150 hover:brightness-[0.98] active:translate-y-[1px]">LOGIN</button>
+            @if (!string.IsNullOrEmpty(_loginError))
+            {
+                <div class="text-red-600 text-xs mt-2.5 text-center whitespace-nowrap overflow-hidden text-ellipsis">@_loginError</div>
+            }
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private readonly LoginModel _loginModel = new();
+    private bool isPasswordVisible;
+    private string? _loginError;
+
+    private void TogglePasswordVisibility()
+    {
+        isPasswordVisible = !isPasswordVisible;
+    }
+
+    private async Task HandleLoginAsync()
+    {
+        _loginError = null;
+        StateHasChanged();
+        
+        try
+        {
+            var user = await AuthService.AuthenticateAsync(_loginModel.Email, _loginModel.Password);
+            if (user is null)
+            {
+                _loginError = "Invalid email or password.";
+                StateHasChanged();
+                return;
+            }
+            AuthState.SetUser(user);
+            try { await HistoryService.LogAsync(user.Id, "login", "Authentication", "User signed in"); } catch {}
+            // Navigate to /{role}/dashboard (e.g., /admin/dashboard, /seller/dashboard)
+            Nav.NavigateTo($"/{user.Role}/dashboard");
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Database connection errors
+            _loginError = ex.Message;
+            StateHasChanged();
+        }
+        catch (Microsoft.Data.SqlClient.SqlException sqlEx)
+        {
+            // SQL-specific errors
+            if (sqlEx.Message.Contains("timeout", StringComparison.OrdinalIgnoreCase))
+            {
+                _loginError = "Database connection timeout. Please check if SQL Server is running and try again.";
+            }
+            else
+            {
+                _loginError = $"Database error: {sqlEx.Message}";
+            }
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            // Other unexpected errors
+            _loginError = $"An error occurred during login: {ex.Message}";
+            StateHasChanged();
+        }
+    }
+
+    private sealed class LoginModel
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.EmailAddress]
+        public string Email { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        public string Password { get; set; } = string.Empty;
+    }
+}
+
+

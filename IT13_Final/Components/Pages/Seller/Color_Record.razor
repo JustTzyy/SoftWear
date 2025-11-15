@@ -1,0 +1,787 @@
+@page "/seller/Color"
+@layout IT13_Final.Components.Layout.Seller.Seller
+@inject IT13_Final.Services.Data.IColorService ColorService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Nav
+@implements IDisposable
+
+<h1 class="page-title">Color Records</h1>
+
+@if (showSuccessMessage && !string.IsNullOrEmpty(successMessageText))
+{
+    <div class="success-banner">
+        <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span>@successMessageText</span>
+    </div>
+}
+
+<div class="colors-container">
+    <div class="search-actions-row">
+        <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input type="text" class="search-input" placeholder="Search colors" value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        </div>
+
+        <div class="action-buttons">
+            <button class="archive-btn" @onclick="NavigateToArchive">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                    <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                </svg>
+                <span>Archive</span>
+            </button>
+            <button class="add-color-btn" @onclick="HandleAddColor">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="16"></line>
+                    <line x1="8" y1="12" x2="16" y2="12"></line>
+                </svg>
+                <span>Add Color</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <div class="table-header">List</div>
+        <table class="colors-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Hex Value</th>
+                    <th>Preview</th>
+                    <th>Description</th>
+                    <th>Date Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="7" class="loading-cell">Loading...</td>
+                    </tr>
+                }
+                else if (colors.Count == 0)
+                {
+                    <tr>
+                        <td colspan="7" class="empty-cell">No colors found</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var color in colors)
+                    {
+                        <tr class="clickable-row" @onclick="() => HandleRowClick(color.Id)">
+                            <td>@color.Id</td>
+                            <td class="color-name">@color.Name</td>
+                            <td class="hex-value">@color.HexValue</td>
+                            <td>
+                                <div class="color-preview" style="background-color: @color.HexValue;"></div>
+                            </td>
+                            <td class="description-cell">@(string.IsNullOrEmpty(color.Description) ? "N/A" : color.Description)</td>
+                            <td>@color.DateCreated.ToString("MMM dd, yyyy")</td>
+                            <td class="actions-cell" @onclick:stopPropagation>
+                                <button class="action-btn edit-btn" @onclick="() => HandleEdit(color.Id)" title="Edit">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                    </svg>
+                                </button>
+                                <button class="action-btn delete-btn" @onclick="() => HandleDelete(color.Id)" title="Delete">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="3 6 5 6 21 6"></polyline>
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                var pageNum = i;
+                @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
+                {
+                    <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 2 || i == currentPage + 2)
+                {
+                    <span class="page-ellipsis">...</span>
+                }
+            }
+
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+@* Color Details Modal *@
+@if (showColorDetails && colorDetails != null)
+{
+    <div class="modal-overlay" @onclick="CloseColorDetails">
+        <div class="modal-container" @onclick:stopPropagation>
+            <div class="modal-header">
+                <div class="modal-title">
+                    <svg class="modal-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                    </svg>
+                    <span>Color Details</span>
+                </div>
+                <button class="modal-close" @onclick="CloseColorDetails" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                    <span class="modal-close-text">Close</span>
+                </button>
+            </div>
+
+            <div class="modal-content-color">
+                <div class="color-preview-large" style="background-color: @colorDetails.HexValue;"></div>
+                <div class="details-list">
+                    <div class="detail-item">
+                        <span class="detail-label">COLOR NAME:</span>
+                        <span class="detail-value">@colorDetails.Name</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">HEX VALUE:</span>
+                        <span class="detail-value">@colorDetails.HexValue</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">DESCRIPTION:</span>
+                        <span class="detail-value">@(string.IsNullOrEmpty(colorDetails.Description) ? "N/A" : colorDetails.Description)</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">STATUS:</span>
+                        <span class="detail-value status-badge @(colorDetails.Status.ToUpper() == "ACTIVE" ? "active" : "inactive")">@colorDetails.Status</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">DATE CREATED:</span>
+                        <span class="detail-value">@colorDetails.DateCreated.ToString("M/d/yyyy")</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* Add Color Modal *@
+@if (showAddColorModal)
+{
+    <div class="modal-overlay" @onclick="CloseAddColorModal">
+        <div class="add-color-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Add Color</h2>
+                <button class="modal-close-btn" @onclick="CloseAddColorModal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <EditForm EditContext="@_addColorEditContext" OnValidSubmit="SaveColorAsync">
+                    <DataAnnotationsValidator />
+                    
+                    <div class="form-grid">
+                        <div class="form-field">
+                            <label class="field-label">Hex Value</label>
+                            <input type="color" class="color-picker" value="@_addColorModel.HexValue" @onchange="OnAddColorPickerChanged" />
+                            <input type="text" class="form-input hex-input" value="@_addColorModel.HexValue" @oninput="OnAddHexValueChanged" placeholder="#000000" />
+                            <ValidationMessage For="@(() => _addColorModel.HexValue)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Color Name</label>
+                            <InputText class="form-input" @bind-Value="_addColorModel.Name" placeholder="Auto-generated or enter custom name" />
+                            <ValidationMessage For="@(() => _addColorModel.Name)" />
+                        </div>
+                        <div class="form-field full-width">
+                            <label class="field-label">Description (Optional)</label>
+                            <InputTextArea class="form-textarea" @bind-Value="_addColorModel.Description" placeholder="Enter color description" rows="3" />
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-btn" @onclick="CloseAddColorModal">Cancel</button>
+                        <button type="submit" class="save-color-btn">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                <polyline points="7 3 7 8 15 8"></polyline>
+                            </svg>
+                            <span>Save Color</span>
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@* Update Color Modal *@
+@if (showUpdateColorModal)
+{
+    <div class="modal-overlay" @onclick="CloseUpdateColorModal">
+        <div class="add-color-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Update Color</h2>
+                <button class="modal-close-btn" @onclick="CloseUpdateColorModal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <EditForm EditContext="@_updateColorEditContext" OnValidSubmit="SaveUpdateColorAsync">
+                    <DataAnnotationsValidator />
+                    
+                    <div class="form-grid">
+                        <div class="form-field">
+                            <label class="field-label">Hex Value</label>
+                            <input type="color" class="color-picker" value="@_updateColorModel.HexValue" @onchange="OnUpdateColorPickerChanged" />
+                            <input type="text" class="form-input hex-input" value="@_updateColorModel.HexValue" @oninput="OnUpdateHexValueChanged" placeholder="#000000" />
+                            <ValidationMessage For="@(() => _updateColorModel.HexValue)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Color Name</label>
+                            <InputText class="form-input" @bind-Value="_updateColorModel.Name" placeholder="Auto-generated or enter custom name" />
+                            <ValidationMessage For="@(() => _updateColorModel.Name)" />
+                        </div>
+                        <div class="form-field full-width">
+                            <label class="field-label">Description (Optional)</label>
+                            <InputTextArea class="form-textarea" @bind-Value="_updateColorModel.Description" placeholder="Enter color description" rows="3" />
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-btn" @onclick="CloseUpdateColorModal">Cancel</button>
+                        <button type="submit" class="save-color-btn">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                <polyline points="7 3 7 8 15 8"></polyline>
+                            </svg>
+                            <span>Update Color</span>
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<IT13_Final.Services.Data.ColorModel> colors = new();
+    private string searchTerm = string.Empty;
+    private bool isLoading = true;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling((double)totalCount / pageSize);
+    private bool showColorDetails = false;
+    private IT13_Final.Services.Data.ColorDetailsModel? colorDetails = null;
+
+    private bool showAddColorModal = false;
+    private readonly AddColorModel _addColorModel = new();
+    private EditContext _addColorEditContext;
+    
+    private bool showUpdateColorModal = false;
+    private readonly AddColorModel _updateColorModel = new();
+    private EditContext _updateColorEditContext;
+    private int? _updateColorId = null;
+
+    private bool showSuccessMessage = false;
+    private string successMessageText = string.Empty;
+    private System.Threading.Timer? _successBannerTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _addColorEditContext = new EditContext(_addColorModel);
+        _updateColorEditContext = new EditContext(_updateColorModel);
+        await LoadColorsAsync();
+    }
+
+    private async Task LoadColorsAsync()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            totalCount = await ColorService.GetColorsCountAsync(searchTerm);
+            colors = await ColorService.GetColorsAsync(searchTerm, currentPage, pageSize);
+        }
+        catch (Exception)
+        {
+            colors = new List<IT13_Final.Services.Data.ColorModel>();
+            totalCount = 0;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            currentPage = 1;
+            await LoadColorsAsync();
+        }
+    }
+
+    private System.Threading.Timer? _searchTimer;
+    private void HandleSearchInput(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? string.Empty;
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            currentPage = 1;
+            await InvokeAsync(async () =>
+            {
+                await LoadColorsAsync();
+            });
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages && page != currentPage)
+        {
+            currentPage = page;
+            await LoadColorsAsync();
+        }
+    }
+
+    private void NavigateToArchive()
+    {
+        Nav.NavigateTo("/seller/Archive_Color_Record");
+    }
+
+    private void HandleAddColor()
+    {
+        showAddColorModal = true;
+        _addColorModel.Reset();
+        _addColorEditContext = new EditContext(_addColorModel);
+        StateHasChanged();
+    }
+
+    private void CloseAddColorModal()
+    {
+        showAddColorModal = false;
+        _addColorModel.Reset();
+        StateHasChanged();
+    }
+
+    private async Task SaveColorAsync()
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to add the color {_addColorModel.Name}?");
+        if (!confirmed) return;
+
+        try
+        {
+            var newColorId = await ColorService.CreateColorAsync(
+                _addColorModel.Name,
+                _addColorModel.HexValue,
+                string.IsNullOrWhiteSpace(_addColorModel.Description) ? null : _addColorModel.Description
+            );
+
+            if (newColorId.HasValue && newColorId.Value > 0)
+            {
+                await LoadColorsAsync();
+                successMessageText = "Color created successfully!";
+                showSuccessMessage = true;
+                CloseAddColorModal();
+
+                _successBannerTimer?.Dispose();
+                _successBannerTimer = new System.Threading.Timer(async _ =>
+                {
+                    await InvokeAsync(() =>
+                    {
+                        showSuccessMessage = false;
+                        successMessageText = string.Empty;
+                        StateHasChanged();
+                    });
+                }, null, 5000, Timeout.Infinite);
+            }
+        }
+        catch (Exception)
+        {
+            // Handle error
+        }
+        finally
+        {
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleEdit(int colorId)
+    {
+        _updateColorId = colorId;
+        
+        try
+        {
+            var details = await ColorService.GetColorDetailsAsync(colorId);
+            if (details == null) return;
+
+            _updateColorModel.Name = details.Name;
+            _updateColorModel.HexValue = details.HexValue;
+            _updateColorModel.Description = details.Description ?? string.Empty;
+
+            _updateColorEditContext = new EditContext(_updateColorModel);
+            showUpdateColorModal = true;
+            StateHasChanged();
+        }
+        catch (Exception)
+        {
+            // Handle error
+        }
+    }
+
+    private void CloseUpdateColorModal()
+    {
+        showUpdateColorModal = false;
+        _updateColorModel.Reset();
+        _updateColorId = null;
+        StateHasChanged();
+    }
+
+    private async Task SaveUpdateColorAsync()
+    {
+        if (!_updateColorId.HasValue) return;
+
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to update the color {_updateColorModel.Name}?");
+        if (!confirmed) return;
+
+        try
+        {
+            var success = await ColorService.UpdateColorAsync(
+                _updateColorId.Value,
+                _updateColorModel.Name,
+                _updateColorModel.HexValue,
+                string.IsNullOrWhiteSpace(_updateColorModel.Description) ? null : _updateColorModel.Description
+            );
+
+            if (success)
+            {
+                await LoadColorsAsync();
+                successMessageText = "Color updated successfully!";
+                showSuccessMessage = true;
+                CloseUpdateColorModal();
+
+                _successBannerTimer?.Dispose();
+                _successBannerTimer = new System.Threading.Timer(async _ =>
+                {
+                    await InvokeAsync(() =>
+                    {
+                        showSuccessMessage = false;
+                        successMessageText = string.Empty;
+                        StateHasChanged();
+                    });
+                }, null, 5000, Timeout.Infinite);
+            }
+        }
+        catch (Exception)
+        {
+            // Handle error
+        }
+        finally
+        {
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleDelete(int colorId)
+    {
+        var color = colors.FirstOrDefault(c => c.Id == colorId);
+        var colorName = color?.Name ?? "this color";
+        
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to archive {colorName}?");
+        if (!confirmed) return;
+        
+        try
+        {
+            var success = await ColorService.ArchiveColorAsync(colorId);
+            
+            if (success)
+            {
+                await LoadColorsAsync();
+                successMessageText = "Color archived successfully!";
+                showSuccessMessage = true;
+                
+                _successBannerTimer?.Dispose();
+                _successBannerTimer = new System.Threading.Timer(async _ =>
+                {
+                    await InvokeAsync(() =>
+                    {
+                        showSuccessMessage = false;
+                        successMessageText = string.Empty;
+                        StateHasChanged();
+                    });
+                }, null, 5000, Timeout.Infinite);
+            }
+        }
+        catch (Exception)
+        {
+            // Handle error
+        }
+        
+        StateHasChanged();
+    }
+
+    private async Task HandleRowClick(int colorId)
+    {
+        showColorDetails = true;
+        StateHasChanged();
+
+        try
+        {
+            colorDetails = await ColorService.GetColorDetailsAsync(colorId);
+        }
+        catch
+        {
+            colorDetails = null;
+        }
+        finally
+        {
+            StateHasChanged();
+        }
+    }
+
+    private void CloseColorDetails()
+    {
+        showColorDetails = false;
+        colorDetails = null;
+        StateHasChanged();
+    }
+
+    // Auto-generate color name from hex value for Add modal
+    private void OnAddColorPickerChanged(ChangeEventArgs e)
+    {
+        var hexValue = e.Value?.ToString() ?? "#000000";
+        _addColorModel.HexValue = hexValue.ToUpperInvariant();
+        _addColorModel.Name = GenerateColorName(hexValue);
+        
+        if (_addColorEditContext != null)
+        {
+            _addColorEditContext.NotifyFieldChanged(_addColorEditContext.Field(nameof(_addColorModel.HexValue)));
+            _addColorEditContext.NotifyFieldChanged(_addColorEditContext.Field(nameof(_addColorModel.Name)));
+        }
+        StateHasChanged();
+    }
+
+    private void OnAddHexValueChanged(ChangeEventArgs e)
+    {
+        var hexValue = e.Value?.ToString() ?? "#000000";
+        _addColorModel.HexValue = hexValue;
+        
+        if (System.Text.RegularExpressions.Regex.IsMatch(hexValue, @"^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$"))
+        {
+            _addColorModel.HexValue = hexValue.ToUpperInvariant();
+            _addColorModel.Name = GenerateColorName(hexValue);
+            
+            if (_addColorEditContext != null)
+            {
+                _addColorEditContext.NotifyFieldChanged(_addColorEditContext.Field(nameof(_addColorModel.HexValue)));
+                _addColorEditContext.NotifyFieldChanged(_addColorEditContext.Field(nameof(_addColorModel.Name)));
+            }
+        }
+        StateHasChanged();
+    }
+
+    // Auto-generate color name from hex value for Update modal
+    private void OnUpdateColorPickerChanged(ChangeEventArgs e)
+    {
+        var hexValue = e.Value?.ToString() ?? "#000000";
+        _updateColorModel.HexValue = hexValue.ToUpperInvariant();
+        _updateColorModel.Name = GenerateColorName(hexValue);
+        
+        if (_updateColorEditContext != null)
+        {
+            _updateColorEditContext.NotifyFieldChanged(_updateColorEditContext.Field(nameof(_updateColorModel.HexValue)));
+            _updateColorEditContext.NotifyFieldChanged(_updateColorEditContext.Field(nameof(_updateColorModel.Name)));
+        }
+        StateHasChanged();
+    }
+
+    private void OnUpdateHexValueChanged(ChangeEventArgs e)
+    {
+        var hexValue = e.Value?.ToString() ?? "#000000";
+        _updateColorModel.HexValue = hexValue;
+        
+        if (System.Text.RegularExpressions.Regex.IsMatch(hexValue, @"^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$"))
+        {
+            _updateColorModel.HexValue = hexValue.ToUpperInvariant();
+            _updateColorModel.Name = GenerateColorName(hexValue);
+            
+            if (_updateColorEditContext != null)
+            {
+                _updateColorEditContext.NotifyFieldChanged(_updateColorEditContext.Field(nameof(_updateColorModel.HexValue)));
+                _updateColorEditContext.NotifyFieldChanged(_updateColorEditContext.Field(nameof(_updateColorModel.Name)));
+            }
+        }
+        StateHasChanged();
+    }
+
+    // Generate a descriptive color name from hex value
+    private string GenerateColorName(string hexValue)
+    {
+        if (string.IsNullOrWhiteSpace(hexValue) || hexValue.Length < 7)
+            return "Custom Color";
+
+        var colorMap = new Dictionary<string, string>
+        {
+            // Reds
+            { "#FF0000", "Red" }, { "#DC143C", "Crimson" }, { "#B22222", "Firebrick" },
+            { "#8B0000", "Dark Red" }, { "#CD5C5C", "Indian Red" }, { "#F08080", "Light Coral" },
+            { "#FA8072", "Salmon" }, { "#E9967A", "Dark Salmon" },
+            
+            // Pinks
+            { "#FFC0CB", "Pink" }, { "#FFB6C1", "Light Pink" }, { "#FF69B4", "Hot Pink" },
+            { "#FF1493", "Deep Pink" }, { "#C71585", "Medium Violet Red" },
+            
+            // Oranges
+            { "#FFA500", "Orange" }, { "#FF8C00", "Dark Orange" }, { "#FF7F50", "Coral" },
+            { "#FF6347", "Tomato" }, { "#FF4500", "Orange Red" },
+            
+            // Yellows
+            { "#FFFF00", "Yellow" }, { "#FFD700", "Gold" },
+            { "#FFFFE0", "Light Yellow" }, { "#FFFACD", "Lemon Chiffon" },
+            
+            // Greens
+            { "#008000", "Green" }, { "#00FF00", "Lime" }, { "#90EE90", "Light Green" },
+            { "#228B22", "Forest Green" }, { "#32CD32", "Lime Green" }, { "#00FF7F", "Spring Green" },
+            { "#00FA9A", "Medium Spring Green" }, { "#7FFF00", "Chartreuse" },
+            
+            // Blues
+            { "#0000FF", "Blue" }, { "#00008B", "Dark Blue" }, { "#0000CD", "Medium Blue" },
+            { "#4169E1", "Royal Blue" }, { "#1E90FF", "Dodger Blue" }, { "#87CEEB", "Sky Blue" },
+            { "#87CEFA", "Light Sky Blue" }, { "#00BFFF", "Deep Sky Blue" }, { "#ADD8E6", "Light Blue" },
+            
+            // Purples
+            { "#800080", "Purple" }, { "#8B008B", "Dark Magenta" }, { "#9370DB", "Medium Purple" },
+            { "#BA55D3", "Medium Orchid" }, { "#DDA0DD", "Plum" }, { "#EE82EE", "Violet" },
+            { "#DA70D6", "Orchid" }, { "#FF00FF", "Magenta" },
+            
+            // Browns
+            { "#A52A2A", "Brown" }, { "#8B4513", "Saddle Brown" }, { "#D2691E", "Chocolate" },
+            { "#CD853F", "Peru" }, { "#F4A460", "Sandy Brown" }, { "#DEB887", "Burlywood" },
+            
+            // Grays
+            { "#808080", "Gray" }, { "#A9A9A9", "Dark Gray" }, { "#C0C0C0", "Silver" },
+            { "#D3D3D3", "Light Gray" }, { "#DCDCDC", "Gainsboro" },
+            
+            // Black & White
+            { "#000000", "Black" }, { "#FFFFFF", "White" }, { "#F5F5F5", "White Smoke" },
+            { "#FFFAF0", "Floral White" }
+        };
+
+        var upperHex = hexValue.ToUpperInvariant();
+        if (colorMap.ContainsKey(upperHex))
+            return colorMap[upperHex];
+
+        // Generate descriptive name based on color components
+        var hex = upperHex.TrimStart('#');
+        if (hex.Length == 6)
+        {
+            var r = Convert.ToInt32(hex.Substring(0, 2), 16);
+            var g = Convert.ToInt32(hex.Substring(2, 2), 16);
+            var b = Convert.ToInt32(hex.Substring(4, 2), 16);
+
+            // Determine dominant color
+            var max = Math.Max(r, Math.Max(g, b));
+            var min = Math.Min(r, Math.Min(g, b));
+            var brightness = (max + min) / 2;
+
+            // If very dark
+            if (max < 50) return "Dark";
+            // If very light
+            if (min > 200) return "Light";
+
+            // Determine color family
+            if (r > g && r > b)
+            {
+                if (g > b * 1.5) return brightness > 150 ? "Light Orange" : "Dark Orange";
+                return brightness > 150 ? "Light Red" : "Dark Red";
+            }
+            else if (g > r && g > b)
+            {
+                if (b > r * 1.5) return brightness > 150 ? "Light Cyan" : "Teal";
+                return brightness > 150 ? "Light Green" : "Dark Green";
+            }
+            else if (b > r && b > g)
+            {
+                if (r > g * 1.5) return brightness > 150 ? "Light Purple" : "Dark Purple";
+                return brightness > 150 ? "Light Blue" : "Dark Blue";
+            }
+            else if (Math.Abs(r - g) < 30 && Math.Abs(g - b) < 30)
+            {
+                if (brightness < 80) return "Dark Gray";
+                if (brightness > 180) return "Light Gray";
+                return "Gray";
+            }
+        }
+
+        return $"Color {hexValue}";
+    }
+
+    private sealed class AddColorModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Color name is required")]
+        [System.ComponentModel.DataAnnotations.StringLength(100, ErrorMessage = "Color name must be at most 100 characters")]
+        public string Name { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Hex value is required")]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$", ErrorMessage = "Invalid hex color format (e.g., #FF5733)")]
+        public string HexValue { get; set; } = "#000000";
+
+        [System.ComponentModel.DataAnnotations.StringLength(500, ErrorMessage = "Description must be at most 500 characters")]
+        public string Description { get; set; } = string.Empty;
+
+        public void Reset()
+        {
+            Name = string.Empty;
+            HexValue = "#000000";
+            Description = string.Empty;
+        }
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+        _successBannerTimer?.Dispose();
+    }
+}
+

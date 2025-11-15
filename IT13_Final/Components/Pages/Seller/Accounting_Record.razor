@@ -1,0 +1,1620 @@
+@page "/seller/Accounting_Record"
+@layout IT13_Final.Components.Layout.Seller.Seller
+@inject IT13_Final.Services.Data.IUserService UserService
+@inject IT13_Final.Services.Data.IAddressService AddressService
+@inject IT13_Final.Services.Data.IPhilippineAddressService PhilippineAddressService
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Nav
+@using System.Linq
+@implements IDisposable
+
+<h1 class="page-title">Accounting Records</h1>
+
+@if (showSuccessMessage && !string.IsNullOrEmpty(successMessageText))
+{
+    <div class="success-banner">
+        <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span>@successMessageText</span>
+    </div>
+}
+
+<div class="admin-records-container">
+    <div class="search-actions-row">
+        <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input type="text" class="search-input" placeholder="Search accounting" value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        </div>
+
+        <div class="action-buttons">
+            <button class="archive-btn" @onclick="NavigateToArchive">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                    <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                </svg>
+                <span>Archive</span>
+            </button>
+            <button class="add-admin-btn" @onclick="HandleAddAccounting">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <line x1="19" y1="8" x2="19" y2="14"></line>
+                    <line x1="22" y1="11" x2="16" y2="11"></line>
+                </svg>
+                <span>Add Accounting</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <div class="table-header">List</div>
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Date Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="5" class="loading-cell">Loading...</td>
+                    </tr>
+                }
+                else if (accountingUsers.Count == 0)
+                {
+                    <tr>
+                        <td colspan="5" class="empty-cell">No accounting users found</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var user in accountingUsers)
+                    {
+                        <tr class="clickable-row" @onclick="() => HandleRowClick(user.Id)">
+                            <td>@user.Id</td>
+                            <td class="user-name">@user.Name</td>
+                            <td>@user.Email</td>
+                            <td>@user.DateCreated.ToString("MMM dd, yyyy")</td>
+                            <td class="actions-cell" @onclick:stopPropagation>
+                                <button class="action-btn edit-btn" @onclick="() => HandleEdit(user.Id)" title="Edit">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                    </svg>
+                                </button>
+                                <button class="action-btn delete-btn" @onclick="() => HandleDelete(user.Id)" title="Delete">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="3 6 5 6 21 6"></polyline>
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                var pageNum = i; // Capture loop variable for lambda
+                @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
+                {
+                    <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 2 || i == currentPage + 2)
+                {
+                    <span class="page-ellipsis">...</span>
+                }
+            }
+
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+@if (showUserDetails && userDetails != null)
+{
+    <div class="modal-overlay" @onclick="CloseUserDetails">
+        <div class="modal-container" @onclick:stopPropagation>
+            <div class="modal-header">
+                <div class="modal-title">
+                    <svg class="modal-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                    <span>User Details</span>
+                </div>
+                <button class="modal-close" @onclick="CloseUserDetails" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                    <span class="modal-close-text">Close</span>
+                </button>
+            </div>
+
+            <div class="modal-content">
+                <div class="details-column">
+                    <div class="details-section">
+                        <div class="details-section-header">
+                            <span class="section-icon-emoji">👤</span>
+                            <span class="section-title">Personal Information</span>
+                        </div>
+                        <div class="details-list">
+                            <div class="detail-item">
+                                <span class="detail-label">Full name</span>
+                                <span class="detail-value">@userDetails.FullName</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Email</span>
+                                <span class="detail-value">@userDetails.Email</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Birthday</span>
+                                <span class="detail-value">@(userDetails.Birthday?.ToString("M/d/yyyy") ?? "N/A")</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Age</span>
+                                <span class="detail-value">@(userDetails.Age?.ToString() ?? "N/A")</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Sex</span>
+                                <span class="detail-value">@(string.IsNullOrEmpty(userDetails.Sex) ? "N/A" : userDetails.Sex)</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Contact number</span>
+                                <span class="detail-value">@(string.IsNullOrEmpty(userDetails.Contact) ? "N/A" : userDetails.Contact)</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Status</span>
+                                <span class="detail-value status-badge @(userDetails.Status.ToUpper() == "ACTIVE" ? "active" : "inactive")">@userDetails.Status</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Date created</span>
+                                <span class="detail-value">@userDetails.DateCreated.ToString("M/d/yyyy")</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="details-column">
+                    <div class="details-section">
+                        <div class="details-section-header">
+                            <span class="section-icon-emoji">📍</span>
+                            <span class="section-title">Address Information</span>
+                        </div>
+                        <div class="details-list">
+                            <div class="detail-item">
+                                <span class="detail-label">Street address</span>
+                                <span class="detail-value">@(string.IsNullOrEmpty(userDetails.Street) ? "N/A" : userDetails.Street)</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">City</span>
+                                <span class="detail-value">@(string.IsNullOrEmpty(userDetails.City) ? "N/A" : userDetails.City)</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Province</span>
+                                <span class="detail-value">@(string.IsNullOrEmpty(userDetails.Province) ? "N/A" : userDetails.Province)</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Zip code</span>
+                                <span class="detail-value">@(string.IsNullOrEmpty(userDetails.Zip) ? "N/A" : userDetails.Zip)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* Add Accounting Modal *@
+@if (showAddAccountingModal)
+{
+    <div class="modal-overlay" @onclick="CloseAddAccountingModal">
+        <div class="add-admin-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Add Accounting</h2>
+                <button class="modal-close-btn" @onclick="CloseAddAccountingModal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-tabs">
+                <button class="modal-tab @(activeAddAccountingTab == "user" ? "active" : "")" @onclick='() => SetActiveAddAccountingTab("user")'>
+                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                    <span>User Information</span>
+                </button>
+                <button class="modal-tab @(activeAddAccountingTab == "address" ? "active" : "")" @onclick='() => SetActiveAddAccountingTab("address")'>
+                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                        <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                    <span>Address Information</span>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <EditForm EditContext="@_addAccountingEditContext" OnValidSubmit="SaveAccountingAsync" OnInvalidSubmit="HandleInvalidSubmit">
+                    <DataAnnotationsValidator />
+                    
+                    @if (activeAddAccountingTab == "user")
+                    {
+                        <div class="form-grid">
+                            <div class="form-field">
+                                <label class="field-label">First Name</label>
+                                <input id="addAccountingFirstName" class="form-input" value="@_addAccountingModel.FirstName" @oninput="FilterAddAccountingFirstNameInput" placeholder="Enter first name" />
+                                <ValidationMessage For="@(() => _addAccountingModel.FirstName)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Middle Name</label>
+                                <input id="addAccountingMiddleName" class="form-input" value="@_addAccountingModel.MiddleName" @oninput="FilterAddAccountingMiddleNameInput" placeholder="Enter middle name (optional)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Last Name</label>
+                                <input id="addAccountingLastName" class="form-input" value="@_addAccountingModel.LastName" @oninput="FilterAddAccountingLastNameInput" placeholder="Enter last name" />
+                                <ValidationMessage For="@(() => _addAccountingModel.LastName)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Email</label>
+                                <InputText class="form-input" @bind-Value="_addAccountingModel.Email" placeholder="Enter email address" />
+                                <ValidationMessage For="@(() => _addAccountingModel.Email)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Birthday</label>
+                                <input type="date" class="form-input" value="@(_addAccountingModel.Birthday?.ToString("yyyy-MM-dd") ?? "")" max="@MaxBirthdayDate.ToString("yyyy-MM-dd")" @onchange="@((ChangeEventArgs e) => { if (DateTime.TryParse(e.Value?.ToString(), out var date)) { AddAccountingBirthday = DateOnly.FromDateTime(date); } else { AddAccountingBirthday = null; } })" />
+                                <ValidationMessage For="@(() => _addAccountingModel.Birthday)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Age</label>
+                                <InputNumber TValue="int?" class="form-input" @bind-Value="_addAccountingModel.Age" disabled />
+                                <ValidationMessage For="@(() => _addAccountingModel.Age)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Sex</label>
+                                <select class="form-input sex-select" value="@_addAccountingModel.Sex" @onchange="@((ChangeEventArgs e) => { 
+                                    _addAccountingModel.Sex = e.Value?.ToString() ?? string.Empty; 
+                                    if (_addAccountingEditContext != null)
+                                    {
+                                        _addAccountingEditContext.NotifyFieldChanged(_addAccountingEditContext.Field(nameof(_addAccountingModel.Sex)));
+                                    }
+                                    StateHasChanged(); 
+                                })">
+                                    <option value="">Select Sex</option>
+                                    <option value="Male">Male</option>
+                                    <option value="Female">Female</option>
+                                </select>
+                                <ValidationMessage For="@(() => _addAccountingModel.Sex)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Contact Number</label>
+                                <InputText class="form-input" @bind-Value="_addAccountingModel.Contact" placeholder="+63 912 345 6789" />
+                                <ValidationMessage For="@(() => _addAccountingModel.Contact)" />
+                            </div>
+                        </div>
+                    }
+                    else if (activeAddAccountingTab == "address")
+                    {
+                        <div class="form-grid">
+                            <div class="form-field full-width">
+                                <label class="field-label">Street Address</label>
+                                <InputText class="form-input" @bind-Value="_addAccountingAddressModel.Street" placeholder="123 Main Street, Barangay Name" />
+                                <ValidationMessage For="@(() => _addAccountingAddressModel.Street)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Province</label>
+                                <select class="form-input province-select" value="@_addAccountingAddressModel.Province" @onchange="OnProvinceChanged">
+                                    <option value="">Select Province</option>
+                                    @foreach (var province in _addAccountingProvinces)
+                                    {
+                                        <option value="@province">@province</option>
+                                    }
+                                </select>
+                                <ValidationMessage For="@(() => _addAccountingAddressModel.Province)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">City</label>
+                                <select class="form-input city-select" value="@_addAccountingAddressModel.City" @onchange="OnCityChanged" disabled="@(string.IsNullOrEmpty(_addAccountingAddressModel.Province))">
+                                    <option value="">Select City</option>
+                                    @foreach (var city in _addAccountingCities)
+                                    {
+                                        <option value="@city">@city</option>
+                                    }
+                                </select>
+                                <ValidationMessage For="@(() => _addAccountingAddressModel.City)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Zip Code</label>
+                                <input class="form-input" value="@_addAccountingAddressModel.Zip" disabled placeholder="Auto-filled" />
+                                <ValidationMessage For="@(() => _addAccountingAddressModel.Zip)" />
+                            </div>
+                        </div>
+                    }
+
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-btn" @onclick="CloseAddAccountingModal">Cancel</button>
+                        <button type="submit" class="save-admin-btn">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                <polyline points="7 3 7 8 15 8"></polyline>
+                            </svg>
+                            <span>Save Accounting</span>
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@* Update Accounting Modal *@
+@if (showUpdateAccountingModal)
+{
+    <div class="modal-overlay" @onclick="CloseUpdateAccountingModal">
+        <div class="add-admin-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Update Accounting</h2>
+                <button class="modal-close-btn" @onclick="CloseUpdateAccountingModal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-tabs">
+                <button class="modal-tab @(activeUpdateAccountingTab == "user" ? "active" : "")" @onclick='() => SetActiveUpdateAccountingTab("user")'>
+                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                    <span>User Information</span>
+                </button>
+                <button class="modal-tab @(activeUpdateAccountingTab == "address" ? "active" : "")" @onclick='() => SetActiveUpdateAccountingTab("address")'>
+                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                        <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                    <span>Address Information</span>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <EditForm EditContext="@_updateAccountingEditContext" OnValidSubmit="SaveUpdateAccountingAsync" OnInvalidSubmit="HandleUpdateInvalidSubmit">
+                    <DataAnnotationsValidator />
+                    
+                    @if (activeUpdateAccountingTab == "user")
+                    {
+                        <div class="form-grid">
+                            <div class="form-field">
+                                <label class="field-label">First Name</label>
+                                <input id="updateAccountingFirstName" class="form-input" value="@_updateAccountingModel.FirstName" @oninput="FilterUpdateAccountingFirstNameInput" placeholder="Enter first name" />
+                                <ValidationMessage For="@(() => _updateAccountingModel.FirstName)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Middle Name</label>
+                                <input id="updateAccountingMiddleName" class="form-input" value="@_updateAccountingModel.MiddleName" @oninput="FilterUpdateAccountingMiddleNameInput" placeholder="Enter middle name (optional)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Last Name</label>
+                                <input id="updateAccountingLastName" class="form-input" value="@_updateAccountingModel.LastName" @oninput="FilterUpdateAccountingLastNameInput" placeholder="Enter last name" />
+                                <ValidationMessage For="@(() => _updateAccountingModel.LastName)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Email</label>
+                                <InputText class="form-input" @bind-Value="_updateAccountingModel.Email" placeholder="Enter email address" />
+                                <ValidationMessage For="@(() => _updateAccountingModel.Email)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Birthday</label>
+                                <input type="date" class="form-input" value="@(_updateAccountingModel.Birthday?.ToString("yyyy-MM-dd") ?? "")" max="@MaxBirthdayDate.ToString("yyyy-MM-dd")" @onchange="@((ChangeEventArgs e) => { if (DateTime.TryParse(e.Value?.ToString(), out var date)) { UpdateAccountingBirthday = DateOnly.FromDateTime(date); } else { UpdateAccountingBirthday = null; } })" />
+                                <ValidationMessage For="@(() => _updateAccountingModel.Birthday)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Age</label>
+                                <InputNumber TValue="int?" class="form-input" @bind-Value="_updateAccountingModel.Age" disabled />
+                                <ValidationMessage For="@(() => _updateAccountingModel.Age)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Sex</label>
+                                <select class="form-input sex-select" value="@_updateAccountingModel.Sex" @onchange="@((ChangeEventArgs e) => { 
+                                    _updateAccountingModel.Sex = e.Value?.ToString() ?? string.Empty; 
+                                    if (_updateAccountingEditContext != null)
+                                    {
+                                        _updateAccountingEditContext.NotifyFieldChanged(_updateAccountingEditContext.Field(nameof(_updateAccountingModel.Sex)));
+                                    }
+                                    StateHasChanged(); 
+                                })">
+                                    <option value="">Select Sex</option>
+                                    <option value="Male">Male</option>
+                                    <option value="Female">Female</option>
+                                </select>
+                                <ValidationMessage For="@(() => _updateAccountingModel.Sex)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Contact Number</label>
+                                <InputText class="form-input" @bind-Value="_updateAccountingModel.Contact" placeholder="+63 912 345 6789" />
+                                <ValidationMessage For="@(() => _updateAccountingModel.Contact)" />
+                            </div>
+                        </div>
+                    }
+                    else if (activeUpdateAccountingTab == "address")
+                    {
+                        <div class="form-grid">
+                            <div class="form-field full-width">
+                                <label class="field-label">Street Address</label>
+                                <InputText class="form-input" @bind-Value="_updateAccountingAddressModel.Street" placeholder="123 Main Street, Barangay Name" />
+                                <ValidationMessage For="@(() => _updateAccountingAddressModel.Street)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Province</label>
+                                <select class="form-input province-select" value="@_updateAccountingAddressModel.Province" @onchange="OnUpdateProvinceChanged">
+                                    <option value="">Select Province</option>
+                                    @foreach (var province in _updateAccountingProvinces)
+                                    {
+                                        <option value="@province">@province</option>
+                                    }
+                                </select>
+                                <ValidationMessage For="@(() => _updateAccountingAddressModel.Province)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">City</label>
+                                <select class="form-input city-select" value="@_updateAccountingAddressModel.City" @onchange="OnUpdateCityChanged" disabled="@(string.IsNullOrEmpty(_updateAccountingAddressModel.Province))">
+                                    <option value="">Select City</option>
+                                    @foreach (var city in _updateAccountingCities)
+                                    {
+                                        <option value="@city">@city</option>
+                                    }
+                                </select>
+                                <ValidationMessage For="@(() => _updateAccountingAddressModel.City)" />
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Zip Code</label>
+                                <input class="form-input" value="@_updateAccountingAddressModel.Zip" disabled placeholder="Auto-filled" />
+                                <ValidationMessage For="@(() => _updateAccountingAddressModel.Zip)" />
+                            </div>
+                        </div>
+                    }
+
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-btn" @onclick="CloseUpdateAccountingModal">Cancel</button>
+                        <button type="submit" class="save-admin-btn">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                <polyline points="7 3 7 8 15 8"></polyline>
+                            </svg>
+                            <span>Update Accounting</span>
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<IT13_Final.Services.Data.AdminUserModel> accountingUsers = new();
+    private int sellerUserId => AuthState.CurrentUser?.Id ?? 0;
+    private string searchTerm = string.Empty;
+    private bool isLoading = true;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling((double)totalCount / pageSize);
+    private bool showUserDetails = false;
+    private IT13_Final.Services.Data.UserDetailsModel? userDetails = null;
+    private bool isLoadingDetails = false;
+
+    // Add Accounting Modal
+    private bool showAddAccountingModal = false;
+    private string activeAddAccountingTab = "user";
+    private readonly AddAccountingModel _addAccountingModel = new();
+    private EditContext _addAccountingEditContext;
+    private ValidationMessageStore? _validationMessageStore;
+    private readonly IT13_Final.Services.Data.AddressModel _addAccountingAddressModel = new();
+    private List<string> _addAccountingProvinces = new();
+    private List<string> _addAccountingCities = new();
+    private string? _addAccountingMessage;
+    private bool _addAccountingSuccess = false;
+    private System.Threading.Timer? _successMessageTimer;
+    private bool showSuccessMessage = false;
+    private string successMessageText = string.Empty;
+    private System.Threading.Timer? _successBannerTimer;
+
+    // Update Accounting Modal
+    private bool showUpdateAccountingModal = false;
+    private string activeUpdateAccountingTab = "user";
+    private readonly AddAccountingModel _updateAccountingModel = new();
+    private EditContext _updateAccountingEditContext;
+    private ValidationMessageStore? _updateValidationMessageStore;
+    private readonly IT13_Final.Services.Data.AddressModel _updateAccountingAddressModel = new();
+    private List<string> _updateAccountingProvinces = new();
+    private List<string> _updateAccountingCities = new();
+    private int? _updateAccountingUserId = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Initialize EditContext with the model
+        _addAccountingEditContext = new EditContext(_addAccountingModel);
+        _validationMessageStore = new ValidationMessageStore(_addAccountingEditContext);
+        
+        // Initialize Update EditContext
+        _updateAccountingEditContext = new EditContext(_updateAccountingModel);
+        _updateValidationMessageStore = new ValidationMessageStore(_updateAccountingEditContext);
+        
+        await LoadAccountingUsersAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (showAddAccountingModal)
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("filterNameInput", "addAccountingFirstName");
+                await JSRuntime.InvokeVoidAsync("filterNameInput", "addAccountingMiddleName");
+                await JSRuntime.InvokeVoidAsync("filterNameInput", "addAccountingLastName");
+            }
+            catch (Exception)
+            {
+                // JavaScript interop might not be available yet, ignore
+            }
+        }
+        
+        if (showUpdateAccountingModal)
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("filterNameInput", "updateAccountingFirstName");
+                await JSRuntime.InvokeVoidAsync("filterNameInput", "updateAccountingMiddleName");
+                await JSRuntime.InvokeVoidAsync("filterNameInput", "updateAccountingLastName");
+            }
+            catch (Exception)
+            {
+                // JavaScript interop might not be available yet, ignore
+            }
+        }
+    }
+
+    private async Task LoadAccountingUsersAsync()
+    {
+        if (sellerUserId == 0) return;
+        
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            totalCount = await UserService.GetAccountingUsersCountAsync(sellerUserId, searchTerm);
+            accountingUsers = await UserService.GetAccountingUsersAsync(sellerUserId, searchTerm, currentPage, pageSize);
+        }
+        catch (Exception)
+        {
+            accountingUsers = new List<IT13_Final.Services.Data.AdminUserModel>();
+            totalCount = 0;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            currentPage = 1;
+            await LoadAccountingUsersAsync();
+        }
+    }
+
+    // Debounce search to avoid too many queries
+    private System.Threading.Timer? _searchTimer;
+    private void HandleSearchInput(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? string.Empty;
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            currentPage = 1;
+            await InvokeAsync(async () =>
+            {
+                await LoadAccountingUsersAsync();
+            });
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages)
+        {
+            if (page != currentPage)
+            {
+                currentPage = page;
+                await LoadAccountingUsersAsync();
+            }
+        }
+    }
+
+    private void NavigateToArchive()
+    {
+        Nav.NavigateTo("/seller/Archive_Accounting_Record");
+    }
+
+    private void HandleAddAccounting()
+    {
+        showAddAccountingModal = true;
+        activeAddAccountingTab = "user";
+        _addAccountingModel.Reset();
+        _addAccountingModel.Role = "accounting"; // Set default role to accounting
+        _addAccountingAddressModel.Id = 0;
+        _addAccountingAddressModel.Street = string.Empty;
+        _addAccountingAddressModel.City = string.Empty;
+        _addAccountingAddressModel.Province = string.Empty;
+        _addAccountingAddressModel.Zip = string.Empty;
+        _addAccountingMessage = null;
+        _addAccountingSuccess = false;
+        
+        // Reinitialize EditContext and ValidationMessageStore with the reset model
+        _addAccountingEditContext = new EditContext(_addAccountingModel);
+        _validationMessageStore = new ValidationMessageStore(_addAccountingEditContext);
+        
+        StateHasChanged();
+        
+        // Load provinces when opening modal
+        _addAccountingProvinces = PhilippineAddressService.GetProvinces();
+        _addAccountingProvinces.Sort();
+        _addAccountingCities = new List<string>();
+    }
+
+    private void CloseAddAccountingModal()
+    {
+        showAddAccountingModal = false;
+        _addAccountingModel.Reset();
+        _addAccountingAddressModel.Id = 0;
+        _addAccountingAddressModel.Street = string.Empty;
+        _addAccountingAddressModel.City = string.Empty;
+        _addAccountingAddressModel.Province = string.Empty;
+        _addAccountingAddressModel.Zip = string.Empty;
+        _addAccountingMessage = null;
+        _addAccountingSuccess = false;
+        _successMessageTimer?.Dispose();
+        _successMessageTimer = null;
+        _successBannerTimer?.Dispose();
+        _successBannerTimer = null;
+        // Reset EditContext and ValidationMessageStore
+        _addAccountingEditContext = new EditContext(_addAccountingModel);
+        _validationMessageStore = new ValidationMessageStore(_addAccountingEditContext);
+        StateHasChanged();
+    }
+
+    private void SetActiveAddAccountingTab(string tab)
+    {
+        activeAddAccountingTab = tab;
+        StateHasChanged();
+    }
+
+    private DateOnly MaxBirthdayDate
+    {
+        get
+        {
+            // Maximum birthday is 24 years ago from today
+            var today = DateOnly.FromDateTime(DateTime.Today);
+            return today.AddYears(-24);
+        }
+    }
+
+    private DateOnly? AddAccountingBirthday
+    {
+        get => _addAccountingModel.Birthday;
+        set
+        {
+            // Clear any previous validation messages for birthday
+            if (_validationMessageStore != null && _addAccountingEditContext != null)
+            {
+                _validationMessageStore.Clear(_addAccountingEditContext.Field(nameof(_addAccountingModel.Birthday)));
+            }
+            
+            if (value.HasValue)
+            {
+                var today = DateOnly.FromDateTime(DateTime.Today);
+                var age = today.Year - value.Value.Year;
+                
+                // Adjust if birthday hasn't occurred this year
+                if (value.Value > today.AddYears(-age))
+                {
+                    age--;
+                }
+                
+                // Validate minimum age requirement (must be at least 24)
+                if (age < 24)
+                {
+                    // Add validation error directly to the Birthday field
+                    if (_validationMessageStore != null && _addAccountingEditContext != null)
+                    {
+                        _validationMessageStore.Add(
+                            _addAccountingEditContext.Field(nameof(_addAccountingModel.Birthday)),
+                            "Accounting users must be at least 24 years old.");
+                        _addAccountingEditContext.NotifyValidationStateChanged();
+                    }
+                    StateHasChanged();
+                    return;
+                }
+                
+                _addAccountingModel.Birthday = value;
+                _addAccountingModel.Age = age;
+                
+                // Notify EditContext of field changes
+                if (_addAccountingEditContext != null)
+                {
+                    _addAccountingEditContext.NotifyFieldChanged(_addAccountingEditContext.Field(nameof(_addAccountingModel.Birthday)));
+                    _addAccountingEditContext.NotifyFieldChanged(_addAccountingEditContext.Field(nameof(_addAccountingModel.Age)));
+                }
+            }
+            else
+            {
+                _addAccountingModel.Birthday = null;
+                _addAccountingModel.Age = null;
+                
+                // Notify EditContext of field changes
+                if (_addAccountingEditContext != null)
+                {
+                    _addAccountingEditContext.NotifyFieldChanged(_addAccountingEditContext.Field(nameof(_addAccountingModel.Birthday)));
+                    _addAccountingEditContext.NotifyFieldChanged(_addAccountingEditContext.Field(nameof(_addAccountingModel.Age)));
+                }
+            }
+            StateHasChanged();
+        }
+    }
+
+    private void OnProvinceChanged(ChangeEventArgs e)
+    {
+        _addAccountingAddressModel.Province = e.Value?.ToString() ?? string.Empty;
+        _addAccountingAddressModel.City = string.Empty;
+        _addAccountingAddressModel.Zip = string.Empty;
+
+        if (!string.IsNullOrEmpty(_addAccountingAddressModel.Province))
+        {
+            _addAccountingCities = PhilippineAddressService.GetCities(_addAccountingAddressModel.Province);
+            _addAccountingCities.Sort();
+        }
+        else
+        {
+            _addAccountingCities = new List<string>();
+        }
+
+        StateHasChanged();
+    }
+
+    private void OnCityChanged(ChangeEventArgs e)
+    {
+        _addAccountingAddressModel.City = e.Value?.ToString() ?? string.Empty;
+
+        if (!string.IsNullOrEmpty(_addAccountingAddressModel.Province) && !string.IsNullOrEmpty(_addAccountingAddressModel.City))
+        {
+            _addAccountingAddressModel.Zip = PhilippineAddressService.GetZipCode(_addAccountingAddressModel.Province, _addAccountingAddressModel.City);
+        }
+        else
+        {
+            _addAccountingAddressModel.Zip = string.Empty;
+        }
+
+        StateHasChanged();
+    }
+
+    private void FilterAddAccountingFirstNameInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        _addAccountingModel.FirstName = filtered;
+        
+        // Notify EditContext of field change
+        if (_addAccountingEditContext != null)
+        {
+            _addAccountingEditContext.NotifyFieldChanged(_addAccountingEditContext.Field(nameof(_addAccountingModel.FirstName)));
+        }
+        
+        // Auto-generate password as FirstName123
+        if (!string.IsNullOrWhiteSpace(filtered))
+        {
+            // Remove spaces and take only letters for password
+            var firstNameForPassword = new string(filtered.Where(char.IsLetter).ToArray());
+            if (!string.IsNullOrWhiteSpace(firstNameForPassword))
+            {
+                _addAccountingModel.Password = firstNameForPassword + "123";
+                _addAccountingModel.ConfirmPassword = firstNameForPassword + "123";
+                
+                // Notify EditContext of password field changes
+                if (_addAccountingEditContext != null)
+                {
+                    _addAccountingEditContext.NotifyFieldChanged(_addAccountingEditContext.Field(nameof(_addAccountingModel.Password)));
+                    _addAccountingEditContext.NotifyFieldChanged(_addAccountingEditContext.Field(nameof(_addAccountingModel.ConfirmPassword)));
+                }
+            }
+        }
+        else
+        {
+            _addAccountingModel.Password = string.Empty;
+            _addAccountingModel.ConfirmPassword = string.Empty;
+            
+            // Notify EditContext of password field changes
+            if (_addAccountingEditContext != null)
+            {
+                _addAccountingEditContext.NotifyFieldChanged(_addAccountingEditContext.Field(nameof(_addAccountingModel.Password)));
+                _addAccountingEditContext.NotifyFieldChanged(_addAccountingEditContext.Field(nameof(_addAccountingModel.ConfirmPassword)));
+            }
+        }
+        
+        StateHasChanged();
+    }
+
+    private void FilterAddAccountingMiddleNameInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        _addAccountingModel.MiddleName = filtered;
+        
+        // Notify EditContext of field change
+        if (_addAccountingEditContext != null)
+        {
+            _addAccountingEditContext.NotifyFieldChanged(_addAccountingEditContext.Field(nameof(_addAccountingModel.MiddleName)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void FilterAddAccountingLastNameInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        _addAccountingModel.LastName = filtered;
+        
+        // Notify EditContext of field change
+        if (_addAccountingEditContext != null)
+        {
+            _addAccountingEditContext.NotifyFieldChanged(_addAccountingEditContext.Field(nameof(_addAccountingModel.LastName)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void HandleInvalidSubmit()
+    {
+        // Show validation errors when form submission fails
+        StateHasChanged();
+    }
+
+    private async Task SaveAccountingAsync()
+    {
+        if (sellerUserId == 0) return;
+        
+        // Build accounting name for confirmation
+        var accountingName = $"{_addAccountingModel.FirstName} {_addAccountingModel.LastName}".Trim();
+        if (string.IsNullOrWhiteSpace(accountingName))
+        {
+            accountingName = _addAccountingModel.Email;
+        }
+        
+        // Show confirmation dialog
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to add {accountingName} as an accounting user?");
+        
+        if (!confirmed)
+        {
+            return; // User cancelled
+        }
+        
+        _addAccountingMessage = null;
+        
+        // Auto-generate password if first name exists but password is empty
+        if (string.IsNullOrWhiteSpace(_addAccountingModel.Password) && !string.IsNullOrWhiteSpace(_addAccountingModel.FirstName))
+        {
+            var firstNameForPassword = new string(_addAccountingModel.FirstName.Where(char.IsLetter).ToArray());
+            if (!string.IsNullOrWhiteSpace(firstNameForPassword))
+            {
+                _addAccountingModel.Password = firstNameForPassword + "123";
+                _addAccountingModel.ConfirmPassword = firstNameForPassword + "123";
+            }
+        }
+        
+        // Validate passwords match
+        if (_addAccountingModel.Password != _addAccountingModel.ConfirmPassword)
+        {
+            _addAccountingMessage = "Passwords do not match.";
+            _addAccountingSuccess = false;
+            StateHasChanged();
+            return;
+        }
+
+        // Validate password length
+        if (string.IsNullOrWhiteSpace(_addAccountingModel.Password) || _addAccountingModel.Password.Length < 6)
+        {
+            _addAccountingMessage = "Password must be at least 6 characters long.";
+            _addAccountingSuccess = false;
+            StateHasChanged();
+            return;
+        }
+        
+        // Ensure role is set to accounting
+        _addAccountingModel.Role = "accounting";
+
+        // Validate accounting age requirement (must be at least 24 years old)
+        if (!_addAccountingModel.Age.HasValue || _addAccountingModel.Age.Value < 24)
+        {
+            _addAccountingMessage = "Accounting users must be at least 24 years old.";
+            _addAccountingSuccess = false;
+            StateHasChanged();
+            return;
+        }
+
+        // Clear any previous validation messages
+        _validationMessageStore?.Clear();
+
+        try
+        {
+            // Create the accounting user with sellerUserId
+            var newUserId = await UserService.CreateAccountingAsync(
+                sellerUserId,
+                _addAccountingModel.Email,
+                _addAccountingModel.Password,
+                _addAccountingModel.FirstName,
+                string.IsNullOrWhiteSpace(_addAccountingModel.MiddleName) ? null : _addAccountingModel.MiddleName,
+                _addAccountingModel.LastName,
+                string.IsNullOrWhiteSpace(_addAccountingModel.Contact) ? null : _addAccountingModel.Contact,
+                _addAccountingModel.Birthday,
+                _addAccountingModel.Age,
+                string.IsNullOrWhiteSpace(_addAccountingModel.Sex) ? null : _addAccountingModel.Sex
+            );
+
+            if (newUserId.HasValue && newUserId.Value > 0)
+            {
+                // Save address if provided
+                if (!string.IsNullOrWhiteSpace(_addAccountingAddressModel.Street) ||
+                    !string.IsNullOrWhiteSpace(_addAccountingAddressModel.City) ||
+                    !string.IsNullOrWhiteSpace(_addAccountingAddressModel.Province) ||
+                    !string.IsNullOrWhiteSpace(_addAccountingAddressModel.Zip))
+                {
+                    _addAccountingAddressModel.Id = 0; // New address
+                    await AddressService.SaveAddressAsync(newUserId.Value, _addAccountingAddressModel);
+                }
+
+                // Refresh list
+                await LoadAccountingUsersAsync();
+                
+                // Show success message
+                successMessageText = "Accounting user created successfully!";
+                showSuccessMessage = true;
+                
+                // Close modal immediately
+                CloseAddAccountingModal();
+                
+                // Set timer to hide success message after 5 seconds
+                _successBannerTimer?.Dispose();
+                _successBannerTimer = new System.Threading.Timer(async _ =>
+                {
+                    await InvokeAsync(() =>
+                    {
+                        showSuccessMessage = false;
+                        successMessageText = string.Empty;
+                        StateHasChanged();
+                    });
+                }, null, 5000, Timeout.Infinite);
+            }
+            else
+            {
+                _addAccountingMessage = "Failed to create accounting user. No user ID returned.";
+                _addAccountingSuccess = false;
+            }
+        }
+        catch (IT13_Final.Services.Data.EmailAlreadyExistsException)
+        {
+            // Add email validation error directly to the Email field
+            if (_validationMessageStore != null && _addAccountingEditContext != null)
+            {
+                _validationMessageStore.Add(
+                    _addAccountingEditContext.Field(nameof(_addAccountingModel.Email)),
+                    "Email address already exists.");
+                _addAccountingEditContext.NotifyValidationStateChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            _addAccountingMessage = $"Failed to create accounting user: {ex.Message}";
+            _addAccountingSuccess = false;
+        }
+        finally
+        {
+            StateHasChanged();
+        }
+    }
+
+    private sealed class AddAccountingModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "First Name is required")]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^[a-zA-Z\s'.-]+$", ErrorMessage = "First Name must contain only letters")]
+        public string FirstName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^[a-zA-Z\s'.-]*$", ErrorMessage = "Middle Name must contain only letters")]
+        public string MiddleName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Last Name is required")]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^[a-zA-Z\s'.-]+$", ErrorMessage = "Last Name must contain only letters")]
+        public string LastName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Email is required")]
+        [System.ComponentModel.DataAnnotations.EmailAddress(ErrorMessage = "Invalid email format")]
+        public string Email { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Birthday is required")]
+        public DateOnly? Birthday { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Age is required")]
+        [System.ComponentModel.DataAnnotations.Range(24, 150, ErrorMessage = "Accounting must be at least 24 years old")]
+        public int? Age { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Sex is required")]
+        public string Sex { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Contact Number is required")]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^(\+63\s?)?9\d{2}[\s-]?\d{3}[\s-]?\d{4}$|^09\d{9}$|^\(?0[2-9]\d\)?[\s-]?\d{3}[\s-]?\d{4}$", ErrorMessage = "Contact Number must be a valid Philippine phone number")]
+        public string Contact { get; set; } = string.Empty;
+
+        // Password is auto-generated, so we don't need Required validation here
+        [System.ComponentModel.DataAnnotations.MinLength(6, ErrorMessage = "Password must be at least 6 characters")]
+        public string Password { get; set; } = string.Empty;
+
+        // Confirm Password is auto-generated, so we don't need Required validation here
+        public string ConfirmPassword { get; set; } = string.Empty;
+
+        public string Role { get; set; } = "accounting";
+
+        public void Reset()
+        {
+            FirstName = string.Empty;
+            MiddleName = string.Empty;
+            LastName = string.Empty;
+            Email = string.Empty;
+            Birthday = null;
+            Age = null;
+            Sex = string.Empty;
+            Contact = string.Empty;
+            Password = string.Empty;
+            ConfirmPassword = string.Empty;
+            Role = "accounting";
+        }
+    }
+
+    private async Task HandleDelete(int userId)
+    {
+        // Get the accounting name for the confirmation dialog
+        var accounting = accountingUsers.FirstOrDefault(u => u.Id == userId);
+        var accountingName = accounting?.Name ?? "this accounting user";
+        
+        // Show confirmation dialog
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to archive {accountingName}?");
+        
+        if (!confirmed)
+        {
+            return; // User cancelled
+        }
+        
+        try
+        {
+            var success = await UserService.ArchiveAccountingAsync(userId);
+            
+            if (success)
+            {
+                // Refresh the list to remove the archived accounting user
+                await LoadAccountingUsersAsync();
+                
+                // Show success message
+                successMessageText = "Accounting user archived successfully!";
+                showSuccessMessage = true;
+                
+                // Set timer to hide success message after 5 seconds
+                _successBannerTimer?.Dispose();
+                _successBannerTimer = new System.Threading.Timer(async _ =>
+                {
+                    await InvokeAsync(() =>
+                    {
+                        showSuccessMessage = false;
+                        successMessageText = string.Empty;
+                        StateHasChanged();
+                    });
+                }, null, 5000, Timeout.Infinite);
+            }
+        }
+        catch (Exception)
+        {
+            // Handle error - could show an error message here
+        }
+        
+        StateHasChanged();
+    }
+
+    private async Task HandleRowClick(int userId)
+    {
+        showUserDetails = true;
+        isLoadingDetails = true;
+        StateHasChanged();
+
+        try
+        {
+            userDetails = await UserService.GetUserDetailsAsync(userId);
+        }
+        catch
+        {
+            userDetails = null;
+        }
+        finally
+        {
+            isLoadingDetails = false;
+            StateHasChanged();
+        }
+    }
+
+    private void CloseUserDetails()
+    {
+        showUserDetails = false;
+        userDetails = null;
+        StateHasChanged();
+    }
+
+    private DateOnly? UpdateAccountingBirthday
+    {
+        get => _updateAccountingModel.Birthday;
+        set
+        {
+            // Clear any previous validation messages for birthday
+            if (_updateValidationMessageStore != null && _updateAccountingEditContext != null)
+            {
+                _updateValidationMessageStore.Clear(_updateAccountingEditContext.Field(nameof(_updateAccountingModel.Birthday)));
+            }
+            
+            if (value.HasValue)
+            {
+                var today = DateOnly.FromDateTime(DateTime.Today);
+                var age = today.Year - value.Value.Year;
+                
+                // Adjust if birthday hasn't occurred this year
+                if (value.Value > today.AddYears(-age))
+                {
+                    age--;
+                }
+                
+                // Validate minimum age requirement (must be at least 24)
+                if (age < 24)
+                {
+                    // Add validation error directly to the Birthday field
+                    if (_updateValidationMessageStore != null && _updateAccountingEditContext != null)
+                    {
+                        _updateValidationMessageStore.Add(
+                            _updateAccountingEditContext.Field(nameof(_updateAccountingModel.Birthday)),
+                            "Accounting users must be at least 24 years old.");
+                        _updateAccountingEditContext.NotifyValidationStateChanged();
+                    }
+                    StateHasChanged();
+                    return;
+                }
+                
+                _updateAccountingModel.Birthday = value;
+                _updateAccountingModel.Age = age;
+                
+                // Notify EditContext of field changes
+                if (_updateAccountingEditContext != null)
+                {
+                    _updateAccountingEditContext.NotifyFieldChanged(_updateAccountingEditContext.Field(nameof(_updateAccountingModel.Birthday)));
+                    _updateAccountingEditContext.NotifyFieldChanged(_updateAccountingEditContext.Field(nameof(_updateAccountingModel.Age)));
+                }
+            }
+            else
+            {
+                _updateAccountingModel.Birthday = null;
+                _updateAccountingModel.Age = null;
+                
+                // Notify EditContext of field changes
+                if (_updateAccountingEditContext != null)
+                {
+                    _updateAccountingEditContext.NotifyFieldChanged(_updateAccountingEditContext.Field(nameof(_updateAccountingModel.Birthday)));
+                    _updateAccountingEditContext.NotifyFieldChanged(_updateAccountingEditContext.Field(nameof(_updateAccountingModel.Age)));
+                }
+            }
+            StateHasChanged();
+        }
+    }
+
+    private void OnUpdateProvinceChanged(ChangeEventArgs e)
+    {
+        _updateAccountingAddressModel.Province = e.Value?.ToString() ?? string.Empty;
+        _updateAccountingAddressModel.City = string.Empty;
+        _updateAccountingAddressModel.Zip = string.Empty;
+
+        if (!string.IsNullOrEmpty(_updateAccountingAddressModel.Province))
+        {
+            _updateAccountingCities = PhilippineAddressService.GetCities(_updateAccountingAddressModel.Province);
+            _updateAccountingCities.Sort();
+        }
+        else
+        {
+            _updateAccountingCities = new List<string>();
+        }
+
+        StateHasChanged();
+    }
+
+    private void OnUpdateCityChanged(ChangeEventArgs e)
+    {
+        _updateAccountingAddressModel.City = e.Value?.ToString() ?? string.Empty;
+
+        if (!string.IsNullOrEmpty(_updateAccountingAddressModel.Province) && !string.IsNullOrEmpty(_updateAccountingAddressModel.City))
+        {
+            _updateAccountingAddressModel.Zip = PhilippineAddressService.GetZipCode(_updateAccountingAddressModel.Province, _updateAccountingAddressModel.City);
+        }
+        else
+        {
+            _updateAccountingAddressModel.Zip = string.Empty;
+        }
+
+        StateHasChanged();
+    }
+
+    private void FilterUpdateAccountingFirstNameInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        _updateAccountingModel.FirstName = filtered;
+        
+        // Notify EditContext of field change
+        if (_updateAccountingEditContext != null)
+        {
+            _updateAccountingEditContext.NotifyFieldChanged(_updateAccountingEditContext.Field(nameof(_updateAccountingModel.FirstName)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void FilterUpdateAccountingMiddleNameInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        _updateAccountingModel.MiddleName = filtered;
+        
+        // Notify EditContext of field change
+        if (_updateAccountingEditContext != null)
+        {
+            _updateAccountingEditContext.NotifyFieldChanged(_updateAccountingEditContext.Field(nameof(_updateAccountingModel.MiddleName)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void FilterUpdateAccountingLastNameInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        _updateAccountingModel.LastName = filtered;
+        
+        // Notify EditContext of field change
+        if (_updateAccountingEditContext != null)
+        {
+            _updateAccountingEditContext.NotifyFieldChanged(_updateAccountingEditContext.Field(nameof(_updateAccountingModel.LastName)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void HandleUpdateInvalidSubmit()
+    {
+        // Show validation errors when form submission fails
+        StateHasChanged();
+    }
+
+    private async Task HandleEdit(int userId)
+    {
+        _updateAccountingUserId = userId;
+        
+        try
+        {
+            var userDetails = await UserService.GetUserDetailsAsync(userId);
+            if (userDetails == null)
+            {
+                return;
+            }
+
+            // Load personal info to get first/middle/last name separately
+            var personalInfo = await UserService.GetPersonalInfoAsync(userId);
+            
+            // Populate user information
+            _updateAccountingModel.FirstName = personalInfo?.FirstName ?? string.Empty;
+            _updateAccountingModel.MiddleName = personalInfo?.MiddleName ?? string.Empty;
+            _updateAccountingModel.LastName = personalInfo?.LastName ?? string.Empty;
+            _updateAccountingModel.Email = userDetails.Email;
+            _updateAccountingModel.Birthday = userDetails.Birthday;
+            _updateAccountingModel.Age = userDetails.Age;
+            _updateAccountingModel.Sex = userDetails.Sex;
+            _updateAccountingModel.Contact = userDetails.Contact;
+            
+            // Set dummy password values to satisfy validation (password is not changed in update)
+            _updateAccountingModel.Password = "Dummy123";
+            _updateAccountingModel.ConfirmPassword = "Dummy123";
+
+            // Load address information with ID for updates
+            var existingAddress = await AddressService.GetAddressAsync(userId);
+            if (existingAddress != null)
+            {
+                _updateAccountingAddressModel.Id = existingAddress.Id;
+                _updateAccountingAddressModel.Street = existingAddress.Street;
+                _updateAccountingAddressModel.Province = existingAddress.Province;
+                _updateAccountingAddressModel.City = existingAddress.City;
+                _updateAccountingAddressModel.Zip = existingAddress.Zip;
+            }
+            else
+            {
+                // If no address exists, use data from userDetails (might be empty)
+                _updateAccountingAddressModel.Id = 0;
+                _updateAccountingAddressModel.Street = userDetails.Street ?? string.Empty;
+                _updateAccountingAddressModel.Province = userDetails.Province ?? string.Empty;
+                _updateAccountingAddressModel.City = userDetails.City ?? string.Empty;
+                _updateAccountingAddressModel.Zip = userDetails.Zip ?? string.Empty;
+            }
+
+            // Load provinces and cities
+            _updateAccountingProvinces = PhilippineAddressService.GetProvinces().ToList();
+            _updateAccountingProvinces.Sort();
+            
+            if (!string.IsNullOrEmpty(_updateAccountingAddressModel.Province))
+            {
+                _updateAccountingCities = PhilippineAddressService.GetCities(_updateAccountingAddressModel.Province);
+                _updateAccountingCities.Sort();
+            }
+            else
+            {
+                _updateAccountingCities = new List<string>();
+            }
+
+            // Reinitialize EditContext with populated model
+            _updateAccountingEditContext = new EditContext(_updateAccountingModel);
+            _updateValidationMessageStore = new ValidationMessageStore(_updateAccountingEditContext);
+
+            activeUpdateAccountingTab = "user";
+            showUpdateAccountingModal = true;
+            StateHasChanged();
+        }
+        catch (Exception)
+        {
+            // Handle error
+        }
+    }
+
+    private void SetActiveUpdateAccountingTab(string tab)
+    {
+        activeUpdateAccountingTab = tab;
+        StateHasChanged();
+    }
+
+    private void CloseUpdateAccountingModal()
+    {
+        showUpdateAccountingModal = false;
+        activeUpdateAccountingTab = "user";
+        _updateAccountingModel.Reset();
+        _updateAccountingAddressModel.Id = 0;
+        _updateAccountingAddressModel.Street = string.Empty;
+        _updateAccountingAddressModel.City = string.Empty;
+        _updateAccountingAddressModel.Province = string.Empty;
+        _updateAccountingAddressModel.Zip = string.Empty;
+        _updateAccountingProvinces = new List<string>();
+        _updateAccountingCities = new List<string>();
+        _updateAccountingUserId = null;
+        
+        // Reset EditContext and ValidationMessageStore
+        _updateAccountingEditContext = new EditContext(_updateAccountingModel);
+        _updateValidationMessageStore = new ValidationMessageStore(_updateAccountingEditContext);
+        StateHasChanged();
+    }
+
+    private async Task SaveUpdateAccountingAsync()
+    {
+        if (!_updateAccountingUserId.HasValue)
+        {
+            return;
+        }
+        
+        // Clear any previous validation messages
+        _updateValidationMessageStore?.Clear();
+        
+        // Validate required fields manually since we're using native inputs
+        bool hasErrors = false;
+        
+        if (string.IsNullOrWhiteSpace(_updateAccountingModel.FirstName))
+        {
+            _updateValidationMessageStore?.Add(_updateAccountingEditContext.Field(nameof(_updateAccountingModel.FirstName)), "First Name is required.");
+            hasErrors = true;
+        }
+        
+        if (string.IsNullOrWhiteSpace(_updateAccountingModel.LastName))
+        {
+            _updateValidationMessageStore?.Add(_updateAccountingEditContext.Field(nameof(_updateAccountingModel.LastName)), "Last Name is required.");
+            hasErrors = true;
+        }
+        
+        if (string.IsNullOrWhiteSpace(_updateAccountingModel.Email))
+        {
+            _updateValidationMessageStore?.Add(_updateAccountingEditContext.Field(nameof(_updateAccountingModel.Email)), "Email is required.");
+            hasErrors = true;
+        }
+        else if (!System.Text.RegularExpressions.Regex.IsMatch(_updateAccountingModel.Email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+        {
+            _updateValidationMessageStore?.Add(_updateAccountingEditContext.Field(nameof(_updateAccountingModel.Email)), "Invalid email format.");
+            hasErrors = true;
+        }
+        
+        if (!_updateAccountingModel.Birthday.HasValue)
+        {
+            _updateValidationMessageStore?.Add(_updateAccountingEditContext.Field(nameof(_updateAccountingModel.Birthday)), "Birthday is required.");
+            hasErrors = true;
+        }
+        
+        if (string.IsNullOrWhiteSpace(_updateAccountingModel.Sex))
+        {
+            _updateValidationMessageStore?.Add(_updateAccountingEditContext.Field(nameof(_updateAccountingModel.Sex)), "Sex is required.");
+            hasErrors = true;
+        }
+        
+        if (string.IsNullOrWhiteSpace(_updateAccountingModel.Contact))
+        {
+            _updateValidationMessageStore?.Add(_updateAccountingEditContext.Field(nameof(_updateAccountingModel.Contact)), "Contact Number is required.");
+            hasErrors = true;
+        }
+
+        // Validate accounting age requirement (must be at least 24 years old)
+        if (!_updateAccountingModel.Age.HasValue || _updateAccountingModel.Age.Value < 24)
+        {
+            _updateValidationMessageStore?.Add(_updateAccountingEditContext.Field(nameof(_updateAccountingModel.Age)), "Accounting users must be at least 24 years old.");
+            hasErrors = true;
+        }
+        
+        if (hasErrors)
+        {
+            _updateAccountingEditContext?.NotifyValidationStateChanged();
+            StateHasChanged();
+            return;
+        }
+        
+        // Build accounting name for confirmation
+        var accountingName = $"{_updateAccountingModel.FirstName} {_updateAccountingModel.LastName}".Trim();
+        if (string.IsNullOrWhiteSpace(accountingName))
+        {
+            accountingName = _updateAccountingModel.Email;
+        }
+        
+        // Show confirmation dialog
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to update {accountingName}?");
+        
+        if (!confirmed)
+        {
+            return; // User cancelled
+        }
+        
+        // All validation passed - proceed with update
+
+        try
+        {
+            // Update the accounting user
+            var success = await UserService.UpdateAccountingAsync(
+                _updateAccountingUserId.Value,
+                _updateAccountingModel.Email,
+                _updateAccountingModel.FirstName,
+                string.IsNullOrWhiteSpace(_updateAccountingModel.MiddleName) ? null : _updateAccountingModel.MiddleName,
+                _updateAccountingModel.LastName,
+                string.IsNullOrWhiteSpace(_updateAccountingModel.Contact) ? null : _updateAccountingModel.Contact,
+                _updateAccountingModel.Birthday,
+                _updateAccountingModel.Age,
+                string.IsNullOrWhiteSpace(_updateAccountingModel.Sex) ? null : _updateAccountingModel.Sex
+            );
+
+            if (success)
+            {
+                // Save/update address if provided
+                if (!string.IsNullOrWhiteSpace(_updateAccountingAddressModel.Street) ||
+                    !string.IsNullOrWhiteSpace(_updateAccountingAddressModel.City) ||
+                    !string.IsNullOrWhiteSpace(_updateAccountingAddressModel.Province) ||
+                    !string.IsNullOrWhiteSpace(_updateAccountingAddressModel.Zip))
+                {
+                    await AddressService.SaveAddressAsync(_updateAccountingUserId.Value, _updateAccountingAddressModel);
+                }
+
+                // Refresh list
+                await LoadAccountingUsersAsync();
+                
+                // Show success message
+                successMessageText = "Accounting user updated successfully!";
+                showSuccessMessage = true;
+                
+                // Close modal immediately
+                CloseUpdateAccountingModal();
+                
+                // Set timer to hide success message after 5 seconds
+                _successBannerTimer?.Dispose();
+                _successBannerTimer = new System.Threading.Timer(async _ =>
+                {
+                    await InvokeAsync(() =>
+                    {
+                        showSuccessMessage = false;
+                        successMessageText = string.Empty;
+                        StateHasChanged();
+                    });
+                }, null, 5000, Timeout.Infinite);
+            }
+        }
+        catch (IT13_Final.Services.Data.EmailAlreadyExistsException)
+        {
+            // Add email validation error directly to the Email field
+            if (_updateValidationMessageStore != null && _updateAccountingEditContext != null)
+            {
+                _updateValidationMessageStore.Add(
+                    _updateAccountingEditContext.Field(nameof(_updateAccountingModel.Email)),
+                    "Email address already exists.");
+                _updateAccountingEditContext.NotifyValidationStateChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            // Handle other errors
+            if (_updateValidationMessageStore != null && _updateAccountingEditContext != null)
+            {
+                _updateValidationMessageStore.Add(
+                    _updateAccountingEditContext.Field(nameof(_updateAccountingModel.Email)),
+                    $"Error: {ex.Message}");
+                _updateAccountingEditContext.NotifyValidationStateChanged();
+            }
+        }
+        finally
+        {
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+        _successMessageTimer?.Dispose();
+        _successBannerTimer?.Dispose();
+    }
+}
+
