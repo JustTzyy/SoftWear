@@ -42,13 +42,13 @@ namespace IT13_Final.Services.Data
         Task<int> GetArchivedAdminUsersCountAsync(string? searchTerm = null, CancellationToken ct = default);
         Task<bool> RestoreAdminAsync(int userId, CancellationToken ct = default);
         Task<UserDetailsModel?> GetArchivedUserDetailsAsync(int userId, CancellationToken ct = default);
-        Task<List<AdminUserModel>> GetSellerUsersAsync(string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
-        Task<int> GetSellerUsersCountAsync(string? searchTerm = null, CancellationToken ct = default);
-        Task<int?> CreateSellerAsync(string email, string password, string firstName, string? middleName, string lastName, string? contact, DateOnly? birthday, int? age, string? sex, CancellationToken ct = default);
+        Task<List<AdminUserModel>> GetSellerUsersAsync(int adminId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
+        Task<int> GetSellerUsersCountAsync(int adminId, string? searchTerm = null, CancellationToken ct = default);
+        Task<int?> CreateSellerAsync(int adminId, string email, string password, string firstName, string? middleName, string lastName, string? contact, DateOnly? birthday, int? age, string? sex, CancellationToken ct = default);
         Task<bool> UpdateSellerAsync(int userId, string email, string firstName, string? middleName, string lastName, string? contact, DateOnly? birthday, int? age, string? sex, CancellationToken ct = default);
         Task<bool> ArchiveSellerAsync(int userId, CancellationToken ct = default);
-        Task<List<ArchivedAdminUserModel>> GetArchivedSellerUsersAsync(string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
-        Task<int> GetArchivedSellerUsersCountAsync(string? searchTerm = null, CancellationToken ct = default);
+        Task<List<ArchivedAdminUserModel>> GetArchivedSellerUsersAsync(int adminId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
+        Task<int> GetArchivedSellerUsersCountAsync(int adminId, string? searchTerm = null, CancellationToken ct = default);
         Task<bool> RestoreSellerAsync(int userId, CancellationToken ct = default);
         Task<List<AdminUserModel>> GetAccountingUsersAsync(int sellerUserId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
         Task<int> GetAccountingUsersCountAsync(int sellerUserId, string? searchTerm = null, CancellationToken ct = default);
@@ -75,8 +75,8 @@ namespace IT13_Final.Services.Data
         Task<int> GetArchivedStockClerkUsersCountAsync(int sellerUserId, string? searchTerm = null, CancellationToken ct = default);
         Task<bool> RestoreStockClerkAsync(int userId, CancellationToken ct = default);
         Task<bool> CreatePermissionRequestAsync(int userId, string requestType, string requestDataJson, CancellationToken ct = default);
-        Task<List<PermissionRequestModel>> GetPermissionRequestsAsync(string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
-        Task<int> GetPermissionRequestsCountAsync(string? searchTerm = null, CancellationToken ct = default);
+        Task<List<PermissionRequestModel>> GetPermissionRequestsAsync(int adminId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
+        Task<int> GetPermissionRequestsCountAsync(int adminId, string? searchTerm = null, CancellationToken ct = default);
         Task<PermissionRequestDetailsModel?> GetPermissionRequestDetailsAsync(int userId, CancellationToken ct = default);
         Task<bool> ApprovePermissionRequestAsync(int userId, CancellationToken ct = default);
         Task<bool> RejectPermissionRequestAsync(int userId, CancellationToken ct = default);
@@ -888,7 +888,7 @@ namespace IT13_Final.Services.Data
             return rowsAffected > 0;
         }
 
-        public async Task<List<AdminUserModel>> GetSellerUsersAsync(string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
+        public async Task<List<AdminUserModel>> GetSellerUsersAsync(int adminId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
         {
             await using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -899,7 +899,7 @@ namespace IT13_Final.Services.Data
                                u.created_at
                         FROM dbo.tbl_users u
                         JOIN dbo.tbl_roles r ON r.id = u.role_id
-                        WHERE LOWER(r.name) = 'seller' AND u.archived_at IS NULL";
+                        WHERE LOWER(r.name) = 'seller' AND u.archived_at IS NULL AND u.user_id = @AdminId";
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -909,6 +909,7 @@ namespace IT13_Final.Services.Data
             sql += " ORDER BY u.created_at DESC OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY";
 
             await using var cmd = new SqlCommand(sql, conn) { CommandType = CommandType.Text };
+            cmd.Parameters.AddWithValue("@AdminId", adminId);
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -935,7 +936,7 @@ namespace IT13_Final.Services.Data
             return users;
         }
 
-        public async Task<int> GetSellerUsersCountAsync(string? searchTerm = null, CancellationToken ct = default)
+        public async Task<int> GetSellerUsersCountAsync(int adminId, string? searchTerm = null, CancellationToken ct = default)
         {
             await using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -943,7 +944,7 @@ namespace IT13_Final.Services.Data
             var sql = @"SELECT COUNT(*)
                         FROM dbo.tbl_users u
                         JOIN dbo.tbl_roles r ON r.id = u.role_id
-                        WHERE LOWER(r.name) = 'seller' AND u.archived_at IS NULL";
+                        WHERE LOWER(r.name) = 'seller' AND u.archived_at IS NULL AND u.user_id = @AdminId";
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -951,6 +952,7 @@ namespace IT13_Final.Services.Data
             }
 
             await using var cmd = new SqlCommand(sql, conn) { CommandType = CommandType.Text };
+            cmd.Parameters.AddWithValue("@AdminId", adminId);
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -961,7 +963,7 @@ namespace IT13_Final.Services.Data
             return result != null && result != DBNull.Value ? Convert.ToInt32(result) : 0;
         }
 
-        public async Task<int?> CreateSellerAsync(string email, string password, string firstName, string? middleName, string lastName, string? contact, DateOnly? birthday, int? age, string? sex, CancellationToken ct = default)
+        public async Task<int?> CreateSellerAsync(int adminId, string email, string password, string firstName, string? middleName, string lastName, string? contact, DateOnly? birthday, int? age, string? sex, CancellationToken ct = default)
         {
             await using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -1011,11 +1013,11 @@ namespace IT13_Final.Services.Data
                 };
             }
 
-            // Insert new seller user
+            // Insert new seller user with user_id linking to admin
             const string insertSql = @"INSERT INTO dbo.tbl_users 
-                                        (email, pwd_hash, name, fname, mname, lname, contact_no, bday, age, sex, is_active, must_change_pw, role_id, created_at)
+                                        (email, pwd_hash, name, fname, mname, lname, contact_no, bday, age, sex, is_active, must_change_pw, role_id, user_id, created_at)
                                         VALUES 
-                                        (@email, @pwd_hash, @name, @fname, @mname, @lname, @contact_no, @bday, @age, @sex, @is_active, @must_change_pw, @role_id, SYSUTCDATETIME());
+                                        (@email, @pwd_hash, @name, @fname, @mname, @lname, @contact_no, @bday, @age, @sex, @is_active, @must_change_pw, @role_id, @user_id, SYSUTCDATETIME());
                                         SELECT CAST(SCOPE_IDENTITY() AS INT);";
 
             await using var insertCmd = new SqlCommand(insertSql, conn) { CommandType = CommandType.Text };
@@ -1032,6 +1034,7 @@ namespace IT13_Final.Services.Data
             insertCmd.Parameters.AddWithValue("@is_active", 1); // Seller users are active by default
             insertCmd.Parameters.AddWithValue("@must_change_pw", 1); // New sellers must change password on first login
             insertCmd.Parameters.AddWithValue("@role_id", roleId);
+            insertCmd.Parameters.AddWithValue("@user_id", adminId); // Link seller to admin
 
             var newUserId = await insertCmd.ExecuteScalarAsync(ct);
             return newUserId != null && newUserId != DBNull.Value ? Convert.ToInt32(newUserId) : null;
@@ -1120,7 +1123,7 @@ namespace IT13_Final.Services.Data
             return rowsAffected > 0;
         }
 
-        public async Task<List<ArchivedAdminUserModel>> GetArchivedSellerUsersAsync(string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
+        public async Task<List<ArchivedAdminUserModel>> GetArchivedSellerUsersAsync(int adminId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
         {
             await using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -1131,7 +1134,7 @@ namespace IT13_Final.Services.Data
                                u.archived_at
                         FROM dbo.tbl_users u
                         JOIN dbo.tbl_roles r ON r.id = u.role_id
-                        WHERE LOWER(r.name) = 'seller' AND u.archived_at IS NOT NULL";
+                        WHERE LOWER(r.name) = 'seller' AND u.archived_at IS NOT NULL AND u.user_id = @AdminId";
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -1141,6 +1144,7 @@ namespace IT13_Final.Services.Data
             sql += " ORDER BY u.archived_at DESC OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY";
 
             await using var cmd = new SqlCommand(sql, conn) { CommandType = CommandType.Text };
+            cmd.Parameters.AddWithValue("@AdminId", adminId);
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -1167,7 +1171,7 @@ namespace IT13_Final.Services.Data
             return users;
         }
 
-        public async Task<int> GetArchivedSellerUsersCountAsync(string? searchTerm = null, CancellationToken ct = default)
+        public async Task<int> GetArchivedSellerUsersCountAsync(int adminId, string? searchTerm = null, CancellationToken ct = default)
         {
             await using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -1175,7 +1179,7 @@ namespace IT13_Final.Services.Data
             var sql = @"SELECT COUNT(*)
                         FROM dbo.tbl_users u
                         JOIN dbo.tbl_roles r ON r.id = u.role_id
-                        WHERE LOWER(r.name) = 'seller' AND u.archived_at IS NOT NULL";
+                        WHERE LOWER(r.name) = 'seller' AND u.archived_at IS NOT NULL AND u.user_id = @AdminId";
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -1183,6 +1187,7 @@ namespace IT13_Final.Services.Data
             }
 
             await using var cmd = new SqlCommand(sql, conn) { CommandType = CommandType.Text };
+            cmd.Parameters.AddWithValue("@AdminId", adminId);
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -2297,7 +2302,7 @@ namespace IT13_Final.Services.Data
             return rowsAffected > 0;
         }
 
-        public async Task<List<PermissionRequestModel>> GetPermissionRequestsAsync(string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
+        public async Task<List<PermissionRequestModel>> GetPermissionRequestsAsync(int adminId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
         {
             await using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -2311,7 +2316,8 @@ namespace IT13_Final.Services.Data
                         JOIN dbo.tbl_roles r ON r.id = u.role_id
                         WHERE LOWER(r.name) = 'seller' 
                         AND u.permission_request_status = 'pending'
-                        AND u.archived_at IS NULL";
+                        AND u.archived_at IS NULL
+                        AND u.user_id = @AdminId";
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -2321,6 +2327,7 @@ namespace IT13_Final.Services.Data
             sql += " ORDER BY u.permission_request_date DESC OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY";
 
             await using var cmd = new SqlCommand(sql, conn) { CommandType = CommandType.Text };
+            cmd.Parameters.AddWithValue("@AdminId", adminId);
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -2348,7 +2355,7 @@ namespace IT13_Final.Services.Data
             return requests;
         }
 
-        public async Task<int> GetPermissionRequestsCountAsync(string? searchTerm = null, CancellationToken ct = default)
+        public async Task<int> GetPermissionRequestsCountAsync(int adminId, string? searchTerm = null, CancellationToken ct = default)
         {
             await using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -2358,7 +2365,8 @@ namespace IT13_Final.Services.Data
                         JOIN dbo.tbl_roles r ON r.id = u.role_id
                         WHERE LOWER(r.name) = 'seller' 
                         AND u.permission_request_status = 'pending'
-                        AND u.archived_at IS NULL";
+                        AND u.archived_at IS NULL
+                        AND u.user_id = @AdminId";
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -2366,6 +2374,7 @@ namespace IT13_Final.Services.Data
             }
 
             await using var cmd = new SqlCommand(sql, conn) { CommandType = CommandType.Text };
+            cmd.Parameters.AddWithValue("@AdminId", adminId);
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {

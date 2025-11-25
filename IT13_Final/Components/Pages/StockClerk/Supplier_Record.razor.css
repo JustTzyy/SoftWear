@@ -1,0 +1,333 @@
+/* Supplier Records Page - Stock Clerk (Read-Only) - SoftWear Theme */
+
+.page-title {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    margin: 6px 0 24px 0;
+    color: #1a1a1a;
+}
+
+.colors-container {
+    background: #FFFFFF;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+/* Search and Actions Row */
+.search-actions-row {
+    display: flex;
+    gap: 16px;
+    align-items: stretch;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+}
+
+.search-wrapper {
+    flex: 1;
+    min-width: 300px;
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    color: #4a4a4a;
+    pointer-events: none;
+}
+
+.search-input {
+    width: 100% !important;
+    height: 40px !important;
+    padding-left: 44px !important;
+    padding-right: 16px !important;
+    border: 1px solid #82A0BC !important;
+    border-radius: 8px !important;
+    font-size: 14px !important;
+    color: #2d2d2d !important;
+    background: #FFFFFF !important;
+    transition: border-color 0.2s, box-shadow 0.2s !important;
+}
+
+.search-input:focus {
+    outline: none !important;
+    border-color: #A7CCED !important;
+    box-shadow: 0 0 0 3px rgba(167, 204, 237, 0.15) !important;
+}
+
+/* Table Container */
+.table-container {
+    overflow-x: auto;
+    margin-bottom: 24px;
+    border-radius: 8px;
+    background: #FFFFFF;
+}
+
+.table-header {
+    font-size: 18px;
+    font-weight: 700;
+    color: #2d2d2d;
+    margin-bottom: 16px;
+}
+
+.suppliers-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.suppliers-table thead {
+    background: #A2B9CD;
+}
+
+.suppliers-table th {
+    padding: 14px 20px;
+    text-align: left;
+    font-weight: 700;
+    color: #2d2d2d;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.suppliers-table tbody tr {
+    transition: background 0.2s;
+}
+
+.suppliers-table tbody tr:hover {
+    background: #E0E0E0;
+}
+
+.suppliers-table tbody tr:nth-child(even) {
+    background: #F9F9F9;
+}
+
+.suppliers-table tbody tr:nth-child(even):hover {
+    background: #E0E0E0;
+}
+
+.suppliers-table td {
+    padding: 16px 20px;
+    color: #2d2d2d;
+}
+
+.clickable-row {
+    cursor: pointer;
+}
+
+.supplier-name {
+    font-weight: 600;
+    color: #2d2d2d;
+}
+
+.loading-cell,
+.empty-cell {
+    text-align: center;
+    padding: 48px 16px;
+    color: #4a4a4a;
+    font-size: 14px;
+}
+
+.loading-cell {
+    color: #A7CCED;
+    font-weight: 600;
+}
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 700;
+    display: inline-block;
+}
+
+.status-badge.active {
+    background: #10B981;
+    color: #FFFFFF;
+}
+
+.status-badge.inactive {
+    background: #6B7280;
+    color: #FFFFFF;
+}
+
+/* Pagination */
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 0;
+}
+
+.page-btn {
+    min-width: 36px;
+    height: 36px;
+    padding: 0 12px;
+    border: none;
+    border-radius: 6px;
+    background: #FFFFFF;
+    color: #2d2d2d;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #82A0BC;
+}
+
+.page-btn:hover:not(:disabled) {
+    background: #A2B9CD;
+    border-color: #A2B9CD;
+}
+
+.page-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.page-btn.active {
+    background: #A2B9CD;
+    color: #304D6D;
+    box-shadow: 0 2px 8px rgba(167, 204, 237, 0.3);
+    border-color: #A2B9CD;
+}
+
+.page-btn svg {
+    width: 18px;
+    height: 18px;
+}
+
+.page-ellipsis {
+    padding: 0 8px;
+    color: #6a6a6a;
+    font-size: 14px;
+}
+
+/* Modal Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+}
+
+.modal-container {
+    background: #FFFFFF;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 600px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15);
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 24px 28px;
+    background: #A2B9CD;
+}
+
+.modal-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 22px;
+    font-weight: 700;
+    color: #304D6D;
+}
+
+.modal-title-icon {
+    width: 24px;
+    height: 24px;
+    color: #304D6D;
+    stroke: currentColor;
+}
+
+.modal-close {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    color: #4a4a4a;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.modal-close:hover {
+    background: rgba(48, 77, 109, 0.1);
+    color: #304D6D;
+}
+
+.modal-close svg {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+}
+
+.modal-content {
+    padding: 32px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    overflow-y: auto;
+    flex: 1;
+    background: #FAFAFA;
+}
+
+.details-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    background: #FFFFFF;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.detail-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+}
+
+.detail-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: #6B7280;
+    min-width: 140px;
+}
+
+.detail-value {
+    font-size: 14px;
+    font-weight: 400;
+    color: #1F2937;
+    text-align: right;
+    flex: 1;
+}
+

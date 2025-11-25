@@ -29,6 +29,14 @@ namespace IT13_Final
             builder.Services.AddScoped<ICategoryService, CategoryService>();
             builder.Services.AddScoped<IProductService, ProductService>();
             builder.Services.AddScoped<IVariantService, VariantService>();
+            builder.Services.AddScoped<ISupplierService, SupplierService>();
+            builder.Services.AddScoped<IStockInService, StockInService>();
+            builder.Services.AddScoped<IStockOutService, StockOutService>();
+            builder.Services.AddScoped<IInventoryService, InventoryService>();
+            builder.Services.AddScoped<IPurchaseOrderService, PurchaseOrderService>();
+            builder.Services.AddScoped<IStockAdjustmentService, StockAdjustmentService>();
+            builder.Services.AddScoped<ISalesService, SalesService>();
+            builder.Services.AddScoped<IReturnsService, ReturnsService>();
 
 #if DEBUG
     		builder.Services.AddBlazorWebViewDeveloperTools();

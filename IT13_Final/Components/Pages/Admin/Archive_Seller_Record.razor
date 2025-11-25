@@ -1,6 +1,7 @@
 @page "/admin/Archive_Seller_Record"
 @layout IT13_Final.Components.Layout.Admin.Admin
 @inject IT13_Final.Services.Data.IUserService UserService
+@inject IT13_Final.Services.Auth.AuthState AuthState
 @inject IJSRuntime JSRuntime
 @using System.Linq
 @implements IDisposable
@@ -261,8 +262,9 @@
 
         try
         {
-            totalCount = await UserService.GetArchivedSellerUsersCountAsync(searchTerm);
-            archivedUsers = await UserService.GetArchivedSellerUsersAsync(searchTerm, currentPage, pageSize);
+            var adminId = AuthState.CurrentUser?.Id ?? 0;
+            totalCount = await UserService.GetArchivedSellerUsersCountAsync(adminId, searchTerm);
+            archivedUsers = await UserService.GetArchivedSellerUsersAsync(adminId, searchTerm, currentPage, pageSize);
         }
         catch (Exception)
         {

@@ -1,6 +1,7 @@
 @page "/seller/Archive_Color_Record"
 @layout IT13_Final.Components.Layout.Seller.Seller
 @inject IT13_Final.Services.Data.IColorService ColorService
+@inject IT13_Final.Services.Auth.AuthState AuthState
 @inject IJSRuntime JSRuntime
 @inject NavigationManager Nav
 @implements IDisposable
@@ -215,8 +216,9 @@
 
         try
         {
-            totalCount = await ColorService.GetArchivedColorsCountAsync(searchTerm);
-            archivedColors = await ColorService.GetArchivedColorsAsync(searchTerm, currentPage, pageSize);
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            totalCount = await ColorService.GetArchivedColorsCountAsync(userId, searchTerm);
+            archivedColors = await ColorService.GetArchivedColorsAsync(userId, searchTerm, currentPage, pageSize);
         }
         catch (Exception)
         {
@@ -278,7 +280,8 @@
         
         try
         {
-            var success = await ColorService.RestoreColorAsync(colorId);
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            var success = await ColorService.RestoreColorAsync(colorId, userId);
             
             if (success)
             {
@@ -313,7 +316,8 @@
 
         try
         {
-            colorDetails = await ColorService.GetArchivedColorDetailsAsync(colorId);
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            colorDetails = await ColorService.GetArchivedColorDetailsAsync(colorId, userId);
         }
         catch
         {

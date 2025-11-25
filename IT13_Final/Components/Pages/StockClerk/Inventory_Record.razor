@@ -1,0 +1,498 @@
+@page "/stockclerk/Inventory"
+@layout IT13_Final.Components.Layout.StockClerk.StockClerk
+@inject IT13_Final.Services.Data.IInventoryService InventoryService
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Nav
+@using Microsoft.Data.SqlClient
+@using System.ComponentModel.DataAnnotations
+@implements IDisposable
+
+<h1 class="page-title">Inventory Records</h1>
+
+<div class="colors-container">
+    <div class="search-actions-row">
+        <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input type="text" class="search-input" placeholder="Search inventory" value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        </div>
+    </div>
+
+    <div class="table-container">
+        <div class="table-header">List</div>
+        <table class="suppliers-table">
+            <thead>
+                <tr>
+                    <th>Product</th>
+                    <th>Variant</th>
+                    <th>Size</th>
+                    <th>Color</th>
+                    <th>Current Stock</th>
+                    <th>Reorder Level</th>
+                    <th>Status</th>
+                    <th>Last Updated</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="9" class="loading-cell">Loading...</td>
+                    </tr>
+                }
+                else if (inventories.Count == 0)
+                {
+                    <tr>
+                        <td colspan="9" class="empty-cell">No inventory records found</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var inventory in inventories)
+                    {
+                        <tr class="clickable-row" @onclick="() => HandleRowClick(inventory.VariantId, inventory.SizeId, inventory.ColorId)">
+                            <td class="supplier-name">@inventory.ProductName</td>
+                            <td>@inventory.VariantName</td>
+                            <td>@(string.IsNullOrEmpty(inventory.SizeName) ? "N/A" : inventory.SizeName)</td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(inventory.ColorName))
+                                {
+                                    <div style="display: flex; align-items: center; gap: 6px;">
+                                        @if (!string.IsNullOrEmpty(inventory.ColorHexValue))
+                                        {
+                                            <span style="display: inline-block; width: 16px; height: 16px; border-radius: 3px; border: 1px solid #ddd; background-color: @inventory.ColorHexValue;"></span>
+                                        }
+                                        <span>@inventory.ColorName</span>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span>N/A</span>
+                                }
+                            </td>
+                            <td>
+                                <span class="stock-value @(inventory.CurrentStock <= inventory.ReorderLevel ? "low-stock" : "")">@inventory.CurrentStock</span>
+                            </td>
+                            <td>@inventory.ReorderLevel</td>
+                            <td>
+                                @if (inventory.CurrentStock <= inventory.ReorderLevel)
+                                {
+                                    <span class="status-badge inactive">Low Stock</span>
+                                }
+                                else
+                                {
+                                    <span class="status-badge active">In Stock</span>
+                                }
+                            </td>
+                            <td>@inventory.LastUpdated.ToString("MMM dd, yyyy")</td>
+                            <td class="actions-cell" @onclick:stopPropagation>
+                                <button class="action-btn edit-btn" @onclick="() => HandleEditReorderLevel(inventory.VariantId, inventory.ReorderLevel, inventory.ProductName, inventory.VariantName, inventory.CurrentStock, inventory.SizeId, inventory.ColorId)" title="Edit Reorder Level">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                var pageNum = i;
+                @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
+                {
+                    <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 2 || i == currentPage + 2)
+                {
+                    <span class="page-ellipsis">...</span>
+                }
+            }
+
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+@* Inventory Details Modal *@
+@if (showInventoryDetails && inventoryDetails != null)
+{
+    <div class="modal-overlay" @onclick="CloseInventoryDetails">
+        <div class="modal-container" @onclick:stopPropagation>
+            <div class="modal-header">
+                <div class="modal-title">
+                    <svg class="modal-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                    </svg>
+                    <span>Inventory Details</span>
+                </div>
+                <button class="modal-close" @onclick="CloseInventoryDetails" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                    <span class="modal-close-text">Close</span>
+                </button>
+            </div>
+
+            <div class="modal-content">
+                <div class="details-list">
+                    <div class="detail-item">
+                        <span class="detail-label">PRODUCT:</span>
+                        <span class="detail-value">@inventoryDetails.ProductName</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">VARIANT:</span>
+                        <span class="detail-value">@inventoryDetails.VariantName</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">SIZE:</span>
+                        <span class="detail-value">@(string.IsNullOrEmpty(inventoryDetails.SizeName) ? "N/A" : inventoryDetails.SizeName)</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">COLOR:</span>
+                        <span class="detail-value">
+                            @if (!string.IsNullOrEmpty(inventoryDetails.ColorName))
+                            {
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    @if (!string.IsNullOrEmpty(inventoryDetails.ColorHexValue))
+                                    {
+                                        <span style="display: inline-block; width: 20px; height: 20px; border-radius: 4px; border: 1px solid #ddd; background-color: @inventoryDetails.ColorHexValue;"></span>
+                                    }
+                                    <span>@inventoryDetails.ColorName</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <span>N/A</span>
+                            }
+                        </span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">CURRENT STOCK:</span>
+                        <span class="detail-value @(inventoryDetails.CurrentStock <= inventoryDetails.ReorderLevel ? "low-stock" : "")">@inventoryDetails.CurrentStock</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">REORDER LEVEL:</span>
+                        <span class="detail-value">@inventoryDetails.ReorderLevel</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">STATUS:</span>
+                        <span class="detail-value">
+                            @if (inventoryDetails.CurrentStock <= inventoryDetails.ReorderLevel)
+                            {
+                                <span class="status-badge inactive">Low Stock</span>
+                            }
+                            else
+                            {
+                                <span class="status-badge active">In Stock</span>
+                            }
+                        </span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">LAST UPDATED:</span>
+                        <span class="detail-value">@inventoryDetails.LastUpdated.ToString("MMMM dd, yyyy 'at' HH:mm")</span>
+                    </div>
+                    @if (!string.IsNullOrEmpty(inventoryDetails.UserName))
+                    {
+                        <div class="detail-item">
+                            <span class="detail-label">UPDATED BY:</span>
+                            <span class="detail-value">@inventoryDetails.UserName</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* Edit Reorder Level Modal *@
+@if (showEditReorderLevelModal)
+{
+    <div class="modal-overlay" @onclick="CloseEditReorderLevelModal">
+        <div class="add-supplier-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Edit Reorder Level</h2>
+                <button class="modal-close-btn" @onclick="CloseEditReorderLevelModal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <EditForm EditContext="@_editReorderLevelEditContext" OnValidSubmit="SaveReorderLevelAsync">
+                    <DataAnnotationsValidator />
+                    
+                    <div class="form-grid">
+                        <div class="form-field full-width">
+                            <label class="field-label">Product</label>
+                            <input type="text" class="form-input" value="@_editReorderLevelProductName" readonly />
+                        </div>
+                        <div class="form-field full-width">
+                            <label class="field-label">Variant</label>
+                            <input type="text" class="form-input" value="@_editReorderLevelVariantName" readonly />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Current Stock</label>
+                            <input type="number" class="form-input" value="@_editReorderLevelCurrentStock" readonly />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Reorder Level <span class="required">*</span></label>
+                            <InputNumber class="form-input" @bind-Value="_editReorderLevelModel.ReorderLevel" placeholder="Enter reorder level" />
+                            <ValidationMessage For="@(() => _editReorderLevelModel.ReorderLevel)" />
+                            <small class="field-hint">Set the minimum stock quantity at which you should reorder. When current stock ≤ reorder level, the status will show "Low Stock".</small>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-btn" @onclick="CloseEditReorderLevelModal">Cancel</button>
+                        <button type="submit" class="save-supplier-btn">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                <polyline points="7 3 7 8 15 8"></polyline>
+                            </svg>
+                            <span>Save Reorder Level</span>
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = false;
+    private string searchTerm = string.Empty;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling(totalCount / (double)pageSize);
+    private List<IT13_Final.Services.Data.InventoryModel> inventories = new();
+    private int sellerUserId = 0;
+
+    private bool showInventoryDetails = false;
+    private IT13_Final.Services.Data.InventoryModel? inventoryDetails = null;
+
+    private bool showEditReorderLevelModal = false;
+    private EditReorderLevelModel _editReorderLevelModel = new();
+    private EditContext? _editReorderLevelEditContext;
+    private int _editReorderLevelVariantId = 0;
+    private string _editReorderLevelProductName = string.Empty;
+    private string _editReorderLevelVariantName = string.Empty;
+    private int _editReorderLevelCurrentStock = 0;
+
+    public class EditReorderLevelModel
+    {
+        [Required(ErrorMessage = "Reorder level is required")]
+        [Range(0, int.MaxValue, ErrorMessage = "Reorder level must be 0 or greater")]
+        public int ReorderLevel { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSellerUserId();
+        if (sellerUserId > 0)
+        {
+            await LoadInventoriesAsync();
+        }
+    }
+
+    private async Task LoadSellerUserId()
+    {
+        if (AuthState.CurrentUser != null)
+        {
+            try
+            {
+                const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+                using var conn = new SqlConnection(connectionString);
+                await conn.OpenAsync();
+
+                var sql = "SELECT user_id FROM dbo.tbl_users WHERE id = @UserId AND archived_at IS NULL";
+                using var cmd = new SqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@UserId", AuthState.CurrentUser.Id);
+
+                var result = await cmd.ExecuteScalarAsync();
+                if (result != null && result != DBNull.Value)
+                {
+                    sellerUserId = Convert.ToInt32(result);
+                }
+            }
+            catch
+            {
+                sellerUserId = 0;
+            }
+        }
+    }
+
+    private async Task LoadInventoriesAsync()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            if (sellerUserId > 0)
+            {
+                totalCount = await InventoryService.GetInventoriesCountAsync(sellerUserId, searchTerm);
+                inventories = await InventoryService.GetInventoriesAsync(sellerUserId, searchTerm, currentPage, pageSize);
+            }
+        }
+        catch (Exception)
+        {
+            inventories = new List<IT13_Final.Services.Data.InventoryModel>();
+            totalCount = 0;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private System.Threading.Timer? _searchTimer;
+    private void HandleSearchInput(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? string.Empty;
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            currentPage = 1;
+            await InvokeAsync(async () => await LoadInventoriesAsync());
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _searchTimer?.Dispose();
+            currentPage = 1;
+            await LoadInventoriesAsync();
+        }
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages && page != currentPage)
+        {
+            currentPage = page;
+            await LoadInventoriesAsync();
+        }
+    }
+
+    private async Task HandleRowClick(int variantId, int? sizeId, int? colorId)
+    {
+        try
+        {
+            if (sellerUserId > 0)
+            {
+                inventoryDetails = await InventoryService.GetInventoryDetailsAsync(variantId, sizeId, colorId, sellerUserId);
+                if (inventoryDetails != null)
+                {
+                    showInventoryDetails = true;
+                    StateHasChanged();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading inventory details: {ex.Message}");
+        }
+    }
+
+    private void CloseInventoryDetails()
+    {
+        showInventoryDetails = false;
+        inventoryDetails = null;
+    }
+
+    private int? _editReorderLevelSizeId = null;
+    private int? _editReorderLevelColorId = null;
+
+    private void HandleEditReorderLevel(int variantId, int currentReorderLevel, string productName, string variantName, int currentStock, int? sizeId = null, int? colorId = null)
+    {
+        _editReorderLevelVariantId = variantId;
+        _editReorderLevelSizeId = sizeId;
+        _editReorderLevelColorId = colorId;
+        _editReorderLevelProductName = productName;
+        _editReorderLevelVariantName = variantName;
+        _editReorderLevelCurrentStock = currentStock;
+        _editReorderLevelModel = new EditReorderLevelModel { ReorderLevel = currentReorderLevel };
+        _editReorderLevelEditContext = new EditContext(_editReorderLevelModel);
+        
+        showEditReorderLevelModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseEditReorderLevelModal()
+    {
+        showEditReorderLevelModal = false;
+        _editReorderLevelModel = new EditReorderLevelModel();
+        _editReorderLevelEditContext = new EditContext(_editReorderLevelModel);
+    }
+
+    private async Task SaveReorderLevelAsync()
+    {
+        try
+        {
+            if (sellerUserId > 0 && _editReorderLevelVariantId > 0 && AuthState.CurrentUser != null)
+            {
+                var result = await InventoryService.UpdateReorderLevelAsync(
+                    _editReorderLevelVariantId,
+                    _editReorderLevelSizeId,
+                    _editReorderLevelColorId,
+                    _editReorderLevelModel.ReorderLevel,
+                    sellerUserId,
+                    AuthState.CurrentUser.Id
+                );
+
+                if (result)
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", "Reorder level updated successfully!");
+                    CloseEditReorderLevelModal();
+                    await LoadInventoriesAsync();
+                }
+                else
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", "Failed to update reorder level. Please try again.");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error updating reorder level: {ex.Message}");
+        }
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+    }
+}
+

@@ -1,0 +1,561 @@
+@page "/stockclerk/Stock_Out"
+@layout IT13_Final.Components.Layout.StockClerk.StockClerk
+@inject IT13_Final.Services.Data.IStockOutService StockOutService
+@inject IT13_Final.Services.Data.IVariantService VariantService
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Nav
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.Data.SqlClient
+@implements IDisposable
+
+<h1 class="page-title">Stock Out Records</h1>
+
+@if (showSuccessMessage && !string.IsNullOrEmpty(successMessageText))
+{
+    <div class="success-banner">
+        <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span>@successMessageText</span>
+    </div>
+}
+
+<div class="colors-container">
+    <div class="search-actions-row">
+        <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input type="text" class="search-input" placeholder="Search stock out records" value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        </div>
+
+        <div class="action-buttons">
+            <button class="add-supplier-btn" @onclick="HandleAddStockOut">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="16"></line>
+                    <line x1="8" y1="12" x2="16" y2="12"></line>
+                </svg>
+                <span>Add Stock Out</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <div class="table-header">List</div>
+        <table class="suppliers-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Variant</th>
+                    <th>Product</th>
+                    <th>Quantity</th>
+                    <th>Reason</th>
+                    <th>Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="6" class="loading-cell">Loading...</td>
+                    </tr>
+                }
+                else if (stockOuts.Count == 0)
+                {
+                    <tr>
+                        <td colspan="6" class="empty-cell">No stock out records found</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var stockOut in stockOuts)
+                    {
+                        <tr class="clickable-row" @onclick="() => HandleRowClick(stockOut.Id)">
+                            <td>@stockOut.Id</td>
+                            <td class="supplier-name">@stockOut.VariantName</td>
+                            <td>@stockOut.ProductName</td>
+                            <td>@stockOut.QuantityRemoved</td>
+                            <td>@(string.IsNullOrEmpty(stockOut.Reason) ? "N/A" : stockOut.Reason)</td>
+                            <td>@stockOut.Timestamps.ToString("MMM dd, yyyy HH:mm")</td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                var pageNum = i;
+                @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
+                {
+                    <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 2 || i == currentPage + 2)
+                {
+                    <span class="page-ellipsis">...</span>
+                }
+            }
+
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+@* Add Stock Out Modal *@
+@if (showAddStockOutModal)
+{
+    <div class="modal-overlay" @onclick="CloseAddStockOutModal">
+        <div class="add-supplier-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Add Stock Out</h2>
+                <button class="modal-close-btn" @onclick="CloseAddStockOutModal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <EditForm EditContext="@_addStockOutEditContext" OnValidSubmit="SaveStockOutAsync">
+                    <DataAnnotationsValidator />
+                    
+                    <div class="form-grid">
+                        <div class="form-field full-width">
+                            <label class="field-label">Variant <span class="required">*</span></label>
+                            <InputSelect class="form-input" @bind-Value="_addStockOutModel.VariantId" @bind-Value:after="OnVariantSelectedAsync">
+                                <option value="0">Select Variant</option>
+                                @foreach (var variant in availableVariants)
+                                {
+                                    <option value="@variant.Id">@variant.ProductName - @variant.Name</option>
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => _addStockOutModel.VariantId)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Size <span class="required">*</span></label>
+                            <InputSelect class="form-input" @bind-Value="_addStockOutModel.SizeId" disabled="@(selectedVariantDetails == null || selectedVariantDetails.SizeIds.Count == 0)">
+                                <option value="0">Select Size</option>
+                                @if (selectedVariantDetails != null && selectedVariantDetails.SizeIds.Count > 0)
+                                {
+                                    @for (int i = 0; i < selectedVariantDetails.SizeIds.Count; i++)
+                                    {
+                                        <option value="@selectedVariantDetails.SizeIds[i]">@selectedVariantDetails.SizeNames[i]</option>
+                                    }
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => _addStockOutModel.SizeId)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Color <span class="required">*</span></label>
+                            <InputSelect class="form-input" @bind-Value="_addStockOutModel.ColorId" disabled="@(selectedVariantDetails == null || selectedVariantDetails.ColorIds.Count == 0)">
+                                <option value="0">Select Color</option>
+                                @if (selectedVariantDetails != null && selectedVariantDetails.ColorIds.Count > 0)
+                                {
+                                    @for (int i = 0; i < selectedVariantDetails.ColorIds.Count; i++)
+                                    {
+                                        <option value="@selectedVariantDetails.ColorIds[i]">@selectedVariantDetails.ColorNames[i]</option>
+                                    }
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => _addStockOutModel.ColorId)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Quantity <span class="required">*</span></label>
+                            <InputNumber class="form-input" @bind-Value="_addStockOutModel.QuantityRemoved" placeholder="Enter quantity" />
+                            <ValidationMessage For="@(() => _addStockOutModel.QuantityRemoved)" />
+                        </div>
+                        <div class="form-field full-width">
+                            <label class="field-label">Reason (Optional)</label>
+                            <InputTextArea class="form-input" @bind-Value="_addStockOutModel.Reason" placeholder="Enter reason for stock out" rows="3" />
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-btn" @onclick="CloseAddStockOutModal">Cancel</button>
+                        <button type="submit" class="save-supplier-btn">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                <polyline points="7 3 7 8 15 8"></polyline>
+                            </svg>
+                            <span>Save Stock Out</span>
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@* Stock Out Details Modal *@
+@if (showStockOutDetails && stockOutDetails != null)
+{
+    <div class="modal-overlay" @onclick="CloseStockOutDetails">
+        <div class="modal-container" @onclick:stopPropagation>
+            <div class="modal-header">
+                <div class="modal-title">
+                    <svg class="modal-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                    </svg>
+                    <span>Stock Out Details</span>
+                </div>
+                <button class="modal-close" @onclick="CloseStockOutDetails" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                    <span class="modal-close-text">Close</span>
+                </button>
+            </div>
+
+            <div class="modal-content">
+                <div class="details-list">
+                    <div class="detail-item">
+                        <span class="detail-label">ID:</span>
+                        <span class="detail-value">@stockOutDetails.Id</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">PRODUCT:</span>
+                        <span class="detail-value">@stockOutDetails.ProductName</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">VARIANT:</span>
+                        <span class="detail-value">@stockOutDetails.VariantName</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">SIZE:</span>
+                        <span class="detail-value">@(string.IsNullOrEmpty(stockOutDetails.SizeName) ? "N/A" : stockOutDetails.SizeName)</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">COLOR:</span>
+                        <span class="detail-value">
+                            @if (!string.IsNullOrEmpty(stockOutDetails.ColorName))
+                            {
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    @if (!string.IsNullOrEmpty(stockOutDetails.ColorHexValue))
+                                    {
+                                        <span style="display: inline-block; width: 20px; height: 20px; border-radius: 4px; border: 1px solid #ddd; background-color: @stockOutDetails.ColorHexValue;"></span>
+                                    }
+                                    <span>@stockOutDetails.ColorName</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <span>N/A</span>
+                            }
+                        </span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">QUANTITY REMOVED:</span>
+                        <span class="detail-value">@stockOutDetails.QuantityRemoved</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">REASON:</span>
+                        <span class="detail-value">@(string.IsNullOrEmpty(stockOutDetails.Reason) ? "N/A" : stockOutDetails.Reason)</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">RECORDED BY:</span>
+                        <span class="detail-value">@(string.IsNullOrEmpty(stockOutDetails.UserName) ? "N/A" : stockOutDetails.UserName)</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">DATE & TIME:</span>
+                        <span class="detail-value">@stockOutDetails.Timestamps.ToString("MMMM dd, yyyy 'at' HH:mm")</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = false;
+    private string searchTerm = string.Empty;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling(totalCount / (double)pageSize);
+    private List<IT13_Final.Services.Data.StockOutModel> stockOuts = new();
+    private bool showSuccessMessage = false;
+    private string successMessageText = string.Empty;
+    private int sellerUserId = 0;
+
+    private bool showStockOutDetails = false;
+    private IT13_Final.Services.Data.StockOutDetailsModel? stockOutDetails = null;
+
+    private bool showAddStockOutModal = false;
+    private AddStockOutModel _addStockOutModel = new();
+    private EditContext? _addStockOutEditContext;
+    private List<IT13_Final.Services.Data.VariantModel> availableVariants = new();
+    private IT13_Final.Services.Data.VariantDetailsModel? selectedVariantDetails = null;
+
+    public class AddStockOutModel
+    {
+        [Required(ErrorMessage = "Variant is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Please select a variant")]
+        public int VariantId { get; set; }
+
+        [Required(ErrorMessage = "Size is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Please select a size")]
+        public int SizeId { get; set; }
+
+        [Required(ErrorMessage = "Color is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Please select a color")]
+        public int ColorId { get; set; }
+
+        [Required(ErrorMessage = "Quantity is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Quantity must be greater than 0")]
+        public int QuantityRemoved { get; set; }
+
+        [MaxLength(500, ErrorMessage = "Reason cannot exceed 500 characters")]
+        public string? Reason { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _addStockOutEditContext = new EditContext(_addStockOutModel);
+        await LoadSellerUserId();
+        if (sellerUserId > 0)
+        {
+            await LoadVariantsAsync();
+            await LoadStockOutsAsync();
+        }
+    }
+
+    private async Task LoadSellerUserId()
+    {
+        if (AuthState.CurrentUser != null)
+        {
+            try
+            {
+                const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+                using var conn = new SqlConnection(connectionString);
+                await conn.OpenAsync();
+
+                var sql = "SELECT user_id FROM dbo.tbl_users WHERE id = @UserId AND archived_at IS NULL";
+                using var cmd = new SqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@UserId", AuthState.CurrentUser.Id);
+
+                var result = await cmd.ExecuteScalarAsync();
+                if (result != null && result != DBNull.Value)
+                {
+                    sellerUserId = Convert.ToInt32(result);
+                }
+            }
+            catch
+            {
+                sellerUserId = 0;
+            }
+        }
+    }
+
+    private async Task LoadVariantsAsync()
+    {
+        try
+        {
+            if (sellerUserId > 0)
+            {
+                // Get all variants (no pagination for dropdown)
+                availableVariants = await VariantService.GetVariantsAsync(sellerUserId, null, 1, 1000);
+            }
+        }
+        catch (Exception)
+        {
+            availableVariants = new List<IT13_Final.Services.Data.VariantModel>();
+        }
+    }
+
+    private async Task LoadStockOutsAsync()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            if (sellerUserId > 0)
+            {
+                totalCount = await StockOutService.GetStockOutsCountAsync(sellerUserId, searchTerm);
+                stockOuts = await StockOutService.GetStockOutsAsync(sellerUserId, searchTerm, currentPage, pageSize);
+            }
+        }
+        catch (Exception)
+        {
+            stockOuts = new List<IT13_Final.Services.Data.StockOutModel>();
+            totalCount = 0;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private System.Threading.Timer? _searchTimer;
+    private void HandleSearchInput(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? string.Empty;
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            currentPage = 1;
+            await InvokeAsync(async () => await LoadStockOutsAsync());
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _searchTimer?.Dispose();
+            currentPage = 1;
+            await LoadStockOutsAsync();
+        }
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages && page != currentPage)
+        {
+            currentPage = page;
+            await LoadStockOutsAsync();
+        }
+    }
+
+    private async Task HandleAddStockOut()
+    {
+        _addStockOutModel = new AddStockOutModel();
+        _addStockOutEditContext = new EditContext(_addStockOutModel);
+        selectedVariantDetails = null;
+        // Reload variants to ensure fresh data
+        await LoadVariantsAsync();
+        showAddStockOutModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseAddStockOutModal()
+    {
+        showAddStockOutModal = false;
+        _addStockOutModel = new AddStockOutModel();
+        _addStockOutEditContext = new EditContext(_addStockOutModel);
+        selectedVariantDetails = null;
+    }
+
+    private async Task OnVariantSelectedAsync()
+    {
+        if (_addStockOutModel.VariantId > 0 && sellerUserId > 0)
+        {
+            try
+            {
+                selectedVariantDetails = await VariantService.GetVariantDetailsAsync(_addStockOutModel.VariantId, sellerUserId);
+                // Reset size and color when variant changes
+                _addStockOutModel.SizeId = 0;
+                _addStockOutModel.ColorId = 0;
+            }
+            catch (Exception ex)
+            {
+                selectedVariantDetails = null;
+                await JSRuntime.InvokeVoidAsync("console.error", $"Error loading variant details: {ex.Message}");
+            }
+        }
+        else
+        {
+            selectedVariantDetails = null;
+            _addStockOutModel.SizeId = 0;
+            _addStockOutModel.ColorId = 0;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SaveStockOutAsync()
+    {
+        try
+        {
+            if (sellerUserId == 0)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Unable to determine seller user ID. Please refresh the page.");
+                return;
+            }
+
+            var result = await StockOutService.CreateStockOutAsync(
+                sellerUserId,
+                _addStockOutModel.VariantId,
+                _addStockOutModel.SizeId,
+                _addStockOutModel.ColorId,
+                _addStockOutModel.QuantityRemoved,
+                _addStockOutModel.Reason
+            );
+
+            if (result.HasValue)
+            {
+                successMessageText = "Stock out record created successfully!";
+                showSuccessMessage = true;
+                CloseAddStockOutModal();
+                await LoadStockOutsAsync();
+                
+                // Hide success message after 3 seconds
+                await Task.Delay(3000);
+                showSuccessMessage = false;
+                StateHasChanged();
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Failed to create stock out record. Please try again.");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error creating stock out record: {ex.Message}");
+        }
+    }
+
+    private async Task HandleRowClick(int stockOutId)
+    {
+        try
+        {
+            if (sellerUserId > 0)
+            {
+                stockOutDetails = await StockOutService.GetStockOutDetailsAsync(stockOutId, sellerUserId);
+                if (stockOutDetails != null)
+                {
+                    showStockOutDetails = true;
+                    StateHasChanged();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading stock out details: {ex.Message}");
+        }
+    }
+
+    private void CloseStockOutDetails()
+    {
+        showStockOutDetails = false;
+        stockOutDetails = null;
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+    }
+}
+

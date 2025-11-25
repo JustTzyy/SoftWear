@@ -1,6 +1,7 @@
 @page "/seller/Size"
 @layout IT13_Final.Components.Layout.Seller.Seller
 @inject IT13_Final.Services.Data.ISizeService SizeService
+@inject IT13_Final.Services.Auth.AuthState AuthState
 @inject IJSRuntime JSRuntime
 @inject NavigationManager Nav
 @implements IDisposable
@@ -88,10 +89,11 @@
                                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                                     </svg>
                                 </button>
-                                <button class="action-btn delete-btn" @onclick="() => HandleDelete(size.Id)" title="Delete">
+                                <button class="action-btn delete-btn" @onclick="() => HandleDelete(size.Id)" title="Archive">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="3 6 5 6 21 6"></polyline>
-                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                        <rect x="3" y="4" width="18" height="4" rx="1"></rect>
+                                        <path d="M5 8h14v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8z"></path>
+                                        <line x1="10" y1="12" x2="14" y2="12"></line>
                                     </svg>
                                 </button>
                             </td>
@@ -315,8 +317,9 @@
 
         try
         {
-            totalCount = await SizeService.GetSizesCountAsync(searchTerm);
-            sizes = await SizeService.GetSizesAsync(searchTerm, currentPage, pageSize);
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            totalCount = await SizeService.GetSizesCountAsync(userId, searchTerm);
+            sizes = await SizeService.GetSizesAsync(userId, searchTerm, currentPage, pageSize);
         }
         catch (Exception)
         {
@@ -384,7 +387,8 @@
     {
         if (_addSizeEditContext?.Validate() ?? false)
         {
-            var newSizeId = await SizeService.CreateSizeAsync(
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            var newSizeId = await SizeService.CreateSizeAsync(userId,
                 _addSizeModel.Name,
                 _addSizeModel.Description
             );
@@ -400,7 +404,8 @@
 
     private async Task HandleEdit(int sizeId)
     {
-        var sizeToUpdate = await SizeService.GetSizeDetailsAsync(sizeId);
+        var userId = AuthState.CurrentUser?.Id ?? 0;
+        var sizeToUpdate = await SizeService.GetSizeDetailsAsync(sizeId, userId);
         if (sizeToUpdate != null)
         {
             _updateSizeId = sizeId;
@@ -423,8 +428,10 @@
     {
         if (_updateSizeEditContext?.Validate() ?? false)
         {
+            var userId = AuthState.CurrentUser?.Id ?? 0;
             var success = await SizeService.UpdateSizeAsync(
                 _updateSizeId,
+                userId,
                 _updateSizeModel.Name,
                 _updateSizeModel.Description
             );
@@ -446,7 +453,8 @@
         var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to archive {sizeName}?");
         if (!confirmed) return;
         
-        var success = await SizeService.ArchiveSizeAsync(sizeId);
+        var userId = AuthState.CurrentUser?.Id ?? 0;
+        var success = await SizeService.ArchiveSizeAsync(sizeId, userId);
         if (success)
         {
             ShowSuccessMessage($"Size '{sizeName}' archived successfully!");
@@ -456,7 +464,8 @@
 
     private async Task HandleRowClick(int sizeId)
     {
-        sizeDetails = await SizeService.GetSizeDetailsAsync(sizeId);
+        var userId = AuthState.CurrentUser?.Id ?? 0;
+        sizeDetails = await SizeService.GetSizeDetailsAsync(sizeId, userId);
         if (sizeDetails != null)
         {
             showSizeDetails = true;
@@ -512,4 +521,5 @@
         public string Description { get; set; } = string.Empty;
     }
 }
+
 

@@ -45,17 +45,17 @@ namespace IT13_Final.Services.Data
 
     public interface IProductService
     {
-        Task<List<ProductModel>> GetProductsAsync(string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
-        Task<int> GetProductsCountAsync(string? searchTerm = null, CancellationToken ct = default);
-        Task<ProductDetailsModel?> GetProductDetailsAsync(int productId, CancellationToken ct = default);
-        Task<int?> CreateProductAsync(string name, string? description, int categoryId, byte[]? imageData, string? imageContentType, CancellationToken ct = default);
-        Task<bool> UpdateProductAsync(int productId, string name, string? description, int categoryId, byte[]? imageData, string? imageContentType, CancellationToken ct = default);
-        Task<bool> ArchiveProductAsync(int productId, CancellationToken ct = default);
-        Task<List<ArchivedProductModel>> GetArchivedProductsAsync(string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
-        Task<int> GetArchivedProductsCountAsync(string? searchTerm = null, CancellationToken ct = default);
-        Task<bool> RestoreProductAsync(int productId, CancellationToken ct = default);
-        Task<ProductDetailsModel?> GetArchivedProductDetailsAsync(int productId, CancellationToken ct = default);
-        Task<List<CategoryOption>> GetActiveCategoriesAsync(CancellationToken ct = default);
+        Task<List<ProductModel>> GetProductsAsync(int userId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
+        Task<int> GetProductsCountAsync(int userId, string? searchTerm = null, CancellationToken ct = default);
+        Task<ProductDetailsModel?> GetProductDetailsAsync(int productId, int userId, CancellationToken ct = default);
+        Task<int?> CreateProductAsync(int userId, string name, string? description, int categoryId, byte[]? imageData, string? imageContentType, CancellationToken ct = default);
+        Task<bool> UpdateProductAsync(int productId, int userId, string name, string? description, int categoryId, byte[]? imageData, string? imageContentType, CancellationToken ct = default);
+        Task<bool> ArchiveProductAsync(int productId, int userId, CancellationToken ct = default);
+        Task<List<ArchivedProductModel>> GetArchivedProductsAsync(int userId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
+        Task<int> GetArchivedProductsCountAsync(int userId, string? searchTerm = null, CancellationToken ct = default);
+        Task<bool> RestoreProductAsync(int productId, int userId, CancellationToken ct = default);
+        Task<ProductDetailsModel?> GetArchivedProductDetailsAsync(int productId, int userId, CancellationToken ct = default);
+        Task<List<CategoryOption>> GetActiveCategoriesAsync(int userId, CancellationToken ct = default);
     }
 
     public class ProductService : IProductService
@@ -63,7 +63,7 @@ namespace IT13_Final.Services.Data
         private readonly string _connectionString =
             "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
 
-        public async Task<List<ProductModel>> GetProductsAsync(string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
+        public async Task<List<ProductModel>> GetProductsAsync(int userId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
         {
             var products = new List<ProductModel>();
             using var conn = new SqlConnection(_connectionString);
@@ -74,7 +74,7 @@ namespace IT13_Final.Services.Data
                        p.status, p.created_at, p.image
                 FROM dbo.tbl_products p
                 INNER JOIN dbo.tbl_categories c ON p.category_id = c.id
-                WHERE p.archived_at IS NULL";
+                WHERE p.archived_at IS NULL AND p.user_id = @UserId";
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -84,6 +84,7 @@ namespace IT13_Final.Services.Data
             sql += " ORDER BY p.created_at DESC OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
@@ -117,7 +118,7 @@ namespace IT13_Final.Services.Data
             return products;
         }
 
-        public async Task<int> GetProductsCountAsync(string? searchTerm = null, CancellationToken ct = default)
+        public async Task<int> GetProductsCountAsync(int userId, string? searchTerm = null, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -134,6 +135,7 @@ namespace IT13_Final.Services.Data
             }
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
@@ -142,7 +144,7 @@ namespace IT13_Final.Services.Data
             return (int)await cmd.ExecuteScalarAsync(ct);
         }
 
-        public async Task<ProductDetailsModel?> GetProductDetailsAsync(int productId, CancellationToken ct = default)
+        public async Task<ProductDetailsModel?> GetProductDetailsAsync(int productId, int userId, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -155,6 +157,7 @@ namespace IT13_Final.Services.Data
                 WHERE p.id = @ProductId AND p.archived_at IS NULL";
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             cmd.Parameters.AddWithValue("@ProductId", productId);
 
             using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -182,17 +185,18 @@ namespace IT13_Final.Services.Data
             return null;
         }
 
-        public async Task<int?> CreateProductAsync(string name, string? description, int categoryId, byte[]? imageData, string? imageContentType, CancellationToken ct = default)
+        public async Task<int?> CreateProductAsync(int userId, string name, string? description, int categoryId, byte[]? imageData, string? imageContentType, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
 
             var sql = @"
-                INSERT INTO dbo.tbl_products (name, description, category_id, image, image_content_type, status, created_at)
-                VALUES (@Name, @Description, @CategoryId, @Image, @ImageContentType, 'Active', SYSUTCDATETIME());
+                INSERT INTO dbo.tbl_products (user_id, name, description, category_id, image, image_content_type, status, created_at)
+                VALUES (@UserId, @Name, @Description, @CategoryId, @Image, @ImageContentType, 'Active', SYSUTCDATETIME());
                 SELECT CAST(SCOPE_IDENTITY() as int);";
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             cmd.Parameters.AddWithValue("@Name", name);
             cmd.Parameters.AddWithValue("@Description", (object?)description ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@CategoryId", categoryId);
@@ -208,7 +212,7 @@ namespace IT13_Final.Services.Data
             return result != null ? Convert.ToInt32(result) : null;
         }
 
-        public async Task<bool> UpdateProductAsync(int productId, string name, string? description, int categoryId, byte[]? imageData, string? imageContentType, CancellationToken ct = default)
+        public async Task<bool> UpdateProductAsync(int productId, int userId, string name, string? description, int categoryId, byte[]? imageData, string? imageContentType, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -224,7 +228,7 @@ namespace IT13_Final.Services.Data
                         image = @Image,
                         image_content_type = @ImageContentType,
                         updated_at = SYSUTCDATETIME()
-                    WHERE id = @ProductId AND archived_at IS NULL";
+                    WHERE id = @ProductId AND user_id = @UserId AND archived_at IS NULL";
             }
             else
             {
@@ -234,10 +238,11 @@ namespace IT13_Final.Services.Data
                         description = @Description, 
                         category_id = @CategoryId,
                         updated_at = SYSUTCDATETIME()
-                    WHERE id = @ProductId AND archived_at IS NULL";
+                    WHERE id = @ProductId AND user_id = @UserId AND archived_at IS NULL";
             }
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             cmd.Parameters.AddWithValue("@ProductId", productId);
             cmd.Parameters.AddWithValue("@Name", name);
             cmd.Parameters.AddWithValue("@Description", (object?)description ?? DBNull.Value);
@@ -257,26 +262,56 @@ namespace IT13_Final.Services.Data
             return rowsAffected > 0;
         }
 
-        public async Task<bool> ArchiveProductAsync(int productId, CancellationToken ct = default)
+        public async Task<bool> ArchiveProductAsync(int productId, int userId, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
+            using var transaction = conn.BeginTransaction();
 
-            var sql = @"
-                UPDATE dbo.tbl_products 
-                SET archived_at = SYSUTCDATETIME(), 
-                    status = 'Archived',
-                    updated_at = SYSUTCDATETIME()
-                WHERE id = @ProductId AND archived_at IS NULL";
+            try
+            {
+                // Archive the product
+                var sql = @"
+                    UPDATE dbo.tbl_products 
+                    SET archived_at = SYSUTCDATETIME(), 
+                        status = 'Archived',
+                        updated_at = SYSUTCDATETIME()
+                    WHERE id = @ProductId AND user_id = @UserId AND archived_at IS NULL";
 
-            using var cmd = new SqlCommand(sql, conn);
-            cmd.Parameters.AddWithValue("@ProductId", productId);
+                using var cmd = new SqlCommand(sql, conn, transaction);
+                cmd.Parameters.AddWithValue("@UserId", userId);
+                cmd.Parameters.AddWithValue("@ProductId", productId);
 
-            var rowsAffected = await cmd.ExecuteNonQueryAsync(ct);
-            return rowsAffected > 0;
+                var rowsAffected = await cmd.ExecuteNonQueryAsync(ct);
+                if (rowsAffected == 0)
+                {
+                    transaction.Rollback();
+                    return false;
+                }
+
+                // Archive all variants of this product
+                var variantSql = @"
+                    UPDATE dbo.tbl_variants 
+                    SET archived_at = SYSUTCDATETIME(), 
+                        updated_at = SYSUTCDATETIME()
+                    WHERE product_id = @ProductId AND user_id = @UserId AND archived_at IS NULL";
+
+                using var variantCmd = new SqlCommand(variantSql, conn, transaction);
+                variantCmd.Parameters.AddWithValue("@ProductId", productId);
+                variantCmd.Parameters.AddWithValue("@UserId", userId);
+                await variantCmd.ExecuteNonQueryAsync(ct);
+
+                transaction.Commit();
+                return true;
+            }
+            catch
+            {
+                transaction.Rollback();
+                return false;
+            }
         }
 
-        public async Task<List<ArchivedProductModel>> GetArchivedProductsAsync(string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
+        public async Task<List<ArchivedProductModel>> GetArchivedProductsAsync(int userId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
         {
             var products = new List<ArchivedProductModel>();
             using var conn = new SqlConnection(_connectionString);
@@ -296,6 +331,7 @@ namespace IT13_Final.Services.Data
             sql += " ORDER BY p.archived_at DESC OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
@@ -327,7 +363,7 @@ namespace IT13_Final.Services.Data
             return products;
         }
 
-        public async Task<int> GetArchivedProductsCountAsync(string? searchTerm = null, CancellationToken ct = default)
+        public async Task<int> GetArchivedProductsCountAsync(int userId, string? searchTerm = null, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -344,6 +380,7 @@ namespace IT13_Final.Services.Data
             }
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
@@ -352,26 +389,56 @@ namespace IT13_Final.Services.Data
             return (int)await cmd.ExecuteScalarAsync(ct);
         }
 
-        public async Task<bool> RestoreProductAsync(int productId, CancellationToken ct = default)
+        public async Task<bool> RestoreProductAsync(int productId, int userId, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
+            using var transaction = conn.BeginTransaction();
 
-            var sql = @"
-                UPDATE dbo.tbl_products 
-                SET archived_at = NULL, 
-                    status = 'Active',
-                    updated_at = SYSUTCDATETIME()
-                WHERE id = @ProductId AND archived_at IS NOT NULL";
+            try
+            {
+                // Restore the product
+                var sql = @"
+                    UPDATE dbo.tbl_products 
+                    SET archived_at = NULL, 
+                        status = 'Active',
+                        updated_at = SYSUTCDATETIME()
+                    WHERE id = @ProductId AND user_id = @UserId AND archived_at IS NOT NULL";
 
-            using var cmd = new SqlCommand(sql, conn);
-            cmd.Parameters.AddWithValue("@ProductId", productId);
+                using var cmd = new SqlCommand(sql, conn, transaction);
+                cmd.Parameters.AddWithValue("@UserId", userId);
+                cmd.Parameters.AddWithValue("@ProductId", productId);
 
-            var rowsAffected = await cmd.ExecuteNonQueryAsync(ct);
-            return rowsAffected > 0;
+                var rowsAffected = await cmd.ExecuteNonQueryAsync(ct);
+                if (rowsAffected == 0)
+                {
+                    transaction.Rollback();
+                    return false;
+                }
+
+                // Restore all variants of this product
+                var variantSql = @"
+                    UPDATE dbo.tbl_variants 
+                    SET archived_at = NULL, 
+                        updated_at = SYSUTCDATETIME()
+                    WHERE product_id = @ProductId AND user_id = @UserId AND archived_at IS NOT NULL";
+
+                using var variantCmd = new SqlCommand(variantSql, conn, transaction);
+                variantCmd.Parameters.AddWithValue("@ProductId", productId);
+                variantCmd.Parameters.AddWithValue("@UserId", userId);
+                await variantCmd.ExecuteNonQueryAsync(ct);
+
+                transaction.Commit();
+                return true;
+            }
+            catch
+            {
+                transaction.Rollback();
+                return false;
+            }
         }
 
-        public async Task<ProductDetailsModel?> GetArchivedProductDetailsAsync(int productId, CancellationToken ct = default)
+        public async Task<ProductDetailsModel?> GetArchivedProductDetailsAsync(int productId, int userId, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -384,6 +451,7 @@ namespace IT13_Final.Services.Data
                 WHERE p.id = @ProductId AND p.archived_at IS NOT NULL";
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             cmd.Parameters.AddWithValue("@ProductId", productId);
 
             using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -411,7 +479,7 @@ namespace IT13_Final.Services.Data
             return null;
         }
 
-        public async Task<List<CategoryOption>> GetActiveCategoriesAsync(CancellationToken ct = default)
+        public async Task<List<CategoryOption>> GetActiveCategoriesAsync(int userId, CancellationToken ct = default)
         {
             var categories = new List<CategoryOption>();
             using var conn = new SqlConnection(_connectionString);
@@ -420,10 +488,11 @@ namespace IT13_Final.Services.Data
             var sql = @"
                 SELECT id, name 
                 FROM dbo.tbl_categories 
-                WHERE archived_at IS NULL 
+                WHERE archived_at IS NULL AND user_id = @UserId 
                 ORDER BY name";
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             using var reader = await cmd.ExecuteReaderAsync(ct);
 
             while (await reader.ReadAsync(ct))
@@ -439,4 +508,5 @@ namespace IT13_Final.Services.Data
         }
     }
 }
+
 

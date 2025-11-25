@@ -33,17 +33,17 @@ namespace IT13_Final.Services.Data
 
     public interface IColorService
     {
-        Task<List<ColorModel>> GetColorsAsync(string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
-        Task<int> GetColorsCountAsync(string? searchTerm = null, CancellationToken ct = default);
-        Task<ColorDetailsModel?> GetColorDetailsAsync(int colorId, CancellationToken ct = default);
-        Task<int?> CreateColorAsync(string name, string hexValue, string? description, CancellationToken ct = default);
-        Task<bool> UpdateColorAsync(int colorId, string name, string hexValue, string? description, CancellationToken ct = default);
-        Task<bool> ArchiveColorAsync(int colorId, CancellationToken ct = default);
-        Task<List<ArchivedColorModel>> GetArchivedColorsAsync(string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
-        Task<int> GetArchivedColorsCountAsync(string? searchTerm = null, CancellationToken ct = default);
-        Task<bool> RestoreColorAsync(int colorId, CancellationToken ct = default);
-        Task<ColorDetailsModel?> GetArchivedColorDetailsAsync(int colorId, CancellationToken ct = default);
-        Task<List<ColorOption>> GetActiveColorsAsync(CancellationToken ct = default);
+        Task<List<ColorModel>> GetColorsAsync(int userId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
+        Task<int> GetColorsCountAsync(int userId, string? searchTerm = null, CancellationToken ct = default);
+        Task<ColorDetailsModel?> GetColorDetailsAsync(int colorId, int userId, CancellationToken ct = default);
+        Task<int?> CreateColorAsync(int userId, string name, string hexValue, string? description, CancellationToken ct = default);
+        Task<bool> UpdateColorAsync(int colorId, int userId, string name, string hexValue, string? description, CancellationToken ct = default);
+        Task<bool> ArchiveColorAsync(int colorId, int userId, CancellationToken ct = default);
+        Task<List<ArchivedColorModel>> GetArchivedColorsAsync(int userId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
+        Task<int> GetArchivedColorsCountAsync(int userId, string? searchTerm = null, CancellationToken ct = default);
+        Task<bool> RestoreColorAsync(int colorId, int userId, CancellationToken ct = default);
+        Task<ColorDetailsModel?> GetArchivedColorDetailsAsync(int colorId, int userId, CancellationToken ct = default);
+        Task<List<ColorOption>> GetActiveColorsAsync(int userId, CancellationToken ct = default);
     }
 
     public class ColorOption
@@ -58,7 +58,7 @@ namespace IT13_Final.Services.Data
         private readonly string _connectionString =
             "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
 
-        public async Task<List<ColorModel>> GetColorsAsync(string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
+        public async Task<List<ColorModel>> GetColorsAsync(int userId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
         {
             var colors = new List<ColorModel>();
             var offset = (page - 1) * pageSize;
@@ -69,12 +69,13 @@ namespace IT13_Final.Services.Data
             var sql = @"
                 SELECT id, name, hex_value, description, created_at
                 FROM dbo.tbl_colors
-                WHERE archived_at IS NULL
+                WHERE archived_at IS NULL AND user_id = @UserId
                 " + (string.IsNullOrWhiteSpace(searchTerm) ? "" : "AND (name LIKE @SearchTerm OR hex_value LIKE @SearchTerm OR description LIKE @SearchTerm)") + @"
                 ORDER BY created_at DESC
                 OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
@@ -98,7 +99,7 @@ namespace IT13_Final.Services.Data
             return colors;
         }
 
-        public async Task<int> GetColorsCountAsync(string? searchTerm = null, CancellationToken ct = default)
+        public async Task<int> GetColorsCountAsync(int userId, string? searchTerm = null, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -106,10 +107,11 @@ namespace IT13_Final.Services.Data
             var sql = @"
                 SELECT COUNT(*)
                 FROM dbo.tbl_colors
-                WHERE archived_at IS NULL
+                WHERE archived_at IS NULL AND user_id = @UserId
                 " + (string.IsNullOrWhiteSpace(searchTerm) ? "" : "AND (name LIKE @SearchTerm OR hex_value LIKE @SearchTerm OR description LIKE @SearchTerm)");
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
@@ -119,7 +121,7 @@ namespace IT13_Final.Services.Data
             return count != null ? Convert.ToInt32(count) : 0;
         }
 
-        public async Task<ColorDetailsModel?> GetColorDetailsAsync(int colorId, CancellationToken ct = default)
+        public async Task<ColorDetailsModel?> GetColorDetailsAsync(int colorId, int userId, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -127,10 +129,11 @@ namespace IT13_Final.Services.Data
             var sql = @"
                 SELECT id, name, hex_value, description, created_at
                 FROM dbo.tbl_colors
-                WHERE id = @ColorId AND archived_at IS NULL";
+                WHERE id = @ColorId AND user_id = @UserId AND archived_at IS NULL";
 
             using var cmd = new SqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@ColorId", colorId);
+            cmd.Parameters.AddWithValue("@UserId", userId);
 
             using var reader = await cmd.ExecuteReaderAsync(ct);
             if (await reader.ReadAsync(ct))
@@ -149,17 +152,18 @@ namespace IT13_Final.Services.Data
             return null;
         }
 
-        public async Task<int?> CreateColorAsync(string name, string hexValue, string? description, CancellationToken ct = default)
+        public async Task<int?> CreateColorAsync(int userId, string name, string hexValue, string? description, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
 
             var sql = @"
-                INSERT INTO dbo.tbl_colors (name, hex_value, description, created_at)
-                VALUES (@Name, @HexValue, @Description, SYSUTCDATETIME());
+                INSERT INTO dbo.tbl_colors (user_id, name, hex_value, description, created_at)
+                VALUES (@UserId, @Name, @HexValue, @Description, SYSUTCDATETIME());
                 SELECT CAST(SCOPE_IDENTITY() as int);";
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             cmd.Parameters.AddWithValue("@Name", name);
             cmd.Parameters.AddWithValue("@HexValue", hexValue);
             cmd.Parameters.AddWithValue("@Description", (object?)description ?? DBNull.Value);
@@ -168,21 +172,22 @@ namespace IT13_Final.Services.Data
             return result != null ? Convert.ToInt32(result) : null;
         }
 
-        public async Task<bool> UpdateColorAsync(int colorId, string name, string hexValue, string? description, CancellationToken ct = default)
+        public async Task<bool> UpdateColorAsync(int colorId, int userId, string name, string hexValue, string? description, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
 
             var sql = @"
-                UPDATE dbo.tbl_colors
-                SET name = @Name,
-                    hex_value = @HexValue,
+                UPDATE dbo.tbl_colors 
+                SET name = @Name, 
+                    hex_value = @HexValue, 
                     description = @Description,
                     updated_at = SYSUTCDATETIME()
-                WHERE id = @ColorId AND archived_at IS NULL";
+                WHERE id = @ColorId AND user_id = @UserId AND archived_at IS NULL";
 
             using var cmd = new SqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@ColorId", colorId);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             cmd.Parameters.AddWithValue("@Name", name);
             cmd.Parameters.AddWithValue("@HexValue", hexValue);
             cmd.Parameters.AddWithValue("@Description", (object?)description ?? DBNull.Value);
@@ -191,7 +196,7 @@ namespace IT13_Final.Services.Data
             return rowsAffected > 0;
         }
 
-        public async Task<bool> ArchiveColorAsync(int colorId, CancellationToken ct = default)
+        public async Task<bool> ArchiveColorAsync(int colorId, int userId, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -199,16 +204,17 @@ namespace IT13_Final.Services.Data
             var sql = @"
                 UPDATE dbo.tbl_colors
                 SET archived_at = SYSUTCDATETIME()
-                WHERE id = @ColorId AND archived_at IS NULL";
+                WHERE id = @ColorId AND user_id = @UserId AND archived_at IS NULL";
 
             using var cmd = new SqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@ColorId", colorId);
+            cmd.Parameters.AddWithValue("@UserId", userId);
 
             var rowsAffected = await cmd.ExecuteNonQueryAsync(ct);
             return rowsAffected > 0;
         }
 
-        public async Task<List<ArchivedColorModel>> GetArchivedColorsAsync(string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
+        public async Task<List<ArchivedColorModel>> GetArchivedColorsAsync(int userId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
         {
             var colors = new List<ArchivedColorModel>();
             var offset = (page - 1) * pageSize;
@@ -219,12 +225,13 @@ namespace IT13_Final.Services.Data
             var sql = @"
                 SELECT id, name, hex_value, description, archived_at
                 FROM dbo.tbl_colors
-                WHERE archived_at IS NOT NULL
+                WHERE archived_at IS NOT NULL AND user_id = @UserId
                 " + (string.IsNullOrWhiteSpace(searchTerm) ? "" : "AND (name LIKE @SearchTerm OR hex_value LIKE @SearchTerm OR description LIKE @SearchTerm)") + @"
                 ORDER BY archived_at DESC
                 OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
@@ -248,7 +255,7 @@ namespace IT13_Final.Services.Data
             return colors;
         }
 
-        public async Task<int> GetArchivedColorsCountAsync(string? searchTerm = null, CancellationToken ct = default)
+        public async Task<int> GetArchivedColorsCountAsync(int userId, string? searchTerm = null, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -256,10 +263,11 @@ namespace IT13_Final.Services.Data
             var sql = @"
                 SELECT COUNT(*)
                 FROM dbo.tbl_colors
-                WHERE archived_at IS NOT NULL
+                WHERE archived_at IS NOT NULL AND user_id = @UserId
                 " + (string.IsNullOrWhiteSpace(searchTerm) ? "" : "AND (name LIKE @SearchTerm OR hex_value LIKE @SearchTerm OR description LIKE @SearchTerm)");
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
@@ -269,7 +277,7 @@ namespace IT13_Final.Services.Data
             return count != null ? Convert.ToInt32(count) : 0;
         }
 
-        public async Task<bool> RestoreColorAsync(int colorId, CancellationToken ct = default)
+        public async Task<bool> RestoreColorAsync(int colorId, int userId, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -277,16 +285,17 @@ namespace IT13_Final.Services.Data
             var sql = @"
                 UPDATE dbo.tbl_colors
                 SET archived_at = NULL
-                WHERE id = @ColorId AND archived_at IS NOT NULL";
+                WHERE id = @ColorId AND user_id = @UserId AND archived_at IS NOT NULL";
 
             using var cmd = new SqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@ColorId", colorId);
+            cmd.Parameters.AddWithValue("@UserId", userId);
 
             var rowsAffected = await cmd.ExecuteNonQueryAsync(ct);
             return rowsAffected > 0;
         }
 
-        public async Task<ColorDetailsModel?> GetArchivedColorDetailsAsync(int colorId, CancellationToken ct = default)
+        public async Task<ColorDetailsModel?> GetArchivedColorDetailsAsync(int colorId, int userId, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -294,10 +303,11 @@ namespace IT13_Final.Services.Data
             var sql = @"
                 SELECT id, name, hex_value, description, created_at
                 FROM dbo.tbl_colors
-                WHERE id = @ColorId AND archived_at IS NOT NULL";
+                WHERE id = @ColorId AND user_id = @UserId AND archived_at IS NOT NULL";
 
             using var cmd = new SqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@ColorId", colorId);
+            cmd.Parameters.AddWithValue("@UserId", userId);
 
             using var reader = await cmd.ExecuteReaderAsync(ct);
             if (await reader.ReadAsync(ct))
@@ -316,7 +326,7 @@ namespace IT13_Final.Services.Data
             return null;
         }
 
-        public async Task<List<ColorOption>> GetActiveColorsAsync(CancellationToken ct = default)
+        public async Task<List<ColorOption>> GetActiveColorsAsync(int userId, CancellationToken ct = default)
         {
             var colors = new List<ColorOption>();
             using var conn = new SqlConnection(_connectionString);
@@ -325,10 +335,11 @@ namespace IT13_Final.Services.Data
             var sql = @"
                 SELECT id, name, hex_value 
                 FROM dbo.tbl_colors 
-                WHERE archived_at IS NULL 
+                WHERE archived_at IS NULL AND user_id = @UserId
                 ORDER BY name";
-
+            
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             using var reader = await cmd.ExecuteReaderAsync(ct);
 
             while (await reader.ReadAsync(ct))

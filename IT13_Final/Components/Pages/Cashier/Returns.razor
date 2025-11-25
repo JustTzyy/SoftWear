@@ -1,0 +1,1087 @@
+@page "/cashier/Returns"
+@layout IT13_Final.Components.Layout.Cashier.Cashier
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IT13_Final.Services.Data.IReturnsService ReturnsService
+@inject IT13_Final.Services.Audit.IHistoryService HistoryService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Nav
+@using Microsoft.Data.SqlClient
+@using Microsoft.AspNetCore.Components.Forms
+@implements IDisposable
+
+<h1 class="page-title">Returns</h1>
+
+<div class="activity-log-container">
+    <div class="search-filters-row">
+        <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input type="text" class="search-input" placeholder="@(showPendingReturns ? "Search by return number or sale number..." : "Search by sale number...")" value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        </div>
+        <button class="view-pending-btn @(showPendingReturns ? "active" : "")" @onclick="TogglePendingReturnsView" title="View Pending Returns">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 12l2 2 4-4"></path>
+                <path d="M21 12c-1 0-3-1-3-3s2-3 3-3 3 1 3 3-2 3-3 3"></path>
+                <path d="M3 12c1 0 3-1 3-3s-2-3-3-3-3 1-3 3 2 3 3 3"></path>
+                <path d="M12 3c0 1-1 3-3 3s-3-2-3-3 1-3 3-3 3 2 3 3"></path>
+                <path d="M12 21c0-1-1-3-3-3s-3 2-3 3 1 3 3 3 3-2 3-3"></path>
+            </svg>
+            <span>@(showPendingReturns ? "View Sales" : "View Pending Returns")</span>
+        </button>
+    </div>
+
+    <div class="filters-section">
+        <div class="filter-content">
+            <div class="date-filters">
+                <div class="date-range-dropdown">
+                    <label>Quick Range</label>
+                    <select class="date-range-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+                        <option value="">Custom</option>
+                        <option value="today">Today</option>
+                        <option value="yesterday">Yesterday</option>
+                        <option value="lastweek">Last Week</option>
+                        <option value="thismonth">This Month</option>
+                        <option value="thisyear">This Year</option>
+                    </select>
+                </div>
+                <div class="date-filter">
+                    <label>From</label>
+                    <input type="date" class="date-input" value="@(startDate?.ToString("yyyy-MM-dd"))" max="@(endDate?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd"))" @onchange="HandleFromDateChange" />
+                </div>
+                <div class="date-filter">
+                    <label>To</label>
+                    <input type="date" class="date-input" value="@(endDate?.ToString("yyyy-MM-dd"))" min="@(startDate?.ToString("yyyy-MM-dd"))" max="@DateTime.Today.ToString("yyyy-MM-dd")" @onchange="HandleToDateChange" />
+                </div>
+                <button class="clear-filter-btn" @onclick="ClearDateFilter" title="Clear Date Filter">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                    <span>Clear</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="table-container">
+        @if (showPendingReturns)
+        {
+            <table class="activity-table">
+                <thead>
+                    <tr>
+                        <th>Return Number</th>
+                        <th>Sale Number</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                        <th>Cashier</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (isLoading)
+                    {
+                        <tr>
+                            <td colspan="6" class="loading-cell">Loading pending returns...</td>
+                        </tr>
+                    }
+                    else if (pendingReturns.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="6" class="empty-cell">No pending returns found</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var returnItem in pendingReturns)
+                        {
+                            <tr class="clickable-row" @onclick="() => HandleReturnClick(returnItem.Id)">
+                                <td class="return-number">@returnItem.ReturnNumber</td>
+                                <td class="sale-number">@returnItem.SaleNumber</td>
+                                <td>
+                                    <span class="status-badge status-@returnItem.Status.ToLower()">@returnItem.Status</span>
+                                </td>
+                                <td>
+                                    <div class="timestamp-info">
+                                        <div class="timestamp-date">@returnItem.Timestamps.ToString("MMM dd, yyyy")</div>
+                                        <div class="timestamp-time">@returnItem.Timestamps.ToString("HH:mm:ss")</div>
+                                    </div>
+                                </td>
+                                <td>@returnItem.CashierName</td>
+                                <td class="actions-cell" @onclick:stopPropagation="true">
+                                    @if (returnItem.Status == "Pending" && IsCashier())
+                                    {
+                                        <button class="action-btn cancel-btn" @onclick='() => HandleCancelReturn(returnItem.Id)' title="Cancel Return">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                                <line x1="18" y1="6" x2="6" y2="18" stroke="#F59E0B"></line>
+                                                <line x1="6" y1="6" x2="18" y2="18" stroke="#F59E0B"></line>
+                                            </svg>
+                                        </button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        }
+        else
+        {
+            <table class="activity-table">
+                <thead>
+                    <tr>
+                        <th>Sale Number</th>
+                        <th>Amount</th>
+                        <th>Payment Method</th>
+                        <th>Date</th>
+                        <th>Cashier</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (isLoading)
+                    {
+                        <tr>
+                            <td colspan="6" class="loading-cell">Loading sales...</td>
+                        </tr>
+                    }
+                    else if (sales.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="6" class="empty-cell">No completed sales found</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var sale in sales)
+                        {
+                            <tr class="clickable-row" @onclick="() => HandleSaleClick(sale.Id)">
+                                <td class="sale-number">@sale.SaleNumber</td>
+                                <td>₱@sale.Amount.ToString("N2")</td>
+                                <td>@sale.PaymentMethod</td>
+                                <td>@sale.Timestamps.ToString("MMM dd, yyyy HH:mm")</td>
+                                <td>@sale.CashierName</td>
+                                <td class="actions-cell" @onclick:stopPropagation="true">
+                                    <button class="return-btn" @onclick="() => HandleCreateReturnForSale(sale.Id)" @onclick:stopPropagation="true" title="Create Return">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+                                            <path d="M21 3v5h-5"></path>
+                                            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+                                            <path d="M3 21v-5h5"></path>
+                                        </svg>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                var pageNum = i;
+                @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
+                {
+                    <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 2 || i == currentPage + 2)
+                {
+                    <span class="page-ellipsis">...</span>
+                }
+            }
+
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+<!-- Sale Details Modal -->
+@if (showSaleDetailsModal && selectedSale != null)
+{
+    <div class="modal-overlay" @onclick="CloseSaleDetailsModal">
+        <div class="modal-content" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h3>Sale Details - @selectedSale.SaleNumber</h3>
+                <button class="modal-close" @onclick="CloseSaleDetailsModal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="sale-info">
+                    <div class="info-row">
+                        <span class="info-label">Sale Number:</span>
+                        <span class="info-value">@selectedSale.SaleNumber</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Amount:</span>
+                        <span class="info-value">₱@selectedSale.Amount.ToString("N2")</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Payment Method:</span>
+                        <span class="info-value">@selectedSale.PaymentMethod</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Date:</span>
+                        <span class="info-value">@selectedSale.Timestamps.ToString("MMM dd, yyyy HH:mm")</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Cashier:</span>
+                        <span class="info-value">@selectedSale.CashierName</span>
+                    </div>
+                </div>
+
+                <div class="items-section">
+                    <h4>Items</h4>
+                    @if (saleItems.Count == 0)
+                    {
+                        <div class="empty-items">No items found</div>
+                    }
+                    else
+                    {
+                        <div class="items-list">
+                            @foreach (var item in saleItems)
+                            {
+                                <div class="item-card">
+                                    <div class="item-info">
+                                        <div class="item-name">@item.ProductName - @item.VariantName</div>
+                                        @if (!string.IsNullOrEmpty(item.SizeName))
+                                        {
+                                            <div class="item-attr">Size: @item.SizeName</div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(item.ColorName))
+                                        {
+                                            <div class="item-attr">
+                                                Color: 
+                                                @if (!string.IsNullOrEmpty(item.ColorHexValue))
+                                                {
+                                                    <span class="color-dot-small" style="background-color: @item.ColorHexValue;"></span>
+                                                }
+                                                @item.ColorName
+                                            </div>
+                                        }
+                                        <div class="item-price">₱@item.Price.ToString("N2") × @item.Quantity = ₱@item.Subtotal.ToString("N2")</div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="CloseSaleDetailsModal">Close</button>
+                <button class="btn-primary" @onclick="() => HandleCreateReturnForSale(selectedSale.Id)">
+                    Create Return
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Create Return Modal -->
+@if (showCreateReturnModal && selectedSaleForReturn != null)
+{
+    <div class="modal-overlay" @onclick="CloseCreateReturnModal">
+        <div class="modal-content return-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h3>Create Return - @selectedSaleForReturn.SaleNumber</h3>
+                <button class="modal-close" @onclick="CloseCreateReturnModal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="sale-info">
+                    <div class="info-row">
+                        <span class="info-label">Sale Number:</span>
+                        <span class="info-value">@selectedSaleForReturn.SaleNumber</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Amount:</span>
+                        <span class="info-value">₱@selectedSaleForReturn.Amount.ToString("N2")</span>
+                    </div>
+                </div>
+
+                <div class="return-items-section">
+                    <h4>Select Items to Return</h4>
+                    @if (saleItemsForReturn.Count == 0)
+                    {
+                        <div class="empty-items">Loading items...</div>
+                    }
+                    else
+                    {
+                        <div class="return-items-list">
+                            @foreach (var item in saleItemsForReturn)
+                            {
+                                <div class="return-item-card">
+                                    <div class="return-item-info">
+                                        <div class="return-item-name">@item.ProductName - @item.VariantName</div>
+                                        @if (!string.IsNullOrEmpty(item.SizeName))
+                                        {
+                                            <div class="return-item-attr">Size: @item.SizeName</div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(item.ColorName))
+                                        {
+                                            <div class="return-item-attr">
+                                                Color: 
+                                                @if (!string.IsNullOrEmpty(item.ColorHexValue))
+                                                {
+                                                    <span class="color-dot-small" style="background-color: @item.ColorHexValue;"></span>
+                                                }
+                                                @item.ColorName
+                                            </div>
+                                        }
+                                        <div class="return-item-price">₱@item.Price.ToString("N2") × @item.Quantity = ₱@item.Subtotal.ToString("N2")</div>
+                                    </div>
+                                    <div class="return-item-controls">
+                                        <div class="qty-control">
+                                            <label>Quantity:</label>
+                                            <div class="qty-input-group">
+                                                <button class="qty-btn" @onclick="() => AdjustReturnQuantity(item, -1)">-</button>
+                                                <input type="number" class="qty-input" @bind="item.ReturnQuantity" @bind:event="oninput" min="0" max="@item.Quantity" />
+                                                <button class="qty-btn" @onclick="() => AdjustReturnQuantity(item, 1)">+</button>
+                                            </div>
+                                            <span class="max-qty">Max: @item.Quantity</span>
+                                        </div>
+                                        <div class="condition-control">
+                                            <label>Condition:</label>
+                                            <select class="condition-select" @bind="item.ReturnCondition">
+                                                <option value="New">New</option>
+                                                <option value="Used">Used</option>
+                                                <option value="Damaged">Damaged</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="return-reason-section">
+                    <label>Return Reason <span class="required">*</span></label>
+                    <textarea class="reason-textarea" @bind="returnReason" placeholder="Enter reason for return..." rows="3"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="CloseCreateReturnModal">Cancel</button>
+                <button class="btn-primary" @onclick="ProcessReturn" disabled="@(returnItems.Count == 0 || string.IsNullOrWhiteSpace(returnReason))">
+                    Process Return
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<IT13_Final.Services.Data.SaleModel> sales = new();
+    private List<IT13_Final.Services.Data.ReturnReportModel> pendingReturns = new();
+    private string searchTerm = string.Empty;
+    private bool isLoading = true;
+    private bool showPendingReturns = false;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling(totalCount / (double)pageSize);
+    private System.Threading.Timer? _searchTimer;
+    private DateTime? startDate = null;
+    private DateTime? endDate = null;
+    private string selectedDateRange = string.Empty;
+
+    // Sale Details Modal
+    private bool showSaleDetailsModal = false;
+    private IT13_Final.Services.Data.SaleModel? selectedSale = null;
+    private List<IT13_Final.Services.Data.ReturnSaleItemModel> saleItems = new();
+
+    // Create Return Modal
+    private bool showCreateReturnModal = false;
+    private IT13_Final.Services.Data.SaleModel? selectedSaleForReturn = null;
+    private List<ReturnItemViewModel> saleItemsForReturn = new();
+    private string returnReason = string.Empty;
+
+    private class ReturnItemViewModel
+    {
+        public int SaleItemId { get; set; }
+        public int VariantId { get; set; }
+        public int? SizeId { get; set; }
+        public int? ColorId { get; set; }
+        public string ProductName { get; set; } = string.Empty;
+        public string VariantName { get; set; } = string.Empty;
+        public string? SizeName { get; set; }
+        public string? ColorName { get; set; }
+        public string? ColorHexValue { get; set; }
+        public int Quantity { get; set; }
+        public decimal Price { get; set; }
+        public decimal Subtotal { get; set; }
+        public int ReturnQuantity { get; set; }
+        public string ReturnCondition { get; set; } = "New";
+    }
+
+    private List<IT13_Final.Services.Data.ReturnItemModel> returnItems => saleItemsForReturn
+        .Where(item => item.ReturnQuantity > 0)
+        .Select(item => new IT13_Final.Services.Data.ReturnItemModel
+        {
+            SaleItemId = item.SaleItemId,
+            VariantId = item.VariantId,
+            SizeId = item.SizeId,
+            ColorId = item.ColorId,
+            Quantity = item.ReturnQuantity,
+            Condition = item.ReturnCondition
+        })
+        .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (showPendingReturns)
+        {
+            await LoadPendingReturns();
+        }
+        else
+        {
+            await LoadSales();
+        }
+    }
+
+    private async Task TogglePendingReturnsView()
+    {
+        showPendingReturns = !showPendingReturns;
+        searchTerm = string.Empty;
+        currentPage = 1;
+        startDate = null;
+        endDate = null;
+        selectedDateRange = string.Empty;
+        
+        try
+        {
+            if (AuthState.CurrentUser != null)
+            {
+                await HistoryService.LogAsync(
+                    AuthState.CurrentUser.Id,
+                    "view",
+                    "Returns",
+                    showPendingReturns ? "Switched to pending returns view" : "Switched to sales view"
+                );
+            }
+        }
+        catch { }
+        
+        if (showPendingReturns)
+        {
+            await LoadPendingReturns();
+        }
+        else
+        {
+            await LoadSales();
+        }
+    }
+
+    private async Task LoadPendingReturns()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var cashierUserId = AuthState.CurrentUser?.Id ?? 0;
+            if (cashierUserId > 0)
+            {
+                // Get all returns and filter for pending status
+                var allReturns = await ReturnsService.GetReturnsForReportsAsync(cashierUserId, searchTerm, startDate, endDate, 1, 10000);
+                pendingReturns = allReturns.Where(r => r.Status == "Pending").ToList();
+                
+                // Apply pagination
+                totalCount = pendingReturns.Count;
+                pendingReturns = pendingReturns
+                    .Skip((currentPage - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
+
+                if (currentPage > totalPages && totalPages > 0)
+                {
+                    currentPage = totalPages;
+                    var allReturnsAgain = await ReturnsService.GetReturnsForReportsAsync(cashierUserId, searchTerm, startDate, endDate, 1, 10000);
+                    pendingReturns = allReturnsAgain.Where(r => r.Status == "Pending").ToList()
+                        .Skip((currentPage - 1) * pageSize)
+                        .Take(pageSize)
+                        .ToList();
+                }
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("console.warn", "cashierUserId is 0, cannot load pending returns");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading pending returns: {ex.Message}");
+            pendingReturns = new List<IT13_Final.Services.Data.ReturnReportModel>();
+            totalCount = 0;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadSales()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var cashierUserId = AuthState.CurrentUser?.Id ?? 0;
+            if (cashierUserId > 0)
+            {
+                await JSRuntime.InvokeVoidAsync("console.log", $"Loading sales with cashierUserId: {cashierUserId}, searchTerm: '{searchTerm}', startDate: {startDate}, endDate: {endDate}");
+                totalCount = await ReturnsService.GetSalesCountAsync(cashierUserId, searchTerm, startDate, endDate);
+                sales = await ReturnsService.GetSalesAsync(cashierUserId, searchTerm, startDate, endDate, currentPage, pageSize);
+                await JSRuntime.InvokeVoidAsync("console.log", $"Loaded {sales.Count} sales out of {totalCount} total");
+
+                if (currentPage > totalPages && totalPages > 0)
+                {
+                    currentPage = totalPages;
+                    sales = await ReturnsService.GetSalesAsync(cashierUserId, searchTerm, startDate, endDate, currentPage, pageSize);
+                }
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("console.warn", "cashierUserId is 0, cannot load sales");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading sales: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("console.error", $"Stack trace: {ex.StackTrace}");
+            if (ex.InnerException != null)
+            {
+                await JSRuntime.InvokeVoidAsync("console.error", $"Inner exception: {ex.InnerException.Message}");
+            }
+            sales = new List<IT13_Final.Services.Data.SaleModel>();
+            totalCount = 0;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleFromDateChange(ChangeEventArgs e)
+    {
+        selectedDateRange = string.Empty; // Reset dropdown when manually changing dates
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        {
+            startDate = date.Date;
+            // If toDate is before fromDate, reset toDate
+            if (endDate.HasValue && endDate.Value < startDate.Value)
+            {
+                endDate = null;
+            }
+            
+            // Log filter change
+            try
+            {
+                if (AuthState.CurrentUser != null)
+                {
+                    await HistoryService.LogAsync(
+                        AuthState.CurrentUser.Id,
+                        "filter",
+                        "Returns",
+                        $"Changed from date filter to: {date.Date:MMM dd, yyyy}"
+                    );
+                }
+            }
+            catch { }
+        }
+        else
+        {
+            startDate = null;
+        }
+        await ApplyFilters();
+    }
+
+    private async Task HandleToDateChange(ChangeEventArgs e)
+    {
+        selectedDateRange = string.Empty; // Reset dropdown when manually changing dates
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        {
+            var dateValue = date.Date;
+            // Ensure toDate is not before fromDate
+            if (startDate.HasValue && dateValue < startDate.Value)
+            {
+                // Don't allow toDate to be set before fromDate
+                return;
+            }
+            endDate = dateValue;
+            
+            // Log filter change
+            try
+            {
+                if (AuthState.CurrentUser != null)
+                {
+                    await HistoryService.LogAsync(
+                        AuthState.CurrentUser.Id,
+                        "filter",
+                        "Returns",
+                        $"Changed to date filter to: {dateValue:MMM dd, yyyy}"
+                    );
+                }
+            }
+            catch { }
+        }
+        else
+        {
+            endDate = null;
+        }
+        await ApplyFilters();
+    }
+
+    private async Task HandleDateRangeChange()
+    {
+        var today = DateTime.Today;
+        
+        switch (selectedDateRange)
+        {
+            case "today":
+                startDate = today;
+                endDate = today;
+                break;
+            case "yesterday":
+                startDate = today.AddDays(-1);
+                endDate = today.AddDays(-1);
+                break;
+            case "lastweek":
+                startDate = today.AddDays(-7);
+                endDate = today;
+                break;
+            case "thismonth":
+                startDate = new DateTime(today.Year, today.Month, 1);
+                endDate = today;
+                break;
+            case "thisyear":
+                startDate = new DateTime(today.Year, 1, 1);
+                endDate = today;
+                break;
+            default:
+                // Custom - don't change dates
+                break;
+        }
+        
+        try
+        {
+            if (AuthState.CurrentUser != null && !string.IsNullOrEmpty(selectedDateRange))
+            {
+                await HistoryService.LogAsync(
+                    AuthState.CurrentUser.Id,
+                    "filter",
+                    "Returns",
+                    $"Changed date range filter to: {selectedDateRange}"
+                );
+            }
+        }
+        catch { }
+        
+        await ApplyFilters();
+    }
+
+    private async Task ApplyFilters()
+    {
+        currentPage = 1;
+        if (showPendingReturns)
+        {
+            await LoadPendingReturns();
+        }
+        else
+        {
+            await LoadSales();
+        }
+    }
+
+    private async Task ClearDateFilter()
+    {
+        startDate = null;
+        endDate = null;
+        selectedDateRange = string.Empty;
+        currentPage = 1;
+        
+        try
+        {
+            if (AuthState.CurrentUser != null)
+            {
+                await HistoryService.LogAsync(
+                    AuthState.CurrentUser.Id,
+                    "filter",
+                    "Returns",
+                    "Cleared date filters"
+                );
+            }
+        }
+        catch { }
+        
+        if (showPendingReturns)
+        {
+            await LoadPendingReturns();
+        }
+        else
+        {
+            await LoadSales();
+        }
+    }
+
+    private void HandleSearchInput(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? string.Empty;
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            currentPage = 1;
+            await InvokeAsync(async () =>
+            {
+                try
+                {
+                    if (AuthState.CurrentUser != null && !string.IsNullOrWhiteSpace(searchTerm))
+                    {
+                        await HistoryService.LogAsync(
+                            AuthState.CurrentUser.Id,
+                            "search",
+                            "Returns",
+                            $"Searched returns: {searchTerm}"
+                        );
+                    }
+                }
+                catch { }
+                if (showPendingReturns)
+                {
+                    await LoadPendingReturns();
+                }
+                else
+                {
+                    await LoadSales();
+                }
+            });
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            currentPage = 1;
+            if (showPendingReturns)
+            {
+                await LoadPendingReturns();
+            }
+            else
+            {
+                await LoadSales();
+            }
+        }
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages && page != currentPage)
+        {
+            currentPage = page;
+            if (showPendingReturns)
+            {
+                await LoadPendingReturns();
+            }
+            else
+            {
+                await LoadSales();
+            }
+        }
+    }
+
+    private async Task HandleReturnClick(int returnId)
+    {
+        try
+        {
+            var cashierUserId = AuthState.CurrentUser?.Id ?? 0;
+            if (cashierUserId > 0)
+            {
+                var returnModel = await ReturnsService.GetReturnForReportAsync(returnId, cashierUserId);
+                if (returnModel != null)
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", $"Return Number: {returnModel.ReturnNumber}\nSale Number: {returnModel.SaleNumber}\nStatus: {returnModel.Status}\nReason: {returnModel.Reason ?? "N/A"}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading return details: {ex.Message}");
+        }
+    }
+
+    private bool IsCashier()
+    {
+        return AuthState.CurrentUser?.Role?.ToLowerInvariant() == "cashier";
+    }
+
+    private async Task HandleCancelReturn(int returnId)
+    {
+        try
+        {
+            var cashierUserId = AuthState.CurrentUser?.Id ?? 0;
+            if (cashierUserId == 0)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "User not authenticated. Please log in again.");
+                return;
+            }
+
+            var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to cancel this return?");
+            if (!confirmed)
+            {
+                return;
+            }
+
+            var result = await ReturnsService.UpdateReturnStatusAsync(returnId, "Cancelled", cashierUserId);
+            if (result)
+            {
+                // Log cancel action to history
+                try
+                {
+                    if (AuthState.CurrentUser != null)
+                    {
+                        var returnModel = await ReturnsService.GetReturnForReportAsync(returnId, cashierUserId);
+                        await HistoryService.LogAsync(
+                            AuthState.CurrentUser.Id,
+                            "cancel",
+                            "Returns",
+                            $"Cancelled return: {returnModel?.ReturnNumber ?? returnId.ToString()}"
+                        );
+                    }
+                }
+                catch { }
+
+                await JSRuntime.InvokeVoidAsync("alert", "Return cancelled successfully!");
+                await LoadPendingReturns();
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Failed to cancel return. Please try again.");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error cancelling return: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error cancelling return: {ex.Message}");
+        }
+    }
+
+    private async Task HandleSaleClick(int saleId)
+    {
+        try
+        {
+            var cashierUserId = AuthState.CurrentUser?.Id ?? 0;
+            if (cashierUserId > 0)
+            {
+                selectedSale = await ReturnsService.GetSaleDetailsAsync(saleId, cashierUserId);
+                if (selectedSale != null)
+                {
+                    saleItems = await ReturnsService.GetSaleItemsAsync(saleId);
+                    showSaleDetailsModal = true;
+                    
+                    // Log view action
+                    try
+                    {
+                        if (AuthState.CurrentUser != null)
+                        {
+                            await HistoryService.LogAsync(
+                                AuthState.CurrentUser.Id,
+                                "view",
+                                "Returns",
+                                $"Viewed sale details for return: {selectedSale.SaleNumber}"
+                            );
+                        }
+                    }
+                    catch { }
+                    
+                    StateHasChanged();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading sale details: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("console.error", $"Stack trace: {ex.StackTrace}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to load sale details. Please check the console for details.");
+        }
+    }
+
+    private void CloseSaleDetailsModal()
+    {
+        showSaleDetailsModal = false;
+        selectedSale = null;
+        saleItems.Clear();
+        StateHasChanged();
+    }
+
+    private async Task HandleCreateReturnForSale(int saleId)
+    {
+        try
+        {
+            var cashierUserId = AuthState.CurrentUser?.Id ?? 0;
+            if (cashierUserId == 0)
+            {
+                await JSRuntime.InvokeVoidAsync("console.warn", "cashierUserId is 0, user not authenticated");
+                await JSRuntime.InvokeVoidAsync("alert", "User not authenticated. Please log in again.");
+                return;
+            }
+
+            selectedSaleForReturn = await ReturnsService.GetSaleDetailsAsync(saleId, cashierUserId);
+            if (selectedSaleForReturn == null)
+            {
+                await JSRuntime.InvokeVoidAsync("console.warn", $"Sale {saleId} not found or user doesn't have permission");
+                await JSRuntime.InvokeVoidAsync("alert", "Sale not found or you don't have permission to access it.");
+                return;
+            }
+
+            var items = await ReturnsService.GetSaleItemsAsync(saleId);
+            if (items == null || items.Count == 0)
+            {
+                await JSRuntime.InvokeVoidAsync("console.warn", $"No items found for sale {saleId}");
+                await JSRuntime.InvokeVoidAsync("alert", "No items found for this sale.");
+                return;
+            }
+
+            saleItemsForReturn = items.Select(item => new ReturnItemViewModel
+            {
+                SaleItemId = item.Id,
+                VariantId = item.VariantId,
+                SizeId = item.SizeId,
+                ColorId = item.ColorId,
+                ProductName = item.ProductName ?? string.Empty,
+                VariantName = item.VariantName ?? string.Empty,
+                SizeName = item.SizeName,
+                ColorName = item.ColorName,
+                ColorHexValue = item.ColorHexValue,
+                Quantity = item.Quantity,
+                Price = item.Price,
+                Subtotal = item.Subtotal,
+                ReturnQuantity = 0,
+                ReturnCondition = "New"
+            }).ToList();
+
+            returnReason = string.Empty;
+            showCreateReturnModal = true;
+            showSaleDetailsModal = false;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading sale for return: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("console.error", $"Stack trace: {ex.StackTrace}");
+            if (ex.InnerException != null)
+            {
+                await JSRuntime.InvokeVoidAsync("console.error", $"Inner exception: {ex.InnerException.Message}");
+            }
+            await JSRuntime.InvokeVoidAsync("alert", $"Failed to load sale for return: {ex.Message}\n\nCheck the browser console for more details.");
+        }
+    }
+
+    private void CloseCreateReturnModal()
+    {
+        showCreateReturnModal = false;
+        selectedSaleForReturn = null;
+        saleItemsForReturn.Clear();
+        returnReason = string.Empty;
+        StateHasChanged();
+    }
+
+    private void AdjustReturnQuantity(ReturnItemViewModel item, int change)
+    {
+        var newQty = item.ReturnQuantity + change;
+        if (newQty >= 0 && newQty <= item.Quantity)
+        {
+            item.ReturnQuantity = newQty;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ProcessReturn()
+    {
+        if (returnItems.Count == 0 || string.IsNullOrWhiteSpace(returnReason)) return;
+
+        try
+        {
+            var returnModel = new IT13_Final.Services.Data.CreateReturnModel
+            {
+                SaleId = selectedSaleForReturn!.Id,
+                Items = returnItems,
+                Reason = returnReason.Trim(),
+                CashierUserId = AuthState.CurrentUser?.Id ?? 0
+            };
+
+            var returnResult = await ReturnsService.CreateReturnAsync(returnModel);
+
+            if (returnResult != null && returnResult.ReturnId.HasValue && returnResult.ReturnId.Value > 0)
+            {
+                // Log return creation to history
+                try
+                {
+                    if (AuthState.CurrentUser != null)
+                    {
+                        await HistoryService.LogAsync(
+                            AuthState.CurrentUser.Id,
+                            "create",
+                            "Returns",
+                            $"Created return: {returnResult.ReturnNumber} for sale: {selectedSaleForReturn.SaleNumber} - Reason: {returnReason}"
+                        );
+                    }
+                }
+                catch { }
+
+                await JSRuntime.InvokeVoidAsync("alert", $"Return processed successfully! Return Number: {returnResult.ReturnNumber}");
+                
+                CloseCreateReturnModal();
+                await LoadSales();
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("console.error", "CreateReturnAsync returned null or invalid result");
+                await JSRuntime.InvokeVoidAsync("alert", "Failed to process return. Please check the console for details.");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error processing return: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("console.error", $"Stack trace: {ex.StackTrace}");
+            if (ex.InnerException != null)
+            {
+                await JSRuntime.InvokeVoidAsync("console.error", $"Inner exception: {ex.InnerException.Message}");
+            }
+            await JSRuntime.InvokeVoidAsync("alert", $"Error processing return: {ex.Message}\n\nCheck the browser console for more details.");
+        }
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+    }
+}

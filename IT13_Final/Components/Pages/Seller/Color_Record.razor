@@ -1,6 +1,7 @@
 @page "/seller/Color"
 @layout IT13_Final.Components.Layout.Seller.Seller
 @inject IT13_Final.Services.Data.IColorService ColorService
+@inject IT13_Final.Services.Auth.AuthState AuthState
 @inject IJSRuntime JSRuntime
 @inject NavigationManager Nav
 @implements IDisposable
@@ -94,10 +95,11 @@
                                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                                     </svg>
                                 </button>
-                                <button class="action-btn delete-btn" @onclick="() => HandleDelete(color.Id)" title="Delete">
+                                <button class="action-btn delete-btn" @onclick="() => HandleDelete(color.Id)" title="Archive">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="3 6 5 6 21 6"></polyline>
-                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                        <rect x="3" y="4" width="18" height="4" rx="1"></rect>
+                                        <path d="M5 8h14v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8z"></path>
+                                        <line x1="10" y1="12" x2="14" y2="12"></line>
                                     </svg>
                                 </button>
                             </td>
@@ -337,8 +339,9 @@
 
         try
         {
-            totalCount = await ColorService.GetColorsCountAsync(searchTerm);
-            colors = await ColorService.GetColorsAsync(searchTerm, currentPage, pageSize);
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            totalCount = await ColorService.GetColorsCountAsync(userId, searchTerm);
+            colors = await ColorService.GetColorsAsync(userId, searchTerm, currentPage, pageSize);
         }
         catch (Exception)
         {
@@ -412,7 +415,8 @@
 
         try
         {
-            var newColorId = await ColorService.CreateColorAsync(
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            var newColorId = await ColorService.CreateColorAsync(userId,
                 _addColorModel.Name,
                 _addColorModel.HexValue,
                 string.IsNullOrWhiteSpace(_addColorModel.Description) ? null : _addColorModel.Description
@@ -453,7 +457,8 @@
         
         try
         {
-            var details = await ColorService.GetColorDetailsAsync(colorId);
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            var details = await ColorService.GetColorDetailsAsync(colorId, userId);
             if (details == null) return;
 
             _updateColorModel.Name = details.Name;
@@ -487,8 +492,10 @@
 
         try
         {
+            var userId = AuthState.CurrentUser?.Id ?? 0;
             var success = await ColorService.UpdateColorAsync(
                 _updateColorId.Value,
+                userId,
                 _updateColorModel.Name,
                 _updateColorModel.HexValue,
                 string.IsNullOrWhiteSpace(_updateColorModel.Description) ? null : _updateColorModel.Description
@@ -533,7 +540,8 @@
         
         try
         {
-            var success = await ColorService.ArchiveColorAsync(colorId);
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            var success = await ColorService.ArchiveColorAsync(colorId, userId);
             
             if (success)
             {
@@ -568,7 +576,8 @@
 
         try
         {
-            colorDetails = await ColorService.GetColorDetailsAsync(colorId);
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            colorDetails = await ColorService.GetColorDetailsAsync(colorId, userId);
         }
         catch
         {

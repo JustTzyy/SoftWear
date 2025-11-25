@@ -1,0 +1,640 @@
+@page "/stockclerk/Stock_In"
+@layout IT13_Final.Components.Layout.StockClerk.StockClerk
+@inject IT13_Final.Services.Data.IStockInService StockInService
+@inject IT13_Final.Services.Data.IVariantService VariantService
+@inject IT13_Final.Services.Data.ISupplierService SupplierService
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Nav
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.Data.SqlClient
+@implements IDisposable
+
+<h1 class="page-title">Stock In Records</h1>
+
+@if (showSuccessMessage && !string.IsNullOrEmpty(successMessageText))
+{
+    <div class="success-banner">
+        <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span>@successMessageText</span>
+    </div>
+}
+
+<div class="colors-container">
+    <div class="search-actions-row">
+        <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input type="text" class="search-input" placeholder="Search stock in records" value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        </div>
+
+        <div class="action-buttons">
+            <button class="add-supplier-btn" @onclick="HandleAddStockIn">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="16"></line>
+                    <line x1="8" y1="12" x2="16" y2="12"></line>
+                </svg>
+                <span>Add Stock In</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <div class="table-header">List</div>
+        <table class="suppliers-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Variant</th>
+                    <th>Product</th>
+                    <th>Quantity</th>
+                    <th>Cost Price</th>
+                    <th>Supplier</th>
+                    <th>Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="7" class="loading-cell">Loading...</td>
+                    </tr>
+                }
+                else if (stockIns.Count == 0)
+                {
+                    <tr>
+                        <td colspan="7" class="empty-cell">No stock in records found</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var stockIn in stockIns)
+                    {
+                        <tr class="clickable-row" @onclick="() => HandleRowClick(stockIn.Id)">
+                            <td>@stockIn.Id</td>
+                            <td class="supplier-name">@stockIn.VariantName</td>
+                            <td>@stockIn.ProductName</td>
+                            <td>@stockIn.QuantityAdded</td>
+                            <td>@stockIn.CostPrice.ToString("N2")</td>
+                            <td>@(string.IsNullOrEmpty(stockIn.SupplierName) ? "N/A" : stockIn.SupplierName)</td>
+                            <td>@stockIn.Timestamps.ToString("MMM dd, yyyy HH:mm")</td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                var pageNum = i;
+                @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
+                {
+                    <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 2 || i == currentPage + 2)
+                {
+                    <span class="page-ellipsis">...</span>
+                }
+            }
+
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+@* Add Stock In Modal *@
+@if (showAddStockInModal)
+{
+    <div class="modal-overlay" @onclick="CloseAddStockInModal">
+        <div class="add-supplier-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Add Stock In</h2>
+                <button class="modal-close-btn" @onclick="CloseAddStockInModal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <EditForm EditContext="@_addStockInEditContext" OnValidSubmit="SaveStockInAsync">
+                    <DataAnnotationsValidator />
+                    
+                    <div class="form-grid">
+                        <div class="form-field full-width">
+                            <label class="field-label">Variant <span class="required">*</span></label>
+                            <InputSelect class="form-input" @bind-Value="_addStockInModel.VariantId" @bind-Value:after="OnVariantSelectedAsync">
+                                <option value="0">Select Variant</option>
+                                @foreach (var variant in availableVariants)
+                                {
+                                    <option value="@variant.Id">@variant.ProductName - @variant.Name</option>
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => _addStockInModel.VariantId)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Size <span class="required">*</span></label>
+                            <InputSelect class="form-input" @bind-Value="_addStockInModel.SizeId" disabled="@(selectedVariantDetails == null || selectedVariantDetails.SizeIds.Count == 0)">
+                                <option value="0">Select Size</option>
+                                @if (selectedVariantDetails != null && selectedVariantDetails.SizeIds.Count > 0)
+                                {
+                                    @for (int i = 0; i < selectedVariantDetails.SizeIds.Count; i++)
+                                    {
+                                        <option value="@selectedVariantDetails.SizeIds[i]">@selectedVariantDetails.SizeNames[i]</option>
+                                    }
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => _addStockInModel.SizeId)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Color <span class="required">*</span></label>
+                            <InputSelect class="form-input" @bind-Value="_addStockInModel.ColorId" disabled="@(selectedVariantDetails == null || selectedVariantDetails.ColorIds.Count == 0)">
+                                <option value="0">Select Color</option>
+                                @if (selectedVariantDetails != null && selectedVariantDetails.ColorIds.Count > 0)
+                                {
+                                    @for (int i = 0; i < selectedVariantDetails.ColorIds.Count; i++)
+                                    {
+                                        <option value="@selectedVariantDetails.ColorIds[i]">@selectedVariantDetails.ColorNames[i]</option>
+                                    }
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => _addStockInModel.ColorId)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Quantity <span class="required">*</span></label>
+                            <InputNumber class="form-input" @bind-Value="_addStockInModel.QuantityAdded" @bind-Value:after="OnQuantityChanged" placeholder="Enter quantity" />
+                            <ValidationMessage For="@(() => _addStockInModel.QuantityAdded)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Cost Price <span class="required">*</span></label>
+                            <InputNumber class="form-input" @bind-Value="_addStockInModel.CostPrice" placeholder="Auto-calculated" step="0.01" readonly />
+                            <ValidationMessage For="@(() => _addStockInModel.CostPrice)" />
+                            @if (selectedVariantDetails != null)
+                            {
+                                <small class="field-hint">Price per unit: @selectedVariantDetails.Price.ToString("N2")</small>
+                            }
+                        </div>
+                        <div class="form-field full-width">
+                            <label class="field-label">Supplier (Optional)</label>
+                            <InputSelect class="form-input" @bind-Value="_addStockInModel.SupplierId">
+                                <option value="">Select Supplier (Optional)</option>
+                                @foreach (var supplier in availableSuppliers)
+                                {
+                                    <option value="@supplier.Id">@supplier.CompanyName</option>
+                                }
+                            </InputSelect>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-btn" @onclick="CloseAddStockInModal">Cancel</button>
+                        <button type="submit" class="save-supplier-btn">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                <polyline points="7 3 7 8 15 8"></polyline>
+                            </svg>
+                            <span>Save Stock In</span>
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@* Stock In Details Modal *@
+@if (showStockInDetails && stockInDetails != null)
+{
+    <div class="modal-overlay" @onclick="CloseStockInDetails">
+        <div class="modal-container" @onclick:stopPropagation>
+            <div class="modal-header">
+                <div class="modal-title">
+                    <svg class="modal-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                    </svg>
+                    <span>Stock In Details</span>
+                </div>
+                <button class="modal-close" @onclick="CloseStockInDetails" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                    <span class="modal-close-text">Close</span>
+                </button>
+            </div>
+
+            <div class="modal-content">
+                <div class="details-list">
+                    <div class="detail-item">
+                        <span class="detail-label">ID:</span>
+                        <span class="detail-value">@stockInDetails.Id</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">PRODUCT:</span>
+                        <span class="detail-value">@stockInDetails.ProductName</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">VARIANT:</span>
+                        <span class="detail-value">@stockInDetails.VariantName</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">SIZE:</span>
+                        <span class="detail-value">@(string.IsNullOrEmpty(stockInDetails.SizeName) ? "N/A" : stockInDetails.SizeName)</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">COLOR:</span>
+                        <span class="detail-value">
+                            @if (!string.IsNullOrEmpty(stockInDetails.ColorName))
+                            {
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    @if (!string.IsNullOrEmpty(stockInDetails.ColorHexValue))
+                                    {
+                                        <span style="display: inline-block; width: 20px; height: 20px; border-radius: 4px; border: 1px solid #ddd; background-color: @stockInDetails.ColorHexValue;"></span>
+                                    }
+                                    <span>@stockInDetails.ColorName</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <span>N/A</span>
+                            }
+                        </span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">QUANTITY ADDED:</span>
+                        <span class="detail-value">@stockInDetails.QuantityAdded</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">COST PRICE:</span>
+                        <span class="detail-value">@stockInDetails.CostPrice.ToString("N2")</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">SUPPLIER:</span>
+                        <span class="detail-value">@(string.IsNullOrEmpty(stockInDetails.SupplierName) ? "N/A" : stockInDetails.SupplierName)</span>
+                    </div>
+                    @if (!string.IsNullOrEmpty(stockInDetails.SupplierContactPerson))
+                    {
+                        <div class="detail-item">
+                            <span class="detail-label">SUPPLIER CONTACT:</span>
+                            <span class="detail-value">@stockInDetails.SupplierContactPerson</span>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(stockInDetails.SupplierEmail))
+                    {
+                        <div class="detail-item">
+                            <span class="detail-label">SUPPLIER EMAIL:</span>
+                            <span class="detail-value">@stockInDetails.SupplierEmail</span>
+                        </div>
+                    }
+                    <div class="detail-item">
+                        <span class="detail-label">RECORDED BY:</span>
+                        <span class="detail-value">@(string.IsNullOrEmpty(stockInDetails.UserName) ? "N/A" : stockInDetails.UserName)</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">DATE & TIME:</span>
+                        <span class="detail-value">@stockInDetails.Timestamps.ToString("MMMM dd, yyyy 'at' HH:mm")</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = false;
+    private string searchTerm = string.Empty;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling(totalCount / (double)pageSize);
+    private List<IT13_Final.Services.Data.StockInModel> stockIns = new();
+    private bool showSuccessMessage = false;
+    private string successMessageText = string.Empty;
+    private int sellerUserId = 0;
+
+    private bool showStockInDetails = false;
+    private IT13_Final.Services.Data.StockInDetailsModel? stockInDetails = null;
+
+    private bool showAddStockInModal = false;
+    private AddStockInModel _addStockInModel = new();
+    private EditContext? _addStockInEditContext;
+    private List<IT13_Final.Services.Data.VariantModel> availableVariants = new();
+    private List<IT13_Final.Services.Data.SupplierModel> availableSuppliers = new();
+    private IT13_Final.Services.Data.VariantDetailsModel? selectedVariantDetails = null;
+
+    public class AddStockInModel
+    {
+        [Required(ErrorMessage = "Variant is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Please select a variant")]
+        public int VariantId { get; set; }
+
+        [Required(ErrorMessage = "Size is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Please select a size")]
+        public int SizeId { get; set; }
+
+        [Required(ErrorMessage = "Color is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Please select a color")]
+        public int ColorId { get; set; }
+
+        [Required(ErrorMessage = "Quantity is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Quantity must be greater than 0")]
+        public int QuantityAdded { get; set; }
+
+        [Required(ErrorMessage = "Cost price is required")]
+        [Range(0.01, double.MaxValue, ErrorMessage = "Cost price must be greater than 0")]
+        public decimal CostPrice { get; set; } = 0;
+
+        public int? SupplierId { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _addStockInEditContext = new EditContext(_addStockInModel);
+        await LoadSellerUserId();
+        if (sellerUserId > 0)
+        {
+            await LoadVariantsAsync();
+            await LoadSuppliersAsync();
+            await LoadStockInsAsync();
+        }
+    }
+
+    private async Task LoadSellerUserId()
+    {
+        if (AuthState.CurrentUser != null)
+        {
+            try
+            {
+                const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+                using var conn = new SqlConnection(connectionString);
+                await conn.OpenAsync();
+
+                var sql = "SELECT user_id FROM dbo.tbl_users WHERE id = @UserId AND archived_at IS NULL";
+                using var cmd = new SqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@UserId", AuthState.CurrentUser.Id);
+
+                var result = await cmd.ExecuteScalarAsync();
+                if (result != null && result != DBNull.Value)
+                {
+                    sellerUserId = Convert.ToInt32(result);
+                }
+            }
+            catch
+            {
+                sellerUserId = 0;
+            }
+        }
+    }
+
+    private async Task LoadVariantsAsync()
+    {
+        try
+        {
+            if (sellerUserId > 0)
+            {
+                // Get all variants (no pagination for dropdown)
+                availableVariants = await VariantService.GetVariantsAsync(sellerUserId, null, 1, 1000);
+            }
+        }
+        catch (Exception)
+        {
+            availableVariants = new List<IT13_Final.Services.Data.VariantModel>();
+        }
+    }
+
+    private async Task LoadSuppliersAsync()
+    {
+        try
+        {
+            if (sellerUserId > 0)
+            {
+                availableSuppliers = await SupplierService.GetSuppliersAsync(sellerUserId, null, 1, 1000);
+            }
+        }
+        catch (Exception)
+        {
+            availableSuppliers = new List<IT13_Final.Services.Data.SupplierModel>();
+        }
+    }
+
+    private async Task LoadStockInsAsync()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            if (sellerUserId > 0)
+            {
+                totalCount = await StockInService.GetStockInsCountAsync(sellerUserId, searchTerm);
+                stockIns = await StockInService.GetStockInsAsync(sellerUserId, searchTerm, currentPage, pageSize);
+            }
+        }
+        catch (Exception)
+        {
+            stockIns = new List<IT13_Final.Services.Data.StockInModel>();
+            totalCount = 0;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private System.Threading.Timer? _searchTimer;
+    private void HandleSearchInput(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? string.Empty;
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            currentPage = 1;
+            await InvokeAsync(async () => await LoadStockInsAsync());
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _searchTimer?.Dispose();
+            currentPage = 1;
+            await LoadStockInsAsync();
+        }
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages && page != currentPage)
+        {
+            currentPage = page;
+            await LoadStockInsAsync();
+        }
+    }
+
+    private async Task HandleAddStockIn()
+    {
+        _addStockInModel = new AddStockInModel();
+        _addStockInEditContext = new EditContext(_addStockInModel);
+        selectedVariantDetails = null;
+        // Reload variants and suppliers to ensure fresh data
+        await LoadVariantsAsync();
+        await LoadSuppliersAsync();
+        showAddStockInModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseAddStockInModal()
+    {
+        showAddStockInModal = false;
+        _addStockInModel = new AddStockInModel();
+        _addStockInEditContext = new EditContext(_addStockInModel);
+        selectedVariantDetails = null;
+    }
+
+    private async Task OnVariantSelectedAsync()
+    {
+        if (_addStockInModel.VariantId > 0 && sellerUserId > 0)
+        {
+            try
+            {
+                selectedVariantDetails = await VariantService.GetVariantDetailsAsync(_addStockInModel.VariantId, sellerUserId);
+                // Reset size and color when variant changes
+                _addStockInModel.SizeId = 0;
+                _addStockInModel.ColorId = 0;
+                // Recalculate cost price when variant changes
+                CalculateCostPrice();
+            }
+            catch (Exception ex)
+            {
+                selectedVariantDetails = null;
+                await JSRuntime.InvokeVoidAsync("console.error", $"Error loading variant details: {ex.Message}");
+            }
+        }
+        else
+        {
+            selectedVariantDetails = null;
+            _addStockInModel.SizeId = 0;
+            _addStockInModel.ColorId = 0;
+            _addStockInModel.CostPrice = 0;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnQuantityChanged()
+    {
+        CalculateCostPrice();
+        StateHasChanged();
+    }
+
+    private void CalculateCostPrice()
+    {
+        if (selectedVariantDetails != null && _addStockInModel.QuantityAdded > 0 && selectedVariantDetails.Price > 0)
+        {
+            _addStockInModel.CostPrice = selectedVariantDetails.Price * _addStockInModel.QuantityAdded;
+        }
+        else
+        {
+            _addStockInModel.CostPrice = 0;
+        }
+    }
+
+    private async Task SaveStockInAsync()
+    {
+        try
+        {
+            if (sellerUserId == 0)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Unable to determine seller user ID. Please refresh the page.");
+                return;
+            }
+
+            var result = await StockInService.CreateStockInAsync(
+                sellerUserId,
+                _addStockInModel.VariantId,
+                _addStockInModel.SizeId,
+                _addStockInModel.ColorId,
+                _addStockInModel.QuantityAdded,
+                _addStockInModel.CostPrice,
+                _addStockInModel.SupplierId
+            );
+
+            if (result.HasValue)
+            {
+                successMessageText = "Stock in record created successfully!";
+                showSuccessMessage = true;
+                CloseAddStockInModal();
+                await LoadStockInsAsync();
+                
+                // Hide success message after 3 seconds
+                await Task.Delay(3000);
+                showSuccessMessage = false;
+                StateHasChanged();
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Failed to create stock in record. Please try again.");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error creating stock in record: {ex.Message}");
+        }
+    }
+
+    private async Task HandleRowClick(int stockInId)
+    {
+        try
+        {
+            if (sellerUserId > 0)
+            {
+                stockInDetails = await StockInService.GetStockInDetailsAsync(stockInId, sellerUserId);
+                if (stockInDetails != null)
+                {
+                    showStockInDetails = true;
+                    StateHasChanged();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading stock in details: {ex.Message}");
+        }
+    }
+
+    private void CloseStockInDetails()
+    {
+        showStockInDetails = false;
+        stockInDetails = null;
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+    }
+}
+

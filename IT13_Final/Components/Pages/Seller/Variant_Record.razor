@@ -3,6 +3,7 @@
 @inject IT13_Final.Services.Data.IVariantService VariantService
 @inject IT13_Final.Services.Data.IColorService ColorService
 @inject IT13_Final.Services.Data.ISizeService SizeService
+@inject IT13_Final.Services.Auth.AuthState AuthState
 @inject IJSRuntime JSRuntime
 @inject NavigationManager Nav
 @implements IDisposable
@@ -93,10 +94,11 @@
                                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                                     </svg>
                                 </button>
-                                <button class="action-btn delete-btn" @onclick="() => HandleDelete(variant.Id)" title="Delete">
+                                <button class="action-btn delete-btn" @onclick="() => HandleDelete(variant.Id)" title="Archive">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="3 6 5 6 21 6"></polyline>
-                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                        <rect x="3" y="4" width="18" height="4" rx="1"></rect>
+                                        <path d="M5 8h14v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8z"></path>
+                                        <line x1="10" y1="12" x2="14" y2="12"></line>
                                     </svg>
                                 </button>
                             </td>
@@ -296,7 +298,7 @@
                             <ValidationMessage For="@(() => _addVariantModel.Price)" />
                         </div>
                         <div class="form-field">
-                            <label class="field-label">Cost Price (Auto-calculated: 50% of Price)</label>
+                            <label class="field-label">Cost Price</label>
                             <InputNumber class="form-input" @bind-Value="_addVariantModel.CostPrice" placeholder="0.00" step="0.01" readonly />
                         </div>
                         <div class="form-field full-width">
@@ -411,7 +413,7 @@
                             <ValidationMessage For="@(() => _updateVariantModel.Price)" />
                         </div>
                         <div class="form-field">
-                            <label class="field-label">Cost Price (Auto-calculated: 50% of Price)</label>
+                            <label class="field-label">Cost Price (Auto-calculated: Price + 50%)</label>
                             <InputNumber class="form-input" @bind-Value="_updateVariantModel.CostPrice" placeholder="0.00" step="0.01" readonly />
                         </div>
                         <div class="form-field full-width">
@@ -513,7 +515,8 @@
     {
         try
         {
-            products = await VariantService.GetActiveProductsAsync();
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            products = await VariantService.GetActiveProductsAsync(userId);
         }
         catch (Exception)
         {
@@ -525,7 +528,8 @@
     {
         try
         {
-            activeSizes = await SizeService.GetActiveSizesAsync();
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            activeSizes = await SizeService.GetActiveSizesAsync(userId);
         }
         catch (Exception)
         {
@@ -537,7 +541,8 @@
     {
         try
         {
-            activeColors = await ColorService.GetActiveColorsAsync();
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            activeColors = await ColorService.GetActiveColorsAsync(userId);
         }
         catch (Exception)
         {
@@ -552,8 +557,9 @@
 
         try
         {
-            totalCount = await VariantService.GetVariantsCountAsync(searchTerm);
-            Variants = await VariantService.GetVariantsAsync(searchTerm, currentPage, pageSize);
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            totalCount = await VariantService.GetVariantsCountAsync(userId, searchTerm);
+            Variants = await VariantService.GetVariantsAsync(userId, searchTerm, currentPage, pageSize);
         }
         catch (Exception)
         {
@@ -635,7 +641,7 @@
     {
         if (_addVariantModel.Price > 0)
         {
-            _addVariantModel.CostPrice = _addVariantModel.Price * 0.5m;
+            _addVariantModel.CostPrice = _addVariantModel.Price * 1.5m;
             StateHasChanged();
         }
     }
@@ -644,7 +650,7 @@
     {
         if (_updateVariantModel.Price > 0)
         {
-            _updateVariantModel.CostPrice = _updateVariantModel.Price * 0.5m;
+            _updateVariantModel.CostPrice = _updateVariantModel.Price * 1.5m;
             StateHasChanged();
         }
     }
@@ -684,7 +690,9 @@
 
         try
         {
+            var userId = AuthState.CurrentUser?.Id ?? 0;
             var result = await VariantService.CreateVariantAsync(
+                userId,
                 _addVariantModel.Name,
                 _addVariantModel.Price,
                 _addVariantModel.CostPrice,
@@ -721,14 +729,15 @@
     {
         try
         {
-            var variantToUpdate = await VariantService.GetVariantDetailsAsync(variantId);
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            var variantToUpdate = await VariantService.GetVariantDetailsAsync(variantId, userId);
             if (variantToUpdate != null)
             {
                 _updateVariantModel = new UpdateVariantModel
                 {
                     Name = variantToUpdate.Name,
                     Price = variantToUpdate.Price,
-                    CostPrice = variantToUpdate.CostPrice ?? (variantToUpdate.Price * 0.5m),
+                    CostPrice = variantToUpdate.CostPrice ?? (variantToUpdate.Price * 1.5m),
                     ProductId = variantToUpdate.ProductId
                 };
                 _updateVariantEditContext = new EditContext(_updateVariantModel);
@@ -779,8 +788,10 @@
 
         try
         {
+            var userId = AuthState.CurrentUser?.Id ?? 0;
             var success = await VariantService.UpdateVariantAsync(
                 _updateVariantId,
+                userId,
                 _updateVariantModel.Name,
                 _updateVariantModel.Price,
                 _updateVariantModel.CostPrice,
@@ -820,7 +831,8 @@
         {
             try
             {
-                var success = await VariantService.ArchiveVariantAsync(variantId);
+                var userId = AuthState.CurrentUser?.Id ?? 0;
+                var success = await VariantService.ArchiveVariantAsync(variantId, userId);
                 if (success)
                 {
                     ShowSuccessMessage("Variant archived successfully!");
@@ -840,7 +852,8 @@
 
     private async Task HandleRowClick(int variantId)
     {
-        variantDetails = await VariantService.GetVariantDetailsAsync(variantId);
+        var userId = AuthState.CurrentUser?.Id ?? 0;
+        variantDetails = await VariantService.GetVariantDetailsAsync(variantId, userId);
         if (variantDetails != null)
         {
             showVariantDetails = true;
@@ -925,4 +938,5 @@
         public decimal? CostPrice { get; set; }
     }
 }
+
 

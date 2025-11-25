@@ -571,6 +571,385 @@ BEGIN
 END
 GO
 
+-- ========================================
+-- Step 14: Add user_id columns to tables
+-- ========================================
+PRINT '';
+PRINT 'Step 14: Adding user_id columns to tables...';
+GO
+
+-- Add user_id to tbl_colors
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tbl_colors') AND name = 'user_id')
+BEGIN
+    ALTER TABLE dbo.tbl_colors ADD user_id INT NULL;
+    CREATE NONCLUSTERED INDEX IX_tbl_colors_user_id ON dbo.tbl_colors(user_id);
+    ALTER TABLE dbo.tbl_colors ADD CONSTRAINT FK_tbl_colors_user FOREIGN KEY (user_id) REFERENCES dbo.tbl_users(id);
+END
+GO
+
+-- Add user_id to tbl_sizes
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tbl_sizes') AND name = 'user_id')
+BEGIN
+    ALTER TABLE dbo.tbl_sizes ADD user_id INT NULL;
+    CREATE NONCLUSTERED INDEX IX_tbl_sizes_user_id ON dbo.tbl_sizes(user_id);
+    ALTER TABLE dbo.tbl_sizes ADD CONSTRAINT FK_tbl_sizes_user FOREIGN KEY (user_id) REFERENCES dbo.tbl_users(id);
+END
+GO
+
+-- Add user_id to tbl_categories
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tbl_categories') AND name = 'user_id')
+BEGIN
+    ALTER TABLE dbo.tbl_categories ADD user_id INT NULL;
+    CREATE NONCLUSTERED INDEX IX_tbl_categories_user_id ON dbo.tbl_categories(user_id);
+    ALTER TABLE dbo.tbl_categories ADD CONSTRAINT FK_tbl_categories_user FOREIGN KEY (user_id) REFERENCES dbo.tbl_users(id);
+END
+GO
+
+-- Add user_id to tbl_products
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tbl_products') AND name = 'user_id')
+BEGIN
+    ALTER TABLE dbo.tbl_products ADD user_id INT NULL;
+    CREATE NONCLUSTERED INDEX IX_tbl_products_user_id ON dbo.tbl_products(user_id);
+    ALTER TABLE dbo.tbl_products ADD CONSTRAINT FK_tbl_products_user FOREIGN KEY (user_id) REFERENCES dbo.tbl_users(id);
+END
+GO
+
+-- Add user_id to tbl_variants
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tbl_variants') AND name = 'user_id')
+BEGIN
+    ALTER TABLE dbo.tbl_variants ADD user_id INT NULL;
+    CREATE NONCLUSTERED INDEX IX_tbl_variants_user_id ON dbo.tbl_variants(user_id);
+    ALTER TABLE dbo.tbl_variants ADD CONSTRAINT FK_tbl_variants_user FOREIGN KEY (user_id) REFERENCES dbo.tbl_users(id);
+END
+GO
+
+-- ========================================
+-- Step 16: Create tbl_suppliers table
+-- ========================================
+PRINT '';
+PRINT 'Step 16: Creating tbl_suppliers table...';
+GO
+
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'dbo.tbl_suppliers') AND type in (N'U'))
+BEGIN
+    CREATE TABLE dbo.tbl_suppliers (
+        id INT IDENTITY(1,1) NOT NULL,
+        company_name NVARCHAR(200) NOT NULL,
+        contact_person NVARCHAR(150) NULL,
+        email NVARCHAR(256) NULL,
+        contact_number NVARCHAR(30) NULL,
+        status NVARCHAR(50) NOT NULL DEFAULT 'Active',
+        archived_at DATETIME2(0) NULL,
+        created_at DATETIME2(0) NOT NULL DEFAULT SYSUTCDATETIME(),
+        updated_at DATETIME2(0) NULL,
+        user_id INT NULL,
+        CONSTRAINT PK_tbl_suppliers PRIMARY KEY CLUSTERED (id ASC)
+    );
+    
+    CREATE NONCLUSTERED INDEX IX_tbl_suppliers_company_name ON dbo.tbl_suppliers(company_name);
+    CREATE NONCLUSTERED INDEX IX_tbl_suppliers_archived_at ON dbo.tbl_suppliers(archived_at) WHERE archived_at IS NULL;
+    
+    IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'dbo.tbl_users') AND type in (N'U'))
+    BEGIN
+        ALTER TABLE dbo.tbl_suppliers
+        ADD CONSTRAINT FK_tbl_suppliers_user 
+        FOREIGN KEY (user_id) 
+        REFERENCES dbo.tbl_users(id);
+    END;
+    
+    IF NOT EXISTS (SELECT * FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.tbl_suppliers') AND name = 'IX_tbl_suppliers_user_id')
+    BEGIN
+        CREATE NONCLUSTERED INDEX IX_tbl_suppliers_user_id ON dbo.tbl_suppliers(user_id);
+    END;
+    
+    PRINT 'Table dbo.tbl_suppliers created successfully.';
+END
+ELSE
+BEGIN
+    PRINT 'Table dbo.tbl_suppliers already exists.';
+END
+GO
+
+-- ========================================
+-- Step 17: Add supplier_id to tbl_addresses
+-- ========================================
+PRINT '';
+PRINT 'Step 17: Adding supplier_id to tbl_addresses...';
+GO
+
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tbl_addresses') AND name = 'supplier_id')
+BEGIN
+    ALTER TABLE dbo.tbl_addresses
+    ADD supplier_id INT NULL;
+    
+    CREATE NONCLUSTERED INDEX IX_tbl_addresses_supplier_id ON dbo.tbl_addresses(supplier_id);
+    
+    IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'dbo.tbl_suppliers') AND type in (N'U'))
+    BEGIN
+        ALTER TABLE dbo.tbl_addresses
+        ADD CONSTRAINT FK_tbl_addresses_supplier FOREIGN KEY (supplier_id) REFERENCES dbo.tbl_suppliers(id);
+    END
+    
+    PRINT 'supplier_id column added to tbl_addresses.';
+END
+ELSE
+BEGIN
+    PRINT 'supplier_id column already exists in tbl_addresses.';
+END
+GO
+
+-- ========================================
+-- Step 18: Create tbl_inventories table
+-- ========================================
+PRINT '';
+PRINT 'Step 18: Creating tbl_inventories table...';
+GO
+
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'dbo.tbl_inventories') AND type in (N'U'))
+BEGIN
+    CREATE TABLE dbo.tbl_inventories (
+        id INT IDENTITY(1,1) NOT NULL,
+        current_stock INT NOT NULL DEFAULT 0,
+        reorder_level INT NOT NULL DEFAULT 0,
+        timestamps DATETIME2(0) NOT NULL DEFAULT SYSUTCDATETIME(),
+        archives DATETIME2(0) NULL,
+        variant_id INT NOT NULL,
+        CONSTRAINT PK_tbl_inventories PRIMARY KEY CLUSTERED (id ASC)
+    );
+    
+    CREATE NONCLUSTERED INDEX IX_tbl_inventories_variant_id ON dbo.tbl_inventories(variant_id);
+    CREATE NONCLUSTERED INDEX IX_tbl_inventories_archives ON dbo.tbl_inventories(archives) WHERE archives IS NULL;
+    
+    IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'dbo.tbl_variants') AND type in (N'U'))
+    BEGIN
+        ALTER TABLE dbo.tbl_inventories
+        ADD CONSTRAINT FK_tbl_inventories_variant 
+        FOREIGN KEY (variant_id) 
+        REFERENCES dbo.tbl_variants(id);
+    END;
+    
+    IF NOT EXISTS (SELECT * FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.tbl_inventories') AND name = 'UQ_tbl_inventories_variant_id')
+    BEGIN
+        CREATE UNIQUE NONCLUSTERED INDEX UQ_tbl_inventories_variant_id ON dbo.tbl_inventories(variant_id) WHERE archives IS NULL;
+    END;
+    
+    PRINT 'Table dbo.tbl_inventories created successfully.';
+END
+ELSE
+BEGIN
+    PRINT 'Table dbo.tbl_inventories already exists.';
+END
+GO
+
+-- ========================================
+-- Step 19: Create tbl_stock_in table
+-- ========================================
+PRINT '';
+PRINT 'Step 19: Creating tbl_stock_in table...';
+GO
+
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'dbo.tbl_stock_in') AND type in (N'U'))
+BEGIN
+    CREATE TABLE dbo.tbl_stock_in (
+        id INT IDENTITY(1,1) NOT NULL,
+        quantity_added INT NOT NULL,
+        cost_price DECIMAL(18,2) NOT NULL,
+        timestamps DATETIME2(0) NOT NULL DEFAULT SYSUTCDATETIME(),
+        archives DATETIME2(0) NULL,
+        user_id INT NOT NULL,
+        variant_id INT NOT NULL,
+        supplier_id INT NULL,
+        CONSTRAINT PK_tbl_stock_in PRIMARY KEY CLUSTERED (id ASC)
+    );
+    
+    CREATE NONCLUSTERED INDEX IX_tbl_stock_in_user_id ON dbo.tbl_stock_in(user_id);
+    CREATE NONCLUSTERED INDEX IX_tbl_stock_in_variant_id ON dbo.tbl_stock_in(variant_id);
+    CREATE NONCLUSTERED INDEX IX_tbl_stock_in_supplier_id ON dbo.tbl_stock_in(supplier_id);
+    CREATE NONCLUSTERED INDEX IX_tbl_stock_in_timestamps ON dbo.tbl_stock_in(timestamps DESC);
+    CREATE NONCLUSTERED INDEX IX_tbl_stock_in_archives ON dbo.tbl_stock_in(archives) WHERE archives IS NULL;
+    
+    IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'dbo.tbl_users') AND type in (N'U'))
+    BEGIN
+        ALTER TABLE dbo.tbl_stock_in
+        ADD CONSTRAINT FK_tbl_stock_in_user 
+        FOREIGN KEY (user_id) 
+        REFERENCES dbo.tbl_users(id);
+    END;
+    
+    IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'dbo.tbl_variants') AND type in (N'U'))
+    BEGIN
+        ALTER TABLE dbo.tbl_stock_in
+        ADD CONSTRAINT FK_tbl_stock_in_variant 
+        FOREIGN KEY (variant_id) 
+        REFERENCES dbo.tbl_variants(id);
+    END;
+    
+    IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'dbo.tbl_suppliers') AND type in (N'U'))
+    BEGIN
+        ALTER TABLE dbo.tbl_stock_in
+        ADD CONSTRAINT FK_tbl_stock_in_supplier 
+        FOREIGN KEY (supplier_id) 
+        REFERENCES dbo.tbl_suppliers(id);
+    END;
+    
+    PRINT 'Table dbo.tbl_stock_in created successfully.';
+END
+ELSE
+BEGIN
+    PRINT 'Table dbo.tbl_stock_in already exists.';
+END
+GO
+
+-- ========================================
+-- Step 20: Create tbl_stock_out table
+-- ========================================
+PRINT '';
+PRINT 'Step 20: Creating tbl_stock_out table...';
+GO
+
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'dbo.tbl_stock_out') AND type in (N'U'))
+BEGIN
+    CREATE TABLE dbo.tbl_stock_out (
+        id INT IDENTITY(1,1) NOT NULL,
+        quantity_removed INT NOT NULL,
+        reason NVARCHAR(500) NULL,
+        timestamps DATETIME2(0) NOT NULL DEFAULT SYSUTCDATETIME(),
+        archives DATETIME2(0) NULL,
+        user_id INT NOT NULL,
+        variant_id INT NOT NULL,
+        CONSTRAINT PK_tbl_stock_out PRIMARY KEY CLUSTERED (id ASC)
+    );
+    
+    CREATE NONCLUSTERED INDEX IX_tbl_stock_out_user_id ON dbo.tbl_stock_out(user_id);
+    CREATE NONCLUSTERED INDEX IX_tbl_stock_out_variant_id ON dbo.tbl_stock_out(variant_id);
+    CREATE NONCLUSTERED INDEX IX_tbl_stock_out_timestamps ON dbo.tbl_stock_out(timestamps DESC);
+    CREATE NONCLUSTERED INDEX IX_tbl_stock_out_archives ON dbo.tbl_stock_out(archives) WHERE archives IS NULL;
+    
+    IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'dbo.tbl_users') AND type in (N'U'))
+    BEGIN
+        ALTER TABLE dbo.tbl_stock_out
+        ADD CONSTRAINT FK_tbl_stock_out_user 
+        FOREIGN KEY (user_id) 
+        REFERENCES dbo.tbl_users(id);
+    END;
+    
+    IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'dbo.tbl_variants') AND type in (N'U'))
+    BEGIN
+        ALTER TABLE dbo.tbl_stock_out
+        ADD CONSTRAINT FK_tbl_stock_out_variant 
+        FOREIGN KEY (variant_id) 
+        REFERENCES dbo.tbl_variants(id);
+    END;
+    
+    PRINT 'Table dbo.tbl_stock_out created successfully.';
+END
+ELSE
+BEGIN
+    PRINT 'Table dbo.tbl_stock_out already exists.';
+END
+GO
+
+-- ========================================
+-- Step 21: Create triggers to update inventory
+-- ========================================
+PRINT '';
+PRINT 'Step 21: Creating triggers to update inventory...';
+GO
+
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+-- Trigger: Update inventory on Stock In
+IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'dbo.TR_tbl_stock_in_UpdateInventory') AND type = 'TR')
+BEGIN
+    DROP TRIGGER dbo.TR_tbl_stock_in_UpdateInventory;
+END
+GO
+
+CREATE TRIGGER TR_tbl_stock_in_UpdateInventory
+ON dbo.tbl_stock_in
+AFTER INSERT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    MERGE dbo.tbl_inventories AS target
+    USING (
+        SELECT variant_id, SUM(quantity_added) as total_quantity
+        FROM inserted
+        WHERE archives IS NULL
+        GROUP BY variant_id
+    ) AS source
+    ON target.variant_id = source.variant_id AND target.archives IS NULL
+    WHEN MATCHED THEN
+        UPDATE SET 
+            current_stock = target.current_stock + source.total_quantity,
+            timestamps = SYSUTCDATETIME()
+    WHEN NOT MATCHED THEN
+        INSERT (variant_id, current_stock, reorder_level, timestamps)
+        VALUES (source.variant_id, source.total_quantity, 0, SYSUTCDATETIME());
+END
+GO
+
+-- Trigger: Update inventory on Stock Out
+IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'dbo.TR_tbl_stock_out_UpdateInventory') AND type = 'TR')
+BEGIN
+    DROP TRIGGER dbo.TR_tbl_stock_out_UpdateInventory;
+END
+GO
+
+CREATE TRIGGER TR_tbl_stock_out_UpdateInventory
+ON dbo.tbl_stock_out
+AFTER INSERT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    UPDATE i
+    SET 
+        current_stock = i.current_stock - so.total_quantity,
+        timestamps = SYSUTCDATETIME()
+    FROM dbo.tbl_inventories i
+    INNER JOIN (
+        SELECT variant_id, SUM(quantity_removed) as total_quantity
+        FROM inserted
+        WHERE archives IS NULL
+        GROUP BY variant_id
+    ) so ON i.variant_id = so.variant_id
+    WHERE i.archives IS NULL;
+END
+GO
+
+PRINT 'Triggers for automatic inventory updates created successfully.';
+GO
+
 PRINT '';
 PRINT '========================================';
 PRINT 'All migrations completed!';

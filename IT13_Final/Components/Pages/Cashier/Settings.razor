@@ -1,0 +1,1323 @@
+@page "/cashier/settings"
+@layout IT13_Final.Components.Layout.Cashier.Cashier
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IT13_Final.Services.Data.IAddressService AddressService
+@inject IT13_Final.Services.Data.IUserService UserService
+@inject IT13_Final.Services.Data.IPhilippineAddressService PhilippineAddressService
+@inject IT13_Final.Services.Audit.IHistoryService HistoryService
+@inject NavigationManager Nav
+@inject IJSRuntime JSRuntime
+@implements IDisposable
+
+<h1 class="settings-title">Settings</h1>
+
+<div class="settings-grid">
+    <aside class="settings-menu">
+        <button class="menu-item @(activeTab == "personal" ? "active" : "")" @onclick='() => SetActiveTab("personal")'>
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+            <span>Personal Information</span>
+        </button>
+        <button class="menu-item @(activeTab == "address" ? "active" : "")" @onclick='() => SetActiveTab("address")'>
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
+            <span>Address</span>
+        </button>
+        <button class="menu-item @(activeTab == "email" ? "active" : "")" @onclick='() => SetActiveTab("email")'>
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                <polyline points="22,6 12,13 2,6"></polyline>
+            </svg>
+            <span>Change Email</span>
+        </button>
+        <button class="menu-item @(activeTab == "password" ? "active" : "")" @onclick='() => SetActiveTab("password")'>
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+            <span>Change Password</span>
+        </button>
+        <button class="menu-item danger @(activeTab == "deactivate" ? "active" : "")" @onclick='() => SetActiveTab("deactivate")'>
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="15" y1="9" x2="9" y2="15"></line>
+                <line x1="9" y1="9" x2="15" y2="15"></line>
+            </svg>
+            <span>Deactivate Account</span>
+        </button>
+    </aside>
+
+    <section class="panel">
+        @if (activeTab == "personal")
+        {
+            <div class="panel-header">
+                <h2 class="panel-title">Personal Information</h2>
+                <p class="panel-subtitle">Update your personal details and preferences</p>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_personalMessage))
+            {
+                <div class="message success">
+                    <svg class="message-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                    <span>@_personalMessage</span>
+                </div>
+            }
+
+            <EditForm Model="_personalModel" OnValidSubmit="SavePersonalAsync">
+                <DataAnnotationsValidator />
+                <div class="form-grid">
+                    <div class="field">
+                        <label class="field-label">First Name</label>
+                        <input id="firstNameInput" class="input" value="@_personalModel.FirstName" @oninput="FilterFirstNameInput" @ref="firstNameRef" />
+                        <ValidationMessage For="@(() => _personalModel.FirstName)" />
+                    </div>
+                    <div class="field">
+                        <label class="field-label">Middle Name</label>
+                        <input id="middleNameInput" class="input" value="@_personalModel.MiddleName" @oninput="FilterMiddleNameInput" @ref="middleNameRef" />
+                    </div>
+                    <div class="field">
+                        <label class="field-label">Last Name</label>
+                        <input id="lastNameInput" class="input" value="@_personalModel.LastName" @oninput="FilterLastNameInput" @ref="lastNameRef" />
+                        <ValidationMessage For="@(() => _personalModel.LastName)" />
+                    </div>
+                    <div class="field">
+                        <label class="field-label">Contact Number</label>
+                        <InputText class="input" @bind-Value="_personalModel.Contact" />
+                        <ValidationMessage For="@(() => _personalModel.Contact)" />
+                    </div>
+                    <div class="field">
+                        <label class="field-label">Birthday</label>
+                        <InputDate TValue="DateOnly?" class="input" @bind-Value="PersonalBirthday" />
+                        <ValidationMessage For="@(() => _personalModel.Birthday)" />
+                    </div>
+                    <div class="field">
+                        <label class="field-label">Age</label>
+                        <InputNumber TValue="int?" class="input" @bind-Value="_personalModel.Age" disabled />
+                        <ValidationMessage For="@(() => _personalModel.Age)" />
+                    </div>
+                    <div class="field">
+                        <label class="field-label">Sex</label>
+                        <select class="input" value="@_personalModel.Sex" @onchange="@((ChangeEventArgs e) => { _personalModel.Sex = e.Value?.ToString() ?? string.Empty; StateHasChanged(); })">
+                            <option value="">Select</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                        </select>
+                        <ValidationMessage For="@(() => _personalModel.Sex)" />
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button class="primary" type="submit">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                            <polyline points="7 3 7 8 15 8"></polyline>
+                        </svg>
+                        <span>Update Personal Information</span>
+                    </button>
+                </div>
+            </EditForm>
+        }
+        else if (activeTab == "address")
+        {
+            <div class="panel-header">
+                <h2 class="panel-title">Address</h2>
+                <p class="panel-subtitle">Manage your address information</p>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_addressMessage))
+            {
+                <div class="message @(_addressSuccess ? "success" : "error")">
+                    @if (_addressSuccess)
+                    {
+                        <svg class="message-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                    }
+                    <span>@_addressMessage</span>
+                </div>
+            }
+
+            <EditForm Model="_addressModel" OnValidSubmit="SaveAddressAsync">
+                <DataAnnotationsValidator />
+                <div class="form-grid">
+                    <div class="field" style="grid-column: 1 / -1;">
+                        <label class="field-label">Street Address</label>
+                        <InputText class="input" @bind-Value="_addressModel.Street" placeholder="e.g., 123 Main St" />
+                        <ValidationMessage For="@(() => _addressModel.Street)" />
+                    </div>
+                    <div class="field">
+                        <label class="field-label">Province</label>
+                        <select class="input" value="@_addressModel.Province" @onchange="OnProvinceChanged">
+                            <option value="">Select Province</option>
+                            @foreach (var province in _provinces)
+                            {
+                                <option value="@province">@province</option>
+                            }
+                        </select>
+                        <ValidationMessage For="@(() => _addressModel.Province)" />
+                    </div>
+                    <div class="field">
+                        <label class="field-label">City</label>
+                        <select class="input" value="@_addressModel.City" @onchange="OnCityChanged" disabled="@(string.IsNullOrEmpty(_addressModel.Province))">
+                            <option value="">Select City</option>
+                            @foreach (var city in _cities)
+                            {
+                                <option value="@city">@city</option>
+                            }
+                        </select>
+                        <ValidationMessage For="@(() => _addressModel.City)" />
+                    </div>
+                    <div class="field">
+                        <label class="field-label">Zip Code</label>
+                        <input class="input" value="@_addressModel.Zip" disabled />
+                        <ValidationMessage For="@(() => _addressModel.Zip)" />
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button class="primary" type="submit">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                            <circle cx="12" cy="10" r="3"></circle>
+                        </svg>
+                        <span>Save Address</span>
+                    </button>
+                </div>
+            </EditForm>
+        }
+        else if (activeTab == "email")
+        {
+            <div class="panel-header">
+                <h2 class="panel-title">Change Email</h2>
+                <p class="panel-subtitle">Update your email address</p>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_emailMessage))
+            {
+                <div class="message @(_emailSuccess ? "success" : "error")">
+                    @if (_emailSuccess)
+                    {
+                        <svg class="message-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                    }
+                    <span>@_emailMessage</span>
+                </div>
+            }
+
+            <EditForm Model="_emailModel" OnValidSubmit="SaveEmailAsync">
+                <DataAnnotationsValidator />
+                <div class="form-grid">
+                    <div class="field" style="grid-column: 1 / -1;">
+                        <label class="field-label">Current Email</label>
+                        <input class="input" value="@(AuthState.CurrentUser?.Email ?? "")" disabled />
+                    </div>
+                    <div class="field" style="grid-column: 1 / -1;">
+                        <label class="field-label">New Email</label>
+                        <InputText class="input" @bind-Value="_emailModel.NewEmail" placeholder="Enter new email address" />
+                        <ValidationMessage For="@(() => _emailModel.NewEmail)" />
+                    </div>
+                    <div class="field" style="grid-column: 1 / -1;">
+                        <label class="field-label">Confirm New Email</label>
+                        <InputText class="input" @bind-Value="_emailModel.ConfirmEmail" placeholder="Confirm new email address" />
+                        <ValidationMessage For="@(() => _emailModel.ConfirmEmail)" />
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button class="primary" type="submit">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                            <polyline points="22,6 12,13 2,6"></polyline>
+                        </svg>
+                        <span>Update Email</span>
+                    </button>
+                </div>
+            </EditForm>
+        }
+        else if (activeTab == "password")
+        {
+            <div class="panel-header">
+                <h2 class="panel-title">Change Password</h2>
+                <p class="panel-subtitle">Update your account password</p>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_passwordMessage))
+            {
+                <div class="message @(_passwordSuccess ? "success" : "error")">
+                    @if (_passwordSuccess)
+                    {
+                        <svg class="message-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                    }
+                    <span>@_passwordMessage</span>
+                </div>
+            }
+
+            <EditForm Model="_passwordModel" OnValidSubmit="SavePasswordAsync">
+                <DataAnnotationsValidator />
+                <div class="form-grid">
+                    <div class="field" style="grid-column: 1 / -1;">
+                        <label class="field-label">Current Password</label>
+                        <InputText type="password" class="input" @bind-Value="_passwordModel.CurrentPassword" placeholder="Enter current password" />
+                        <ValidationMessage For="@(() => _passwordModel.CurrentPassword)" />
+                    </div>
+                    <div class="field" style="grid-column: 1 / -1;">
+                        <label class="field-label">New Password</label>
+                        <InputText type="password" class="input" @bind-Value="_passwordModel.NewPassword" placeholder="Enter new password" />
+                        <ValidationMessage For="@(() => _passwordModel.NewPassword)" />
+                    </div>
+                    <div class="field" style="grid-column: 1 / -1;">
+                        <label class="field-label">Confirm New Password</label>
+                        <InputText type="password" class="input" @bind-Value="_passwordModel.ConfirmPassword" placeholder="Confirm new password" />
+                        <ValidationMessage For="@(() => _passwordModel.ConfirmPassword)" />
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button class="primary" type="submit">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                        </svg>
+                        <span>Update Password</span>
+                    </button>
+                </div>
+            </EditForm>
+        }
+        else if (activeTab == "deactivate")
+        {
+            <div class="panel-header">
+                <h2 class="panel-title">Deactivate Account</h2>
+                <p class="panel-subtitle">Permanently deactivate your account</p>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_deactivateMessage))
+            {
+                <div class="message error">@_deactivateMessage</div>
+            }
+
+            <div class="warning-box">
+                <svg class="warning-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <div>
+                    <h3>Warning: This action cannot be undone</h3>
+                    <p>Deactivating your account will permanently disable access and may result in data loss. Please confirm this action below.</p>
+                </div>
+            </div>
+
+            <EditForm Model="_deactivateModel" OnValidSubmit="DeactivateAccountAsync">
+                <DataAnnotationsValidator />
+                <div class="form-grid">
+                    <div class="field" style="grid-column: 1 / -1;">
+                        <label class="field-label">Confirm Password</label>
+                        <InputText type="password" class="input" @bind-Value="_deactivateModel.Password" placeholder="Enter your password to confirm" />
+                        <ValidationMessage For="@(() => _deactivateModel.Password)" />
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button class="danger-btn" type="submit">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="15" y1="9" x2="9" y2="15"></line>
+                            <line x1="9" y1="9" x2="15" y2="15"></line>
+                        </svg>
+                        <span>Deactivate Account</span>
+                    </button>
+                </div>
+            </EditForm>
+        }
+    </section>
+</div>
+
+@code {
+    private string activeTab = "personal";
+
+    private readonly PersonalModel _personalModel = new();
+    private readonly IT13_Final.Services.Data.AddressModel _addressModel = new();
+    private readonly EmailModel _emailModel = new();
+    private readonly PasswordModel _passwordModel = new();
+    private readonly DeactivateModel _deactivateModel = new();
+
+    private List<string> _provinces = new();
+    private List<string> _cities = new();
+
+    private ElementReference firstNameRef;
+    private ElementReference middleNameRef;
+    private ElementReference lastNameRef;
+
+    // Property to handle birthday binding with automatic age calculation
+    private DateOnly? PersonalBirthday
+    {
+        get => _personalModel.Birthday;
+        set
+        {
+            _personalModel.Birthday = value;
+            
+            // Auto-calculate age from birthday
+            if (value.HasValue)
+            {
+                var today = DateOnly.FromDateTime(DateTime.Today);
+                var age = today.Year - value.Value.Year;
+                
+                // Adjust if birthday hasn't occurred this year
+                if (value.Value.Month > today.Month || 
+                    (value.Value.Month == today.Month && value.Value.Day > today.Day))
+                {
+                    age--;
+                }
+                
+                _personalModel.Age = age;
+            }
+            else
+            {
+                _personalModel.Age = null;
+            }
+            
+            StateHasChanged();
+        }
+    }
+
+    private string? _emailMessage;
+    private bool _emailSuccess;
+    private string? _passwordMessage;
+    private bool _passwordSuccess;
+    private string? _deactivateMessage;
+    private string? _addressMessage;
+    private bool _addressSuccess;
+    private string? _personalMessage;
+
+    private System.Threading.Timer? _messageTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Check for tab query parameter
+        var uri = Nav.ToAbsoluteUri(Nav.Uri);
+        if (!string.IsNullOrEmpty(uri.Query))
+        {
+            var query = uri.Query.TrimStart('?');
+            var queryParams = query.Split('&', StringSplitOptions.RemoveEmptyEntries)
+                .Select(p => p.Split('=', 2))
+                .Where(p => p.Length == 2)
+                .ToDictionary(p => Uri.UnescapeDataString(p[0]), p => Uri.UnescapeDataString(p[1]), StringComparer.OrdinalIgnoreCase);
+            
+            if (queryParams.TryGetValue("tab", out var tabValue) && !string.IsNullOrEmpty(tabValue))
+            {
+                var tab = tabValue.ToLowerInvariant();
+                if (tab == "password" || tab == "personal" || tab == "address" || tab == "email" || tab == "deactivate")
+                {
+                    activeTab = tab;
+                }
+            }
+        }
+
+        // Load provinces
+        _provinces = PhilippineAddressService.GetProvinces();
+        _provinces.Sort();
+
+        var user = AuthState.CurrentUser;
+        if (user is not null)
+        {
+            try
+            {
+                // Load personal info from database on page initialization
+                var existing = await UserService.GetPersonalInfoAsync(user.Id);
+                if (existing is not null)
+                {
+                    _personalModel.FirstName = existing.FirstName;
+                    _personalModel.MiddleName = existing.MiddleName ?? string.Empty;
+                    _personalModel.LastName = existing.LastName;
+                    _personalModel.Contact = existing.Contact;
+                    _personalModel.Birthday = existing.Birthday;
+                    
+                    // Calculate age from birthday if birthday exists
+                    if (existing.Birthday.HasValue)
+                    {
+                        var today = DateOnly.FromDateTime(DateTime.Today);
+                        var age = today.Year - existing.Birthday.Value.Year;
+                        
+                        // Adjust if birthday hasn't occurred this year
+                        if (existing.Birthday.Value.Month > today.Month || 
+                            (existing.Birthday.Value.Month == today.Month && existing.Birthday.Value.Day > today.Day))
+                        {
+                            age--;
+                        }
+                        
+                        _personalModel.Age = age;
+                    }
+                    else
+                    {
+                        _personalModel.Age = existing.Age;
+                    }
+                    
+                    // Set sex value directly - UserService already converts 0→"Male", 1→"Female"
+                    var sexValue = existing.Sex ?? string.Empty;
+                    _personalModel.Sex = sexValue;
+                    // Force UI update to ensure select shows the correct value
+                    await InvokeAsync(StateHasChanged);
+                }
+                else
+                {
+                    // Fallback to parsing from FullName if database doesn't have data
+                    var nameParts = user.FullName?.Split(' ', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
+                    if (nameParts.Length > 0)
+                        _personalModel.FirstName = nameParts[0];
+                    if (nameParts.Length > 1)
+                        _personalModel.LastName = nameParts[nameParts.Length - 1];
+                }
+            }
+            catch (Exception)
+            {
+                // If loading fails, fallback to parsing from FullName
+                var nameParts = user.FullName?.Split(' ', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
+                if (nameParts.Length > 0)
+                    _personalModel.FirstName = nameParts[0];
+                if (nameParts.Length > 1)
+                    _personalModel.LastName = nameParts[nameParts.Length - 1];
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Initialize JavaScript filtering for name inputs
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("filterNameInput", "firstNameInput");
+                await JSRuntime.InvokeVoidAsync("filterNameInput", "middleNameInput");
+                await JSRuntime.InvokeVoidAsync("filterNameInput", "lastNameInput");
+            }
+            catch (Exception)
+            {
+                // JavaScript interop might not be available yet, ignore
+            }
+        }
+    }
+
+    private async Task SetActiveTabAsync(string tab)
+    {
+        try
+        {
+            // Log tab change
+            try
+            {
+                if (AuthState.CurrentUser != null && activeTab != tab)
+                {
+                    var tabNames = new Dictionary<string, string>
+                    {
+                        { "personal", "Personal Information" },
+                        { "address", "Address" },
+                        { "email", "Change Email" },
+                        { "password", "Change Password" },
+                        { "deactivate", "Deactivate Account" }
+                    };
+                    var tabName = tabNames.ContainsKey(tab) ? tabNames[tab] : tab;
+                    await HistoryService.LogAsync(
+                        AuthState.CurrentUser.Id,
+                        "view",
+                        "Settings",
+                        $"Switched to {tabName} tab"
+                    );
+                }
+            }
+            catch { }
+            
+            activeTab = tab;
+            _emailMessage = null;
+            _passwordMessage = null;
+            _deactivateMessage = null;
+            _addressMessage = null;
+            _personalMessage = null;
+
+            // Load address when switching to address tab
+            if (tab == "address" && AuthState.CurrentUser is not null)
+            {
+                try
+                {
+                    var existing = await AddressService.GetAddressAsync(AuthState.CurrentUser.Id);
+                    if (existing is not null)
+                    {
+                        _addressModel.Id = existing.Id;
+                        _addressModel.Street = existing.Street;
+                        _addressModel.City = existing.City;
+                        _addressModel.Province = existing.Province;
+                        _addressModel.Zip = existing.Zip;
+
+                        // Load cities for the selected province
+                        if (!string.IsNullOrEmpty(_addressModel.Province))
+                        {
+                            _cities = PhilippineAddressService.GetCities(_addressModel.Province);
+                            _cities.Sort();
+                        }
+                        else
+                        {
+                            _cities = new List<string>();
+                        }
+                    }
+                    else
+                    {
+                        _addressModel.Id = 0;
+                        _addressModel.Street = string.Empty;
+                        _addressModel.City = string.Empty;
+                        _addressModel.Province = string.Empty;
+                        _addressModel.Zip = string.Empty;
+                        _cities = new List<string>();
+                    }
+                }
+                catch (Exception)
+                {
+                    // If address loading fails, just clear the form
+                    _addressModel.Id = 0;
+                    _addressModel.Street = string.Empty;
+                    _addressModel.City = string.Empty;
+                    _addressModel.Province = string.Empty;
+                    _addressModel.Zip = string.Empty;
+                    _cities = new List<string>();
+                }
+            }
+
+            // Load personal info when switching to personal tab
+            if (tab == "personal" && AuthState.CurrentUser is not null)
+            {
+                try
+                {
+                    var existing = await UserService.GetPersonalInfoAsync(AuthState.CurrentUser.Id);
+                    if (existing is not null)
+                    {
+                        _personalModel.FirstName = existing.FirstName;
+                        _personalModel.MiddleName = existing.MiddleName ?? string.Empty;
+                        _personalModel.LastName = existing.LastName;
+                        _personalModel.Contact = existing.Contact;
+                        _personalModel.Birthday = existing.Birthday;
+                        
+                        // Calculate age from birthday if birthday exists
+                        if (existing.Birthday.HasValue)
+                        {
+                            var today = DateOnly.FromDateTime(DateTime.Today);
+                            var age = today.Year - existing.Birthday.Value.Year;
+                            
+                            // Adjust if birthday hasn't occurred this year
+                            if (existing.Birthday.Value.Month > today.Month || 
+                                (existing.Birthday.Value.Month == today.Month && existing.Birthday.Value.Day > today.Day))
+                            {
+                                age--;
+                            }
+                            
+                            _personalModel.Age = age;
+                        }
+                        else
+                        {
+                            _personalModel.Age = existing.Age;
+                        }
+                        
+                    // Set sex value directly - UserService already converts 0→"Male", 1→"Female"
+                    var sexValue = existing.Sex ?? string.Empty;
+                    _personalModel.Sex = sexValue;
+                    // Force UI update to ensure select shows the correct value
+                    await InvokeAsync(StateHasChanged);
+                    }
+                }
+                catch (Exception)
+                {
+                    // If loading fails, keep current values
+                }
+            }
+
+            // Clear email form when switching to email tab
+            if (tab == "email")
+            {
+                _emailModel.NewEmail = string.Empty;
+                _emailModel.ConfirmEmail = string.Empty;
+            }
+
+            StateHasChanged();
+        }
+        catch (Exception)
+        {
+            // If any error occurs, just switch the tab anyway
+            activeTab = tab;
+            StateHasChanged();
+        }
+    }
+
+    private void SetActiveTab(string tab)
+    {
+        _ = SetActiveTabAsync(tab);
+    }
+
+    private void FilterFirstNameInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        _personalModel.FirstName = filtered;
+        StateHasChanged();
+    }
+
+    private void FilterMiddleNameInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        _personalModel.MiddleName = filtered;
+        StateHasChanged();
+    }
+
+    private void FilterLastNameInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        _personalModel.LastName = filtered;
+        StateHasChanged();
+    }
+
+    private void ClearMessageAfterDelay(string messageType)
+    {
+        // Clear previous timer
+        _messageTimer?.Dispose();
+
+        // Set new timer to hide message after 5 seconds
+        _messageTimer = new System.Threading.Timer(_ =>
+        {
+            switch (messageType)
+            {
+                case "personal":
+                    _personalMessage = null;
+                    break;
+                case "address":
+                    _addressMessage = null;
+                    break;
+                case "email":
+                    _emailMessage = null;
+                    break;
+                case "password":
+                    _passwordMessage = null;
+                    break;
+                case "deactivate":
+                    _deactivateMessage = null;
+                    break;
+            }
+            InvokeAsync(StateHasChanged);
+        }, null, 5000, Timeout.Infinite);
+    }
+
+
+    private async Task SavePersonalAsync()
+    {
+        // Show confirmation dialog
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to update your personal information?");
+        
+        if (!confirmed)
+        {
+            return; // User cancelled
+        }
+        
+        _personalMessage = null;
+        if (AuthState.CurrentUser is null)
+        {
+            _personalMessage = "User not authenticated.";
+            StateHasChanged();
+            ClearMessageAfterDelay("personal");
+            return;
+        }
+
+        // Validate names don't contain numbers
+        var namePattern = new System.Text.RegularExpressions.Regex(@"^[a-zA-Z\s'.-]+$");
+        if (!namePattern.IsMatch(_personalModel.FirstName))
+        {
+            _personalMessage = "First Name must contain only letters, spaces, hyphens, apostrophes, and periods.";
+            StateHasChanged();
+            ClearMessageAfterDelay("personal");
+            return;
+        }
+        if (!string.IsNullOrWhiteSpace(_personalModel.MiddleName) && !namePattern.IsMatch(_personalModel.MiddleName))
+        {
+            _personalMessage = "Middle Name must contain only letters, spaces, hyphens, apostrophes, and periods.";
+            StateHasChanged();
+            ClearMessageAfterDelay("personal");
+            return;
+        }
+        if (!namePattern.IsMatch(_personalModel.LastName))
+        {
+            _personalMessage = "Last Name must contain only letters, spaces, hyphens, apostrophes, and periods.";
+            StateHasChanged();
+            ClearMessageAfterDelay("personal");
+            return;
+        }
+
+        // Validate Philippine phone number format
+        var phonePattern = new System.Text.RegularExpressions.Regex(@"^(\+63\s?)?9\d{2}[\s-]?\d{3}[\s-]?\d{4}$|^09\d{9}$|^\(?0[2-9]\d\)?[\s-]?\d{3}[\s-]?\d{4}$");
+        if (!phonePattern.IsMatch(_personalModel.Contact))
+        {
+            _personalMessage = "Contact Number must be a valid Philippine phone number format (e.g., 09123456789, +639123456789, (02) 123-4567).";
+            StateHasChanged();
+            ClearMessageAfterDelay("personal");
+            return;
+        }
+
+
+        try
+        {
+            // Recalculate age to ensure it's accurate
+            if (_personalModel.Birthday.HasValue)
+            {
+                var today = DateOnly.FromDateTime(DateTime.Today);
+                var age = today.Year - _personalModel.Birthday.Value.Year;
+                
+                // Adjust if birthday hasn't occurred this year
+                if (_personalModel.Birthday.Value.Month > today.Month || 
+                    (_personalModel.Birthday.Value.Month == today.Month && _personalModel.Birthday.Value.Day > today.Day))
+                {
+                    age--;
+                }
+                
+                _personalModel.Age = age;
+            }
+
+            // Create permission request data
+            var requestData = new IT13_Final.Services.Data.PersonalInfoRequestData
+            {
+                FirstName = _personalModel.FirstName,
+                MiddleName = string.IsNullOrWhiteSpace(_personalModel.MiddleName) ? null : _personalModel.MiddleName,
+                LastName = _personalModel.LastName,
+                Contact = _personalModel.Contact,
+                Birthday = _personalModel.Birthday,
+                Age = _personalModel.Age,
+                Sex = string.IsNullOrWhiteSpace(_personalModel.Sex) ? null : _personalModel.Sex.Trim()
+            };
+
+            // Serialize to JSON
+            var requestDataJson = System.Text.Json.JsonSerializer.Serialize(requestData);
+
+            // Create permission request instead of direct update
+            var success = await UserService.CreatePermissionRequestAsync(
+                AuthState.CurrentUser.Id,
+                "personal_info",
+                requestDataJson
+            );
+
+            if (success)
+            {
+                // Log history
+                try { await HistoryService.LogAsync(AuthState.CurrentUser!.Id, "request", "Settings", "Requested personal information update - pending admin approval"); } catch {}
+                
+                // Reload current data from database to show actual current values (not requested values)
+                var currentInfo = await UserService.GetPersonalInfoAsync(AuthState.CurrentUser.Id);
+                if (currentInfo != null)
+            {
+                    _personalModel.FirstName = currentInfo.FirstName;
+                    _personalModel.MiddleName = currentInfo.MiddleName ?? string.Empty;
+                    _personalModel.LastName = currentInfo.LastName;
+                    _personalModel.Contact = currentInfo.Contact;
+                    _personalModel.Birthday = currentInfo.Birthday;
+                    
+                    // Calculate age from birthday if birthday exists
+                    if (currentInfo.Birthday.HasValue)
+                    {
+                        var today = DateOnly.FromDateTime(DateTime.Today);
+                        var age = today.Year - currentInfo.Birthday.Value.Year;
+                        
+                        // Adjust if birthday hasn't occurred this year
+                        if (currentInfo.Birthday.Value.Month > today.Month || 
+                            (currentInfo.Birthday.Value.Month == today.Month && currentInfo.Birthday.Value.Day > today.Day))
+                        {
+                            age--;
+                        }
+                        
+                        _personalModel.Age = age;
+                    }
+                    else
+                    {
+                        _personalModel.Age = currentInfo.Age;
+                    }
+                    
+                    _personalModel.Sex = currentInfo.Sex ?? string.Empty;
+                }
+            
+                _personalMessage = "Permission request submitted successfully! Your changes will be reviewed by an administrator.";
+            StateHasChanged();
+            ClearMessageAfterDelay("personal");
+            }
+            else
+            {
+                _personalMessage = "Failed to submit permission request. Please try again.";
+                StateHasChanged();
+                ClearMessageAfterDelay("personal");
+            }
+        }
+        catch (Exception)
+        {
+            _personalMessage = "Failed to submit permission request. Please try again.";
+            StateHasChanged();
+            ClearMessageAfterDelay("personal");
+        }
+    }
+
+    private async Task SaveAddressAsync()
+    {
+        // Show confirmation dialog
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to update your address?");
+        
+        if (!confirmed)
+        {
+            return; // User cancelled
+        }
+        
+        _addressMessage = null;
+        if (AuthState.CurrentUser is null)
+        {
+            _addressMessage = "User not authenticated.";
+            _addressSuccess = false;
+            StateHasChanged();
+            ClearMessageAfterDelay("address");
+            return;
+        }
+
+        try
+        {
+            // Create permission request data
+            var requestData = new IT13_Final.Services.Data.AddressRequestData
+            {
+                Street = _addressModel.Street,
+                City = _addressModel.City,
+                Province = _addressModel.Province,
+                Zip = _addressModel.Zip
+            };
+
+            // Serialize to JSON
+            var requestDataJson = System.Text.Json.JsonSerializer.Serialize(requestData);
+
+            // Create permission request instead of direct update
+            var success = await UserService.CreatePermissionRequestAsync(
+                AuthState.CurrentUser.Id,
+                "address",
+                requestDataJson
+            );
+
+            if (success)
+            {
+            // Log history
+                try { await HistoryService.LogAsync(AuthState.CurrentUser.Id, "request", "Settings", "Requested address update - pending admin approval"); } catch {}
+                
+                // Reload current data from database to show actual current values (not requested values)
+                var currentAddress = await AddressService.GetAddressAsync(AuthState.CurrentUser.Id);
+                if (currentAddress != null)
+                {
+                    _addressModel.Id = currentAddress.Id;
+                    _addressModel.Street = currentAddress.Street;
+                    _addressModel.City = currentAddress.City;
+                    _addressModel.Province = currentAddress.Province;
+                    _addressModel.Zip = currentAddress.Zip;
+                    
+                    // Reload cities for the selected province
+                    if (!string.IsNullOrEmpty(_addressModel.Province))
+                    {
+                        _cities = PhilippineAddressService.GetCities(_addressModel.Province);
+                        _cities.Sort();
+                    }
+                    else
+                    {
+                        _cities = new List<string>();
+                    }
+                }
+                else
+                {
+                    // Clear form if no address exists
+                    _addressModel.Id = 0;
+                    _addressModel.Street = string.Empty;
+                    _addressModel.City = string.Empty;
+                    _addressModel.Province = string.Empty;
+                    _addressModel.Zip = string.Empty;
+                    _cities = new List<string>();
+                }
+                
+                _addressMessage = "Permission request submitted successfully! Your changes will be reviewed by an administrator.";
+            _addressSuccess = true;
+            StateHasChanged();
+            ClearMessageAfterDelay("address");
+            }
+            else
+            {
+                _addressMessage = "Failed to submit permission request. Please try again.";
+                _addressSuccess = false;
+                StateHasChanged();
+                ClearMessageAfterDelay("address");
+            }
+        }
+        catch (Exception)
+        {
+            _addressMessage = "Failed to submit permission request. Please try again.";
+            _addressSuccess = false;
+            StateHasChanged();
+            ClearMessageAfterDelay("address");
+        }
+    }
+
+    private async Task SaveEmailAsync()
+    {
+        // Show confirmation dialog
+        var emailText = !string.IsNullOrWhiteSpace(_emailModel.NewEmail) ? _emailModel.NewEmail : "this new email";
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to change your email to {emailText}?");
+        
+        if (!confirmed)
+        {
+            return; // User cancelled
+        }
+        
+        _emailMessage = null;
+        if (AuthState.CurrentUser is null)
+        {
+            _emailMessage = "User not authenticated.";
+            _emailSuccess = false;
+            StateHasChanged();
+            ClearMessageAfterDelay("email");
+            return;
+        }
+        
+        // Validate that emails match
+        if (_emailModel.NewEmail != _emailModel.ConfirmEmail)
+        {
+            _emailMessage = "Email addresses do not match.";
+            _emailSuccess = false;
+            StateHasChanged();
+            ClearMessageAfterDelay("email");
+            return;
+        }
+
+        // Check if new email is the same as current email
+        if (string.Equals(_emailModel.NewEmail.Trim(), AuthState.CurrentUser.Email, StringComparison.OrdinalIgnoreCase))
+        {
+            _emailMessage = "New email must be different from your current email.";
+            _emailSuccess = false;
+            StateHasChanged();
+            ClearMessageAfterDelay("email");
+            return;
+        }
+
+        try
+        {
+            // Update email in database
+            var success = await UserService.UpdateEmailAsync(AuthState.CurrentUser.Id, _emailModel.NewEmail);
+            
+            if (!success)
+            {
+                _emailMessage = "Failed to update email. The email may already be in use.";
+                _emailSuccess = false;
+                StateHasChanged();
+                ClearMessageAfterDelay("email");
+                return;
+            }
+
+            // Update AuthState with new email
+            if (AuthState.CurrentUser is not null)
+            {
+                var updatedUser = new IT13_Final.Services.Auth.AuthUser
+                {
+                    Id = AuthState.CurrentUser.Id,
+                    Email = _emailModel.NewEmail.Trim(),
+                    FullName = AuthState.CurrentUser.FullName,
+                    Role = AuthState.CurrentUser.Role
+                };
+                AuthState.SetUser(updatedUser);
+            }
+
+            // Log history
+            try { await HistoryService.LogAsync(AuthState.CurrentUser!.Id, "update", "Settings", "Updated email address"); } catch {}
+
+            // Clear form fields
+            _emailModel.NewEmail = string.Empty;
+            _emailModel.ConfirmEmail = string.Empty;
+
+            _emailMessage = "Email updated successfully!";
+            _emailSuccess = true;
+            StateHasChanged();
+            ClearMessageAfterDelay("email");
+        }
+        catch (Exception ex)
+        {
+            _emailMessage = $"Failed to update email: {ex.Message}";
+            _emailSuccess = false;
+            StateHasChanged();
+            ClearMessageAfterDelay("email");
+        }
+    }
+
+    private async Task SavePasswordAsync()
+    {
+        // Show confirmation dialog
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to change your password?");
+        
+        if (!confirmed)
+        {
+            return; // User cancelled
+        }
+        
+        _passwordMessage = null;
+        if (AuthState.CurrentUser is null)
+        {
+            _passwordMessage = "User not authenticated.";
+            _passwordSuccess = false;
+            StateHasChanged();
+            ClearMessageAfterDelay("password");
+            return;
+        }
+        
+        // Validate that passwords match
+        if (_passwordModel.NewPassword != _passwordModel.ConfirmPassword)
+        {
+            _passwordMessage = "New passwords do not match.";
+            _passwordSuccess = false;
+            StateHasChanged();
+            ClearMessageAfterDelay("password");
+            return;
+        }
+
+        // Validate password requirements
+        if (string.IsNullOrWhiteSpace(_passwordModel.NewPassword))
+        {
+            _passwordMessage = "New password is required.";
+            _passwordSuccess = false;
+            StateHasChanged();
+            ClearMessageAfterDelay("password");
+            return;
+        }
+
+        var password = _passwordModel.NewPassword;
+
+        // Check minimum length
+        if (password.Length < 12)
+        {
+            _passwordMessage = "New password must be at least 12 characters long.";
+            _passwordSuccess = false;
+            StateHasChanged();
+            ClearMessageAfterDelay("password");
+            return;
+        }
+
+        // Count letters, numbers, and special characters
+        int letterCount = password.Count(c => char.IsLetter(c));
+        int numberCount = password.Count(c => char.IsDigit(c));
+        int specialCharCount = password.Count(c => !char.IsLetterOrDigit(c));
+
+        // Validate special character requirement
+        if (specialCharCount < 1)
+        {
+            _passwordMessage = "New password must contain at least 1 special character.";
+            _passwordSuccess = false;
+            StateHasChanged();
+            ClearMessageAfterDelay("password");
+            return;
+        }
+
+        // Validate number count (3-6 numbers)
+        if (numberCount < 3 || numberCount > 6)
+        {
+            _passwordMessage = "New password must contain 3-6 numbers.";
+            _passwordSuccess = false;
+            StateHasChanged();
+            ClearMessageAfterDelay("password");
+            return;
+        }
+
+        // Validate letter count (5-8 letters)
+        if (letterCount < 5 || letterCount > 8)
+        {
+            _passwordMessage = "New password must contain 5-8 letters.";
+            _passwordSuccess = false;
+            StateHasChanged();
+            ClearMessageAfterDelay("password");
+            return;
+        }
+
+        // Check if new password is different from current password
+        if (_passwordModel.CurrentPassword == _passwordModel.NewPassword)
+        {
+            _passwordMessage = "New password must be different from your current password.";
+            _passwordSuccess = false;
+            StateHasChanged();
+            ClearMessageAfterDelay("password");
+            return;
+        }
+
+        try
+        {
+            // Validate current password and update in database
+            var success = await UserService.UpdatePasswordAsync(
+                AuthState.CurrentUser.Id, 
+                _passwordModel.CurrentPassword, 
+                _passwordModel.NewPassword
+            );
+            
+            if (!success)
+            {
+                _passwordMessage = "Failed to update password. Please verify your current password is correct.";
+                _passwordSuccess = false;
+                StateHasChanged();
+                ClearMessageAfterDelay("password");
+                return;
+            }
+
+            // Log history
+            try { await HistoryService.LogAsync(AuthState.CurrentUser.Id, "update", "Settings", "Updated password"); } catch {}
+
+            // Clear form fields
+            _passwordModel.CurrentPassword = string.Empty;
+            _passwordModel.NewPassword = string.Empty;
+            _passwordModel.ConfirmPassword = string.Empty;
+
+            _passwordMessage = "Password updated successfully!";
+            _passwordSuccess = true;
+            StateHasChanged();
+            ClearMessageAfterDelay("password");
+        }
+        catch (Exception ex)
+        {
+            _passwordMessage = $"Failed to update password: {ex.Message}";
+            _passwordSuccess = false;
+            StateHasChanged();
+            ClearMessageAfterDelay("password");
+        }
+    }
+
+
+    private void OnProvinceChanged(ChangeEventArgs e)
+    {
+        _addressModel.Province = e.Value?.ToString() ?? string.Empty;
+        _addressModel.City = string.Empty; // Clear city when province changes
+        _addressModel.Zip = string.Empty; // Clear zip when province changes
+
+        // Load cities for selected province
+        if (!string.IsNullOrEmpty(_addressModel.Province))
+        {
+            _cities = PhilippineAddressService.GetCities(_addressModel.Province);
+            _cities.Sort();
+        }
+        else
+        {
+            _cities = new List<string>();
+        }
+
+        StateHasChanged();
+    }
+
+    private void OnCityChanged(ChangeEventArgs e)
+    {
+        _addressModel.City = e.Value?.ToString() ?? string.Empty;
+
+        // Auto-populate zip code
+        if (!string.IsNullOrEmpty(_addressModel.Province) && !string.IsNullOrEmpty(_addressModel.City))
+        {
+            _addressModel.Zip = PhilippineAddressService.GetZipCode(_addressModel.Province, _addressModel.City);
+        }
+        else
+        {
+            _addressModel.Zip = string.Empty;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task DeactivateAccountAsync()
+    {
+        // Show confirmation dialog with warning
+        var userFullName = AuthState.CurrentUser?.FullName ?? "your account";
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to deactivate {userFullName}? This action cannot be undone.");
+        
+        if (!confirmed)
+        {
+            return; // User cancelled
+        }
+        
+        _deactivateMessage = null;
+        if (AuthState.CurrentUser is null)
+        {
+            _deactivateMessage = "User not authenticated.";
+            StateHasChanged();
+            ClearMessageAfterDelay("deactivate");
+            return;
+        }
+        
+        // TODO: Validate password and deactivate account in database
+        
+        // Log history
+        try { await HistoryService.LogAsync(AuthState.CurrentUser.Id, "deactivate", "Settings", "Account deactivated"); } catch {}
+        
+        AuthState.Logout();
+        Nav.NavigateTo("/");
+    }
+
+    private sealed class PersonalModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "First Name is required")]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^[a-zA-Z\s'.-]+$", ErrorMessage = "First Name must contain only letters, spaces, hyphens, apostrophes, and periods")]
+        public string FirstName { get; set; } = string.Empty;
+        
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^[a-zA-Z\s'.-]*$", ErrorMessage = "Middle Name must contain only letters, spaces, hyphens, apostrophes, and periods")]
+        public string MiddleName { get; set; } = string.Empty;
+        
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Last Name is required")]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^[a-zA-Z\s'.-]+$", ErrorMessage = "Last Name must contain only letters, spaces, hyphens, apostrophes, and periods")]
+        public string LastName { get; set; } = string.Empty;
+        
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Contact Number is required")]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^(\+63\s?)?9\d{2}[\s-]?\d{3}[\s-]?\d{4}$|^09\d{9}$|^\(?0[2-9]\d\)?[\s-]?\d{3}[\s-]?\d{4}$", ErrorMessage = "Contact Number must be a valid Philippine phone number (e.g., 09123456789, +639123456789, (02) 123-4567)")]
+        public string Contact { get; set; } = string.Empty;
+        
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Birthday is required")]
+        public DateOnly? Birthday { get; set; }
+        
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Age is required")]
+        [System.ComponentModel.DataAnnotations.Range(1, 150, ErrorMessage = "Age must be between 1 and 150")]
+        public int? Age { get; set; }
+        
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Sex is required")]
+        public string Sex { get; set; } = string.Empty;
+    }
+
+    private sealed class EmailModel
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.EmailAddress]
+        public string NewEmail { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.EmailAddress]
+        public string ConfirmEmail { get; set; } = string.Empty;
+    }
+
+    private sealed class PasswordModel
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        public string CurrentPassword { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.MinLength(12)]
+        public string NewPassword { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        public string ConfirmPassword { get; set; } = string.Empty;
+    }
+
+    private sealed class DeactivateModel
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        public string Password { get; set; } = string.Empty;
+    }
+
+    public void Dispose()
+    {
+        _messageTimer?.Dispose();
+    }
+}

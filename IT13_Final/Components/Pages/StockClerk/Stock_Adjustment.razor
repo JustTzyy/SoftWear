@@ -1,0 +1,640 @@
+@page "/stockclerk/Stock_Adjustment"
+@layout IT13_Final.Components.Layout.StockClerk.StockClerk
+@inject IT13_Final.Services.Data.IStockAdjustmentService StockAdjustmentService
+@inject IT13_Final.Services.Data.IVariantService VariantService
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Nav
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.Data.SqlClient
+@implements IDisposable
+
+<h1 class="page-title">Stock Adjustments</h1>
+
+@if (showSuccessMessage && !string.IsNullOrEmpty(successMessageText))
+{
+    <div class="success-banner">
+        <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span>@successMessageText</span>
+    </div>
+}
+
+<div class="colors-container">
+    <div class="search-actions-row">
+        <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input type="text" class="search-input" placeholder="Search stock adjustments" value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        </div>
+
+        <div class="filter-wrapper">
+            <select class="status-filter" @bind="selectedAdjustmentType" @bind:after="OnAdjustmentTypeFilterChanged">
+                <option value="">All Types</option>
+                <option value="Increase">Increase</option>
+                <option value="Decrease">Decrease</option>
+            </select>
+        </div>
+
+        <div class="action-buttons">
+            <button class="add-supplier-btn" @onclick="HandleAddStockAdjustment">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="16"></line>
+                    <line x1="8" y1="12" x2="16" y2="12"></line>
+                </svg>
+                <span>Add Adjustment</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <div class="table-header">List</div>
+        <table class="suppliers-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Variant</th>
+                    <th>Product</th>
+                    <th>Size</th>
+                    <th>Color</th>
+                    <th>Type</th>
+                    <th>Quantity</th>
+                    <th>Reason</th>
+                    <th>Date</th>
+                    <th>Adjusted By</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="10" class="loading-cell">Loading...</td>
+                    </tr>
+                }
+                else if (stockAdjustments.Count == 0)
+                {
+                    <tr>
+                        <td colspan="10" class="empty-cell">No stock adjustments found</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var adjustment in stockAdjustments)
+                    {
+                        <tr class="clickable-row" @onclick="() => HandleRowClick(adjustment.Id)">
+                            <td>@adjustment.Id</td>
+                            <td class="supplier-name">@adjustment.VariantName</td>
+                            <td>@adjustment.ProductName</td>
+                            <td>@(string.IsNullOrEmpty(adjustment.SizeName) ? "N/A" : adjustment.SizeName)</td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(adjustment.ColorName))
+                                {
+                                    <div style="display: flex; align-items: center; gap: 6px;">
+                                        @if (!string.IsNullOrEmpty(adjustment.ColorHexValue))
+                                        {
+                                            <span style="display: inline-block; width: 16px; height: 16px; border-radius: 3px; border: 1px solid #ddd; background-color: @adjustment.ColorHexValue;"></span>
+                                        }
+                                        <span>@adjustment.ColorName</span>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span>N/A</span>
+                                }
+                            </td>
+                            <td>
+                                <span class="status-badge @GetAdjustmentTypeClass(adjustment.AdjustmentType)">@adjustment.AdjustmentType</span>
+                            </td>
+                            <td>@adjustment.QuantityAdjusted</td>
+                            <td>@(string.IsNullOrEmpty(adjustment.Reason) ? "N/A" : (adjustment.Reason.Length > 30 ? adjustment.Reason.Substring(0, 30) + "..." : adjustment.Reason))</td>
+                            <td>@adjustment.Timestamps.ToString("MMM dd, yyyy HH:mm")</td>
+                            <td>@(string.IsNullOrEmpty(adjustment.UserName) ? "N/A" : adjustment.UserName)</td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                @if (i == 1 || i == totalPages || (i >= currentPage - 2 && i <= currentPage + 2))
+                {
+                    <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(i)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 3 || i == currentPage + 3)
+                {
+                    <span class="page-ellipsis">...</span>
+                }
+            }
+
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+@* Add Stock Adjustment Modal *@
+@if (showAddStockAdjustmentModal)
+{
+    <div class="modal-overlay" @onclick="CloseAddStockAdjustmentModal">
+        <div class="add-supplier-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Add Stock Adjustment</h2>
+                <button class="modal-close-btn" @onclick="CloseAddStockAdjustmentModal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <EditForm EditContext="@_addStockAdjustmentEditContext" OnValidSubmit="SaveStockAdjustmentAsync">
+                    <DataAnnotationsValidator />
+                    
+                    <div class="form-grid">
+                        <div class="form-field full-width">
+                            <label class="field-label">Variant <span class="required">*</span></label>
+                            <InputSelect class="form-input" @bind-Value="_addStockAdjustmentModel.VariantId" @bind-Value:after="OnVariantSelectedAsync">
+                                <option value="0">Select Variant</option>
+                                @foreach (var variant in availableVariants)
+                                {
+                                    <option value="@variant.Id">@variant.ProductName - @variant.Name</option>
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => _addStockAdjustmentModel.VariantId)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Size</label>
+                            <InputSelect class="form-input" @bind-Value="_addStockAdjustmentModel.SizeId" disabled="@(selectedVariantDetails == null || selectedVariantDetails.SizeIds.Count == 0)">
+                                <option value="0">Select Size (Optional)</option>
+                                @if (selectedVariantDetails != null && selectedVariantDetails.SizeIds.Count > 0)
+                                {
+                                    @for (int i = 0; i < selectedVariantDetails.SizeIds.Count; i++)
+                                    {
+                                        <option value="@selectedVariantDetails.SizeIds[i]">@selectedVariantDetails.SizeNames[i]</option>
+                                    }
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Color</label>
+                            <InputSelect class="form-input" @bind-Value="_addStockAdjustmentModel.ColorId" disabled="@(selectedVariantDetails == null || selectedVariantDetails.ColorIds.Count == 0)">
+                                <option value="0">Select Color (Optional)</option>
+                                @if (selectedVariantDetails != null && selectedVariantDetails.ColorIds.Count > 0)
+                                {
+                                    @for (int i = 0; i < selectedVariantDetails.ColorIds.Count; i++)
+                                    {
+                                        <option value="@selectedVariantDetails.ColorIds[i]">@selectedVariantDetails.ColorNames[i]</option>
+                                    }
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Adjustment Type <span class="required">*</span></label>
+                            <InputSelect class="form-input" @bind-Value="_addStockAdjustmentModel.AdjustmentType">
+                                <option value="">Select Type</option>
+                                <option value="Increase">Increase</option>
+                                <option value="Decrease">Decrease</option>
+                            </InputSelect>
+                            <ValidationMessage For="@(() => _addStockAdjustmentModel.AdjustmentType)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Quantity <span class="required">*</span></label>
+                            <InputNumber class="form-input" @bind-Value="_addStockAdjustmentModel.QuantityAdjusted" placeholder="Enter quantity" />
+                            <ValidationMessage For="@(() => _addStockAdjustmentModel.QuantityAdjusted)" />
+                        </div>
+                        <div class="form-field full-width">
+                            <label class="field-label">Reason</label>
+                            <InputSelect class="form-input" @bind-Value="_addStockAdjustmentModel.Reason">
+                                <option value="">Select Reason (Optional)</option>
+                                <option value="Miscount">Miscount</option>
+                                <option value="Theft">Theft</option>
+                                <option value="Human Error">Human Error</option>
+                                <option value="System Mismatch">System Mismatch</option>
+                                <option value="Damage">Damage</option>
+                                <option value="Expired">Expired</option>
+                                <option value="Other">Other</option>
+                            </InputSelect>
+                        </div>
+                        @if (_addStockAdjustmentModel.Reason == "Other")
+                        {
+                            <div class="form-field full-width">
+                                <label class="field-label">Custom Reason</label>
+                                <InputTextArea class="form-textarea" @bind-Value="_addStockAdjustmentModel.CustomReason" placeholder="Enter custom reason" rows="3" />
+                            </div>
+                        }
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-btn" @onclick="CloseAddStockAdjustmentModal">Cancel</button>
+                        <button type="submit" class="save-supplier-btn">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                <polyline points="7 3 7 8 15 8"></polyline>
+                            </svg>
+                            <span>Save Adjustment</span>
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@* Stock Adjustment Details Modal *@
+@if (showStockAdjustmentDetails && stockAdjustmentDetails != null)
+{
+    <div class="modal-overlay" @onclick="CloseStockAdjustmentDetails">
+        <div class="modal-container" @onclick:stopPropagation>
+            <div class="modal-header">
+                <div class="modal-title">
+                    <svg class="modal-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2v20M2 12h20"></path>
+                    </svg>
+                    <span>Stock Adjustment Details</span>
+                </div>
+                <button class="modal-close" @onclick="CloseStockAdjustmentDetails" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                    <span class="modal-close-text">Close</span>
+                </button>
+            </div>
+
+            <div class="modal-content">
+                <div class="details-list">
+                    <div class="detail-item">
+                        <span class="detail-label">ID:</span>
+                        <span class="detail-value">@stockAdjustmentDetails.Id</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">PRODUCT:</span>
+                        <span class="detail-value">@stockAdjustmentDetails.ProductName</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">VARIANT:</span>
+                        <span class="detail-value">@stockAdjustmentDetails.VariantName</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">SIZE:</span>
+                        <span class="detail-value">@(string.IsNullOrEmpty(stockAdjustmentDetails.SizeName) ? "N/A" : stockAdjustmentDetails.SizeName)</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">COLOR:</span>
+                        <span class="detail-value">
+                            @if (!string.IsNullOrEmpty(stockAdjustmentDetails.ColorName))
+                            {
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    @if (!string.IsNullOrEmpty(stockAdjustmentDetails.ColorHexValue))
+                                    {
+                                        <span style="display: inline-block; width: 20px; height: 20px; border-radius: 4px; border: 1px solid #ddd; background-color: @stockAdjustmentDetails.ColorHexValue;"></span>
+                                    }
+                                    <span>@stockAdjustmentDetails.ColorName</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <span>N/A</span>
+                            }
+                        </span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">ADJUSTMENT TYPE:</span>
+                        <span class="detail-value">
+                            <span class="status-badge @GetAdjustmentTypeClass(stockAdjustmentDetails.AdjustmentType)">@stockAdjustmentDetails.AdjustmentType</span>
+                        </span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">QUANTITY ADJUSTED:</span>
+                        <span class="detail-value">@stockAdjustmentDetails.QuantityAdjusted</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">REASON:</span>
+                        <span class="detail-value">@(string.IsNullOrEmpty(stockAdjustmentDetails.Reason) ? "N/A" : stockAdjustmentDetails.Reason)</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">ADJUSTED BY:</span>
+                        <span class="detail-value">@(string.IsNullOrEmpty(stockAdjustmentDetails.UserName) ? "N/A" : stockAdjustmentDetails.UserName)</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">DATE & TIME:</span>
+                        <span class="detail-value">@stockAdjustmentDetails.Timestamps.ToString("MMMM dd, yyyy 'at' HH:mm")</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = false;
+    private string searchTerm = string.Empty;
+    private string selectedAdjustmentType = string.Empty;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling(totalCount / (double)pageSize);
+    private List<IT13_Final.Services.Data.StockAdjustmentModel> stockAdjustments = new();
+    private bool showSuccessMessage = false;
+    private string successMessageText = string.Empty;
+    private int sellerUserId = 0;
+
+    private bool showStockAdjustmentDetails = false;
+    private IT13_Final.Services.Data.StockAdjustmentDetailsModel? stockAdjustmentDetails = null;
+
+    private bool showAddStockAdjustmentModal = false;
+    private AddStockAdjustmentModel _addStockAdjustmentModel = new();
+    private EditContext? _addStockAdjustmentEditContext;
+    private List<IT13_Final.Services.Data.VariantModel> availableVariants = new();
+    private IT13_Final.Services.Data.VariantDetailsModel? selectedVariantDetails = null;
+
+    public class AddStockAdjustmentModel
+    {
+        [Required(ErrorMessage = "Variant is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Please select a variant")]
+        public int VariantId { get; set; }
+
+        public int? SizeId { get; set; }
+
+        public int? ColorId { get; set; }
+
+        [Required(ErrorMessage = "Adjustment type is required")]
+        public string AdjustmentType { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Quantity is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Quantity must be greater than 0")]
+        public int QuantityAdjusted { get; set; }
+
+        public string? Reason { get; set; }
+
+        public string? CustomReason { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _addStockAdjustmentEditContext = new EditContext(_addStockAdjustmentModel);
+        await LoadSellerUserId();
+        if (sellerUserId > 0)
+        {
+            await LoadVariantsAsync();
+            await LoadStockAdjustmentsAsync();
+        }
+    }
+
+    private async Task LoadSellerUserId()
+    {
+        if (AuthState.CurrentUser != null)
+        {
+            try
+            {
+                const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+                using var conn = new SqlConnection(connectionString);
+                await conn.OpenAsync();
+
+                var sql = "SELECT user_id FROM dbo.tbl_users WHERE id = @UserId AND archived_at IS NULL";
+                using var cmd = new SqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@UserId", AuthState.CurrentUser.Id);
+
+                var result = await cmd.ExecuteScalarAsync();
+                if (result != null && result != DBNull.Value)
+                {
+                    sellerUserId = Convert.ToInt32(result);
+                }
+            }
+            catch
+            {
+                sellerUserId = 0;
+            }
+        }
+    }
+
+    private async Task LoadVariantsAsync()
+    {
+        try
+        {
+            if (sellerUserId > 0)
+            {
+                availableVariants = await VariantService.GetVariantsAsync(sellerUserId, null, 1, 1000);
+            }
+        }
+        catch (Exception)
+        {
+            availableVariants = new List<IT13_Final.Services.Data.VariantModel>();
+        }
+    }
+
+    private async Task LoadStockAdjustmentsAsync()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            if (sellerUserId > 0)
+            {
+                totalCount = await StockAdjustmentService.GetStockAdjustmentsCountAsync(sellerUserId, searchTerm, string.IsNullOrEmpty(selectedAdjustmentType) ? null : selectedAdjustmentType);
+                stockAdjustments = await StockAdjustmentService.GetStockAdjustmentsAsync(sellerUserId, searchTerm, string.IsNullOrEmpty(selectedAdjustmentType) ? null : selectedAdjustmentType, currentPage, pageSize);
+            }
+        }
+        catch (Exception)
+        {
+            stockAdjustments = new List<IT13_Final.Services.Data.StockAdjustmentModel>();
+            totalCount = 0;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private System.Threading.Timer? _searchTimer;
+    private void HandleSearchInput(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? string.Empty;
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            currentPage = 1;
+            await InvokeAsync(async () => await LoadStockAdjustmentsAsync());
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _searchTimer?.Dispose();
+            currentPage = 1;
+            await LoadStockAdjustmentsAsync();
+        }
+    }
+
+    private async Task OnAdjustmentTypeFilterChanged()
+    {
+        currentPage = 1;
+        await LoadStockAdjustmentsAsync();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages && page != currentPage)
+        {
+            currentPage = page;
+            await LoadStockAdjustmentsAsync();
+        }
+    }
+
+    private async Task HandleRowClick(int adjustmentId)
+    {
+        try
+        {
+            if (sellerUserId > 0)
+            {
+                stockAdjustmentDetails = await StockAdjustmentService.GetStockAdjustmentDetailsAsync(adjustmentId, sellerUserId);
+                if (stockAdjustmentDetails != null)
+                {
+                    showStockAdjustmentDetails = true;
+                    StateHasChanged();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading adjustment details: {ex.Message}");
+        }
+    }
+
+    private void CloseStockAdjustmentDetails()
+    {
+        showStockAdjustmentDetails = false;
+        stockAdjustmentDetails = null;
+    }
+
+    private void HandleAddStockAdjustment()
+    {
+        _addStockAdjustmentModel = new AddStockAdjustmentModel();
+        _addStockAdjustmentEditContext = new EditContext(_addStockAdjustmentModel);
+        selectedVariantDetails = null;
+        showAddStockAdjustmentModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseAddStockAdjustmentModal()
+    {
+        showAddStockAdjustmentModal = false;
+        _addStockAdjustmentModel = new AddStockAdjustmentModel();
+        _addStockAdjustmentEditContext = new EditContext(_addStockAdjustmentModel);
+        selectedVariantDetails = null;
+    }
+
+    private async Task OnVariantSelectedAsync()
+    {
+        if (_addStockAdjustmentModel.VariantId > 0 && sellerUserId > 0)
+        {
+            try
+            {
+                selectedVariantDetails = await VariantService.GetVariantDetailsAsync(_addStockAdjustmentModel.VariantId, sellerUserId);
+                // Reset size and color when variant changes
+                _addStockAdjustmentModel.SizeId = null;
+                _addStockAdjustmentModel.ColorId = null;
+            }
+            catch (Exception ex)
+            {
+                selectedVariantDetails = null;
+                await JSRuntime.InvokeVoidAsync("console.error", $"Error loading variant details: {ex.Message}");
+            }
+        }
+        else
+        {
+            selectedVariantDetails = null;
+            _addStockAdjustmentModel.SizeId = null;
+            _addStockAdjustmentModel.ColorId = null;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SaveStockAdjustmentAsync()
+    {
+        try
+        {
+            if (sellerUserId > 0 && AuthState.CurrentUser != null)
+            {
+                // Use custom reason if "Other" is selected
+                string finalReason = _addStockAdjustmentModel.Reason == "Other" 
+                    ? _addStockAdjustmentModel.CustomReason 
+                    : _addStockAdjustmentModel.Reason;
+
+                var adjustmentId = await StockAdjustmentService.CreateStockAdjustmentAsync(
+                    sellerUserId,
+                    AuthState.CurrentUser.Id,
+                    _addStockAdjustmentModel.VariantId,
+                    _addStockAdjustmentModel.SizeId == 0 ? null : _addStockAdjustmentModel.SizeId,
+                    _addStockAdjustmentModel.ColorId == 0 ? null : _addStockAdjustmentModel.ColorId,
+                    _addStockAdjustmentModel.AdjustmentType,
+                    _addStockAdjustmentModel.QuantityAdjusted,
+                    finalReason
+                );
+
+                if (adjustmentId.HasValue)
+                {
+                    showSuccessMessage = true;
+                    successMessageText = $"Stock adjustment ({_addStockAdjustmentModel.AdjustmentType}) created successfully!";
+                    CloseAddStockAdjustmentModal();
+                    await LoadStockAdjustmentsAsync();
+                    
+                    // Hide success message after 3 seconds
+                    await Task.Delay(3000);
+                    showSuccessMessage = false;
+                    StateHasChanged();
+                }
+                else
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", "Failed to create stock adjustment. Please try again.");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error creating stock adjustment: {ex.Message}");
+        }
+    }
+
+    private string GetAdjustmentTypeClass(string adjustmentType)
+    {
+        return adjustmentType.ToLower() switch
+        {
+            "increase" => "active",
+            "decrease" => "inactive",
+            _ => ""
+        };
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+    }
+}
+

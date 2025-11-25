@@ -58,11 +58,11 @@
             }
 
             <button class="@GetProductMgmtButtonClass()" @onclick="() => productMgmtOpen = !productMgmtOpen" aria-expanded="@productMgmtOpen" title="Product Management">
-                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/seller/Color", "/seller/Size", "/seller/Product", "/seller/Variant", "/seller/Inventory")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/seller/Color", "/seller/Size", "/seller/Product", "/seller/Variant")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                 </svg>
                 <span class="flex-1 transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">Product Management</span>
-                <span class="@GetIconClass("/seller/Color", "/seller/Size", "/seller/Product", "/seller/Variant", "/seller/Inventory") transition-all duration-300 ease-in-out" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">@(productMgmtOpen ? "▾" : "▸")</span>
+                <span class="@GetIconClass("/seller/Color", "/seller/Size", "/seller/Product", "/seller/Variant") transition-all duration-300 ease-in-out" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">@(productMgmtOpen ? "▾" : "▸")</span>
                 @if (IsProductMgmtActive())
                 {
                     <div class="absolute left-0 top-0 bottom-0 w-1 bg-yinmn-blue rounded-r"></div>
@@ -79,10 +79,6 @@
                         <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/seller/Color")"></span>
                         <span>Color</span>
                     </a>
-                    <a class="@GetSubNavItemClass("/seller/Inventory")" href="/seller/Inventory">
-                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/seller/Inventory")"></span>
-                        <span>Inventory</span>
-                    </a>
                     <a class="@GetSubNavItemClass("/seller/Product")" href="/seller/Product">
                         <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/seller/Product")"></span>
                         <span>Product</span>
@@ -94,6 +90,27 @@
                     <a class="@GetSubNavItemClass("/seller/Variant")" href="/seller/Variant">
                         <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/seller/Variant")"></span>
                         <span>Variant</span>
+                    </a>
+                </div>
+            }
+
+            <button class="@GetSupplierMgmtButtonClass()" @onclick="() => supplierMgmtOpen = !supplierMgmtOpen" aria-expanded="@supplierMgmtOpen" title="Supplier Management">
+                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/seller/Supplier")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                <span class="flex-1 transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">Supplier Management</span>
+                <span class="@GetIconClass("/seller/Supplier") transition-all duration-300 ease-in-out" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">@(supplierMgmtOpen ? "▾" : "▸")</span>
+                @if (IsSupplierMgmtActive())
+                {
+                    <div class="absolute left-0 top-0 bottom-0 w-1 bg-yinmn-blue rounded-r"></div>
+                }
+            </button>
+            @if (supplierMgmtOpen && !sidebarCollapsed)
+            {
+                <div class="grid gap-1 py-1 pl-4">
+                    <a class="@GetSubNavItemClass("/seller/Supplier")" href="/seller/Supplier">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/seller/Supplier")"></span>
+                        <span>Supplier</span>
                     </a>
                 </div>
             }
@@ -161,6 +178,7 @@
 @code {
     private bool staffMgmtOpen = false;
     private bool productMgmtOpen = false;
+    private bool supplierMgmtOpen = false;
     private bool profileOpen;
     private bool sidebarCollapsed = false;
     private string currentUri = string.Empty;
@@ -170,6 +188,7 @@
         currentUri = Nav.Uri;
         CheckStaffMgmtExpansion();
         CheckProductMgmtExpansion();
+        CheckSupplierMgmtExpansion();
         Nav.LocationChanged += OnLocationChanged;
     }
 
@@ -178,6 +197,7 @@
         currentUri = e.Location;
         CheckStaffMgmtExpansion();
         CheckProductMgmtExpansion();
+        CheckSupplierMgmtExpansion();
         InvokeAsync(StateHasChanged);
     }
 
@@ -191,9 +211,17 @@
 
     private void CheckProductMgmtExpansion()
     {
-        if (IsActive("/seller/Color") || IsActive("/seller/Size") || IsActive("/seller/Product") || IsActive("/seller/Variant") || IsActive("/seller/Inventory"))
+        if (IsActive("/seller/Category") || IsActive("/seller/Color") || IsActive("/seller/Size") || IsActive("/seller/Product") || IsActive("/seller/Variant"))
         {
             productMgmtOpen = true;
+        }
+    }
+
+    private void CheckSupplierMgmtExpansion()
+    {
+        if (IsActive("/seller/Supplier"))
+        {
+            supplierMgmtOpen = true;
         }
     }
 
@@ -249,7 +277,23 @@
 
     private bool IsProductMgmtActive()
     {
-        return IsActive("/seller/Category") || IsActive("/seller/Color") || IsActive("/seller/Size") || IsActive("/seller/Product") || IsActive("/seller/Variant") || IsActive("/seller/Inventory");
+        return IsActive("/seller/Category") || IsActive("/seller/Color") || IsActive("/seller/Size") || IsActive("/seller/Product") || IsActive("/seller/Variant");
+    }
+
+    private bool IsSupplierMgmtActive()
+    {
+        return IsActive("/seller/Supplier");
+    }
+
+    private string GetSupplierMgmtButtonClass()
+    {
+        var baseClass = "relative w-full text-left cursor-pointer py-2.5 px-3 rounded-lg no-underline flex items-center gap-3 transition-all duration-200 ease-in-out";
+        
+        if (IsSupplierMgmtActive())
+        {
+            return $"{baseClass} bg-uranian-blue text-yinmn-blue";
+        }
+        return $"{baseClass} bg-transparent text-gray-800 hover:bg-uranian-blue hover:bg-opacity-30";
     }
 
     private string GetProductMgmtButtonClass()
@@ -301,11 +345,13 @@
         {
             staffMgmtOpen = false;
             productMgmtOpen = false;
+            supplierMgmtOpen = false;
         }
         else
         {
             CheckStaffMgmtExpansion();
             CheckProductMgmtExpansion();
+            CheckSupplierMgmtExpansion();
         }
     }
 

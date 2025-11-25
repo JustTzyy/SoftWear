@@ -1,0 +1,372 @@
+@page "/stockclerk/Cancelled_Purchase_Orders"
+@layout IT13_Final.Components.Layout.StockClerk.StockClerk
+@inject IT13_Final.Services.Data.IPurchaseOrderService PurchaseOrderService
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Nav
+@implements IDisposable
+
+<h1 class="page-title">Cancelled Purchase Orders</h1>
+
+<div class="colors-container">
+    <div class="search-actions-row">
+        <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input type="text" class="search-input" placeholder="Search cancelled purchase orders" value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        </div>
+        <div class="action-buttons">
+            <button class="back-btn" @onclick="NavigateBack" title="Back to Purchase Orders">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+                <span>Back to Purchase Orders</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <div class="table-header">List</div>
+        <table class="suppliers-table">
+            <thead>
+                <tr>
+                    <th>PO Number</th>
+                    <th>Supplier</th>
+                    <th>Status</th>
+                    <th>Total Amount</th>
+                    <th>Expected Delivery</th>
+                    <th>Created At</th>
+                    <th>Created By</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="7" class="loading-cell">Loading...</td>
+                    </tr>
+                }
+                else if (purchaseOrders.Count == 0)
+                {
+                    <tr>
+                        <td colspan="7" class="empty-cell">No cancelled purchase orders found</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var po in purchaseOrders)
+                    {
+                        <tr class="clickable-row" @onclick="() => HandleRowClick(po.Id)">
+                            <td class="supplier-name">@po.PONumber</td>
+                            <td>@po.SupplierName</td>
+                            <td>
+                                <span class="status-badge cancelled">@po.Status</span>
+                            </td>
+                            <td>@po.TotalAmount.ToString("N2")</td>
+                            <td>@(po.ExpectedDeliveryDate?.ToString("MMM dd, yyyy") ?? "N/A")</td>
+                            <td>@po.CreatedAt.ToString("MMM dd, yyyy")</td>
+                            <td>@(string.IsNullOrEmpty(po.CreatedByName) ? "N/A" : po.CreatedByName)</td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                var pageNum = i;
+                @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
+                {
+                    <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 2 || i == currentPage + 2)
+                {
+                    <span class="page-ellipsis">...</span>
+                }
+            }
+
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+@* Details Modal *@
+@if (showDetailsModal && selectedPO != null)
+{
+    <div class="modal-overlay" @onclick="CloseDetailsModal">
+        <div class="modal-content" @onclick:stopPropagation style="max-width: 900px;">
+            <div class="modal-header">
+                <h2 class="modal-title-text">Purchase Order Details</h2>
+                <button class="modal-close-btn" @onclick="CloseDetailsModal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="po-details-section">
+                    <div class="detail-item">
+                        <span class="detail-label">PO NUMBER:</span>
+                        <span class="detail-value">@selectedPO.PONumber</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">SUPPLIER:</span>
+                        <span class="detail-value">@selectedPO.SupplierName</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">SUPPLIER EMAIL:</span>
+                        <span class="detail-value">@(string.IsNullOrEmpty(selectedPO.SupplierEmail) ? "N/A" : selectedPO.SupplierEmail)</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">SUPPLIER CONTACT:</span>
+                        <span class="detail-value">@(string.IsNullOrEmpty(selectedPO.SupplierContactNumber) ? "N/A" : selectedPO.SupplierContactNumber)</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">STATUS:</span>
+                        <span class="detail-value">
+                            <span class="status-badge @GetStatusClass(selectedPO.Status)">@selectedPO.Status</span>
+                        </span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">TOTAL AMOUNT:</span>
+                        <span class="detail-value">@selectedPO.TotalAmount.ToString("N2")</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">EXPECTED DELIVERY:</span>
+                        <span class="detail-value">@(selectedPO.ExpectedDeliveryDate?.ToString("MMMM dd, yyyy") ?? "N/A")</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">NOTES:</span>
+                        <span class="detail-value">@(string.IsNullOrEmpty(selectedPO.Notes) ? "N/A" : selectedPO.Notes)</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">CREATED BY:</span>
+                        <span class="detail-value">@selectedPO.CreatedByName</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">CREATED AT:</span>
+                        <span class="detail-value">@selectedPO.CreatedAt.ToString("MMMM dd, yyyy 'at' HH:mm")</span>
+                    </div>
+                    @if (selectedPO.UpdatedAt.HasValue)
+                    {
+                        <div class="detail-item">
+                            <span class="detail-label">UPDATED BY:</span>
+                            <span class="detail-value">@(string.IsNullOrEmpty(selectedPO.UpdatedByName) ? "N/A" : selectedPO.UpdatedByName)</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">UPDATED AT:</span>
+                            <span class="detail-value">@selectedPO.UpdatedAt.Value.ToString("MMMM dd, yyyy 'at' HH:mm")</span>
+                        </div>
+                    }
+                </div>
+
+                @if (selectedPO.Items != null && selectedPO.Items.Count > 0)
+                {
+                    <div class="po-items-section">
+                        <h3 class="po-items-title">Items</h3>
+                        <table class="po-items-table">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Variant</th>
+                                    <th>Size</th>
+                                    <th>Color</th>
+                                    <th>Quantity</th>
+                                    <th>Unit Price</th>
+                                    <th>Total</th>
+                                    <th>Received</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in selectedPO.Items)
+                                {
+                                    <tr>
+                                        <td>@item.ProductName</td>
+                                        <td>@item.VariantName</td>
+                                        <td>@(string.IsNullOrEmpty(item.SizeName) ? "N/A" : item.SizeName)</td>
+                                        <td>
+                                            @if (!string.IsNullOrEmpty(item.ColorName))
+                                            {
+                                                <div style="display: flex; align-items: center; gap: 6px;">
+                                                    @if (!string.IsNullOrEmpty(item.ColorHexValue))
+                                                    {
+                                                        <span style="display: inline-block; width: 16px; height: 16px; border-radius: 3px; border: 1px solid #ddd; background-color: @item.ColorHexValue;"></span>
+                                                    }
+                                                    <span>@item.ColorName</span>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <span>N/A</span>
+                                            }
+                                        </td>
+                                        <td>@item.Quantity</td>
+                                        <td>@item.UnitPrice.ToString("N2")</td>
+                                        <td>@item.TotalPrice.ToString("N2")</td>
+                                        <td>@item.ReceivedQuantity</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn secondary" @onclick="CloseDetailsModal">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<IT13_Final.Services.Data.PurchaseOrderModel> purchaseOrders = new();
+    private IT13_Final.Services.Data.PurchaseOrderDetailsModel? selectedPO;
+    private bool isLoading = true;
+    private string searchTerm = string.Empty;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalPages = 1;
+    private bool showDetailsModal = false;
+    private int sellerUserId = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSellerUserIdAsync();
+        await LoadPurchaseOrdersAsync();
+    }
+
+    private async Task LoadSellerUserIdAsync()
+    {
+        try
+        {
+            if (AuthState.CurrentUser != null)
+            {
+                var sql = "SELECT user_id FROM dbo.tbl_users WHERE id = @UserId AND archived_at IS NULL";
+                using var conn = new Microsoft.Data.SqlClient.SqlConnection(
+                    "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;");
+                await conn.OpenAsync();
+                using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@UserId", AuthState.CurrentUser.Id);
+                var result = await cmd.ExecuteScalarAsync();
+                if (result != null)
+                {
+                    sellerUserId = Convert.ToInt32(result);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error loading seller user ID: {ex.Message}");
+        }
+    }
+
+    private async Task LoadPurchaseOrdersAsync()
+    {
+        isLoading = true;
+        try
+        {
+            if (sellerUserId > 0)
+            {
+                var count = await PurchaseOrderService.GetCancelledPurchaseOrdersCountAsync(sellerUserId, searchTerm);
+                totalPages = (int)Math.Ceiling(count / (double)pageSize);
+                if (currentPage > totalPages && totalPages > 0)
+                {
+                    currentPage = totalPages;
+                }
+
+                purchaseOrders = await PurchaseOrderService.GetCancelledPurchaseOrdersAsync(sellerUserId, searchTerm, currentPage, pageSize);
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading purchase orders: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void HandleSearchInput(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? string.Empty;
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            currentPage = 1;
+            await LoadPurchaseOrdersAsync();
+        }
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages)
+        {
+            currentPage = page;
+            await LoadPurchaseOrdersAsync();
+        }
+    }
+
+    private async Task HandleRowClick(int poId)
+    {
+        if (sellerUserId > 0)
+        {
+            selectedPO = await PurchaseOrderService.GetPurchaseOrderDetailsAsync(poId, sellerUserId);
+            if (selectedPO != null)
+            {
+                showDetailsModal = true;
+            }
+        }
+    }
+
+    private void CloseDetailsModal()
+    {
+        showDetailsModal = false;
+        selectedPO = null;
+    }
+
+    private void NavigateBack()
+    {
+        Nav.NavigateTo("/stockclerk/Purchase_Orders");
+    }
+
+    private string GetStatusClass(string status)
+    {
+        return status switch
+        {
+            "Pending" => "pending",
+            "Approved" => "approved",
+            "Cancelled" => "cancelled",
+            "Completed" => "completed",
+            _ => "pending"
+        };
+    }
+
+    public void Dispose()
+    {
+        // Cleanup if needed
+    }
+}
+

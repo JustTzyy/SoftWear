@@ -31,17 +31,17 @@ namespace IT13_Final.Services.Data
 
     public interface ISizeService
     {
-        Task<List<SizeModel>> GetSizesAsync(string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
-        Task<int> GetSizesCountAsync(string? searchTerm = null, CancellationToken ct = default);
-        Task<SizeDetailsModel?> GetSizeDetailsAsync(int sizeId, CancellationToken ct = default);
-        Task<int?> CreateSizeAsync(string name, string? description, CancellationToken ct = default);
-        Task<bool> UpdateSizeAsync(int sizeId, string name, string? description, CancellationToken ct = default);
-        Task<bool> ArchiveSizeAsync(int sizeId, CancellationToken ct = default);
-        Task<List<ArchivedSizeModel>> GetArchivedSizesAsync(string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
-        Task<int> GetArchivedSizesCountAsync(string? searchTerm = null, CancellationToken ct = default);
-        Task<bool> RestoreSizeAsync(int sizeId, CancellationToken ct = default);
-        Task<SizeDetailsModel?> GetArchivedSizeDetailsAsync(int sizeId, CancellationToken ct = default);
-        Task<List<SizeOption>> GetActiveSizesAsync(CancellationToken ct = default);
+        Task<List<SizeModel>> GetSizesAsync(int userId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
+        Task<int> GetSizesCountAsync(int userId, string? searchTerm = null, CancellationToken ct = default);
+        Task<SizeDetailsModel?> GetSizeDetailsAsync(int sizeId, int userId, CancellationToken ct = default);
+        Task<int?> CreateSizeAsync(int userId, string name, string? description, CancellationToken ct = default);
+        Task<bool> UpdateSizeAsync(int sizeId, int userId, string name, string? description, CancellationToken ct = default);
+        Task<bool> ArchiveSizeAsync(int sizeId, int userId, CancellationToken ct = default);
+        Task<List<ArchivedSizeModel>> GetArchivedSizesAsync(int userId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
+        Task<int> GetArchivedSizesCountAsync(int userId, string? searchTerm = null, CancellationToken ct = default);
+        Task<bool> RestoreSizeAsync(int sizeId, int userId, CancellationToken ct = default);
+        Task<SizeDetailsModel?> GetArchivedSizeDetailsAsync(int sizeId, int userId, CancellationToken ct = default);
+        Task<List<SizeOption>> GetActiveSizesAsync(int userId, CancellationToken ct = default);
     }
 
     public class SizeOption
@@ -55,7 +55,7 @@ namespace IT13_Final.Services.Data
         private readonly string _connectionString =
             "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
 
-        public async Task<List<SizeModel>> GetSizesAsync(string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
+        public async Task<List<SizeModel>> GetSizesAsync(int userId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
         {
             var sizes = new List<SizeModel>();
             var offset = (page - 1) * pageSize;
@@ -66,13 +66,13 @@ namespace IT13_Final.Services.Data
             var sql = @"
                 SELECT id, name, description, created_at
                 FROM dbo.tbl_sizes
-                WHERE archived_at IS NULL
+                WHERE archived_at IS NULL AND user_id = @UserId
                 " + (string.IsNullOrWhiteSpace(searchTerm) ? "" : "AND (name LIKE @SearchTerm OR description LIKE @SearchTerm)") + @"
                 ORDER BY created_at DESC
                 OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
 
             using var cmd = new SqlCommand(sql, conn);
-            if (!string.IsNullOrWhiteSpace(searchTerm))
+            cmd.Parameters.AddWithValue("@UserId", userId);if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
             }
@@ -95,7 +95,7 @@ namespace IT13_Final.Services.Data
             return sizes;
         }
 
-        public async Task<int> GetSizesCountAsync(string? searchTerm = null, CancellationToken ct = default)
+        public async Task<int> GetSizesCountAsync(int userId, string? searchTerm = null, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -103,11 +103,11 @@ namespace IT13_Final.Services.Data
             var sql = @"
                 SELECT COUNT(*)
                 FROM dbo.tbl_sizes
-                WHERE archived_at IS NULL
+                WHERE archived_at IS NULL AND user_id = @UserId
                 " + (string.IsNullOrWhiteSpace(searchTerm) ? "" : "AND (name LIKE @SearchTerm OR description LIKE @SearchTerm)");
 
             using var cmd = new SqlCommand(sql, conn);
-            if (!string.IsNullOrWhiteSpace(searchTerm))
+            cmd.Parameters.AddWithValue("@UserId", userId);if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
             }
@@ -116,7 +116,7 @@ namespace IT13_Final.Services.Data
             return count != null ? Convert.ToInt32(count) : 0;
         }
 
-        public async Task<SizeDetailsModel?> GetSizeDetailsAsync(int sizeId, CancellationToken ct = default)
+        public async Task<SizeDetailsModel?> GetSizeDetailsAsync(int sizeId, int userId, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -124,9 +124,10 @@ namespace IT13_Final.Services.Data
             var sql = @"
                 SELECT id, name, description, created_at
                 FROM dbo.tbl_sizes
-                WHERE id = @SizeId AND archived_at IS NULL";
+                WHERE id = @SizeId AND user_id = @UserId AND archived_at IS NULL";
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             cmd.Parameters.AddWithValue("@SizeId", sizeId);
 
             using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -145,17 +146,18 @@ namespace IT13_Final.Services.Data
             return null;
         }
 
-        public async Task<int?> CreateSizeAsync(string name, string? description, CancellationToken ct = default)
+        public async Task<int?> CreateSizeAsync(int userId, string name, string? description, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
 
             var sql = @"
-                INSERT INTO dbo.tbl_sizes (name, description, created_at)
-                VALUES (@Name, @Description, SYSUTCDATETIME());
-                SELECT CAST(SCOPE_IDENTITY() AS INT);";
+                INSERT INTO dbo.tbl_sizes (user_id, name, description, created_at)
+                VALUES (@UserId, @Name, @Description, SYSUTCDATETIME());
+                SELECT CAST(SCOPE_IDENTITY() as int);";
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             cmd.Parameters.AddWithValue("@Name", name);
             cmd.Parameters.AddWithValue("@Description", (object?)description ?? DBNull.Value);
 
@@ -163,7 +165,7 @@ namespace IT13_Final.Services.Data
             return result != null ? Convert.ToInt32(result) : null;
         }
 
-        public async Task<bool> UpdateSizeAsync(int sizeId, string name, string? description, CancellationToken ct = default)
+        public async Task<bool> UpdateSizeAsync(int sizeId, int userId, string name, string? description, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -173,9 +175,10 @@ namespace IT13_Final.Services.Data
                 SET name = @Name, 
                     description = @Description,
                     updated_at = SYSUTCDATETIME()
-                WHERE id = @SizeId AND archived_at IS NULL";
+                WHERE id = @SizeId AND user_id = @UserId AND archived_at IS NULL";
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             cmd.Parameters.AddWithValue("@SizeId", sizeId);
             cmd.Parameters.AddWithValue("@Name", name);
             cmd.Parameters.AddWithValue("@Description", (object?)description ?? DBNull.Value);
@@ -184,7 +187,7 @@ namespace IT13_Final.Services.Data
             return rowsAffected > 0;
         }
 
-        public async Task<bool> ArchiveSizeAsync(int sizeId, CancellationToken ct = default)
+        public async Task<bool> ArchiveSizeAsync(int sizeId, int userId, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -192,16 +195,17 @@ namespace IT13_Final.Services.Data
             var sql = @"
                 UPDATE dbo.tbl_sizes
                 SET archived_at = SYSUTCDATETIME()
-                WHERE id = @SizeId AND archived_at IS NULL";
+                WHERE id = @SizeId AND user_id = @UserId AND archived_at IS NULL";
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             cmd.Parameters.AddWithValue("@SizeId", sizeId);
 
             var rowsAffected = await cmd.ExecuteNonQueryAsync(ct);
             return rowsAffected > 0;
         }
 
-        public async Task<List<ArchivedSizeModel>> GetArchivedSizesAsync(string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
+        public async Task<List<ArchivedSizeModel>> GetArchivedSizesAsync(int userId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
         {
             var sizes = new List<ArchivedSizeModel>();
             var offset = (page - 1) * pageSize;
@@ -212,13 +216,13 @@ namespace IT13_Final.Services.Data
             var sql = @"
                 SELECT id, name, description, archived_at
                 FROM dbo.tbl_sizes
-                WHERE archived_at IS NOT NULL
+                WHERE archived_at IS NOT NULL AND user_id = @UserId
                 " + (string.IsNullOrWhiteSpace(searchTerm) ? "" : "AND (name LIKE @SearchTerm OR description LIKE @SearchTerm)") + @"
                 ORDER BY archived_at DESC
                 OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
 
             using var cmd = new SqlCommand(sql, conn);
-            if (!string.IsNullOrWhiteSpace(searchTerm))
+            cmd.Parameters.AddWithValue("@UserId", userId);if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
             }
@@ -240,7 +244,7 @@ namespace IT13_Final.Services.Data
             return sizes;
         }
 
-        public async Task<int> GetArchivedSizesCountAsync(string? searchTerm = null, CancellationToken ct = default)
+        public async Task<int> GetArchivedSizesCountAsync(int userId, string? searchTerm = null, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -248,11 +252,11 @@ namespace IT13_Final.Services.Data
             var sql = @"
                 SELECT COUNT(*)
                 FROM dbo.tbl_sizes
-                WHERE archived_at IS NOT NULL
+                WHERE archived_at IS NOT NULL AND user_id = @UserId
                 " + (string.IsNullOrWhiteSpace(searchTerm) ? "" : "AND (name LIKE @SearchTerm OR description LIKE @SearchTerm)");
 
             using var cmd = new SqlCommand(sql, conn);
-            if (!string.IsNullOrWhiteSpace(searchTerm))
+            cmd.Parameters.AddWithValue("@UserId", userId);if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
             }
@@ -261,7 +265,7 @@ namespace IT13_Final.Services.Data
             return count != null ? Convert.ToInt32(count) : 0;
         }
 
-        public async Task<bool> RestoreSizeAsync(int sizeId, CancellationToken ct = default)
+        public async Task<bool> RestoreSizeAsync(int sizeId, int userId, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -269,16 +273,17 @@ namespace IT13_Final.Services.Data
             var sql = @"
                 UPDATE dbo.tbl_sizes
                 SET archived_at = NULL
-                WHERE id = @SizeId AND archived_at IS NOT NULL";
+                WHERE id = @SizeId AND user_id = @UserId AND archived_at IS NOT NULL";
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             cmd.Parameters.AddWithValue("@SizeId", sizeId);
 
             var rowsAffected = await cmd.ExecuteNonQueryAsync(ct);
             return rowsAffected > 0;
         }
 
-        public async Task<SizeDetailsModel?> GetArchivedSizeDetailsAsync(int sizeId, CancellationToken ct = default)
+        public async Task<SizeDetailsModel?> GetArchivedSizeDetailsAsync(int sizeId, int userId, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -286,9 +291,10 @@ namespace IT13_Final.Services.Data
             var sql = @"
                 SELECT id, name, description, created_at
                 FROM dbo.tbl_sizes
-                WHERE id = @SizeId AND archived_at IS NOT NULL";
+                WHERE id = @SizeId AND user_id = @UserId AND archived_at IS NOT NULL";
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             cmd.Parameters.AddWithValue("@SizeId", sizeId);
 
             using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -307,7 +313,7 @@ namespace IT13_Final.Services.Data
             return null;
         }
 
-        public async Task<List<SizeOption>> GetActiveSizesAsync(CancellationToken ct = default)
+        public async Task<List<SizeOption>> GetActiveSizesAsync(int userId, CancellationToken ct = default)
         {
             var sizes = new List<SizeOption>();
             using var conn = new SqlConnection(_connectionString);
@@ -316,10 +322,11 @@ namespace IT13_Final.Services.Data
             var sql = @"
                 SELECT id, name 
                 FROM dbo.tbl_sizes 
-                WHERE archived_at IS NULL 
+                WHERE archived_at IS NULL AND user_id = @UserId 
                 ORDER BY name";
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             using var reader = await cmd.ExecuteReaderAsync(ct);
 
             while (await reader.ReadAsync(ct))
@@ -335,4 +342,6 @@ namespace IT13_Final.Services.Data
         }
     }
 }
+
+
 

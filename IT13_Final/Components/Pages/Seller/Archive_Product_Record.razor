@@ -1,6 +1,7 @@
 @page "/seller/Archive_Product_Record"
 @layout IT13_Final.Components.Layout.Seller.Seller
 @inject IT13_Final.Services.Data.IProductService ProductService
+@inject IT13_Final.Services.Auth.AuthState AuthState
 @inject IJSRuntime JSRuntime
 @inject NavigationManager Nav
 @implements IDisposable
@@ -207,8 +208,9 @@
 
         try
         {
-            totalCount = await ProductService.GetArchivedProductsCountAsync(searchTerm);
-            archivedProducts = await ProductService.GetArchivedProductsAsync(searchTerm, currentPage, pageSize);
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            totalCount = await ProductService.GetArchivedProductsCountAsync(userId, searchTerm);
+            archivedProducts = await ProductService.GetArchivedProductsAsync(userId, searchTerm, currentPage, pageSize);
         }
         catch (Exception)
         {
@@ -274,7 +276,8 @@
         {
             try
             {
-                var success = await ProductService.RestoreProductAsync(productId);
+                var userId = AuthState.CurrentUser?.Id ?? 0;
+                var success = await ProductService.RestoreProductAsync(productId, userId);
                 if (success)
                 {
                     ShowSuccessMessage("Product restored successfully!");
@@ -299,7 +302,8 @@
 
         try
         {
-            productDetails = await ProductService.GetArchivedProductDetailsAsync(productId);
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            productDetails = await ProductService.GetArchivedProductDetailsAsync(productId, userId);
         }
         catch
         {
@@ -338,4 +342,5 @@
         _successBannerTimer?.Dispose();
     }
 }
+
 

@@ -1,0 +1,1105 @@
+@page "/stockclerk/Purchase_Orders"
+@layout IT13_Final.Components.Layout.StockClerk.StockClerk
+@inject IT13_Final.Services.Data.IPurchaseOrderService PurchaseOrderService
+@inject IT13_Final.Services.Data.ISupplierService SupplierService
+@inject IT13_Final.Services.Data.IVariantService VariantService
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Nav
+@using Microsoft.Data.SqlClient
+@using System.ComponentModel.DataAnnotations
+@implements IDisposable
+
+<h1 class="page-title">Purchase Orders</h1>
+
+<div class="colors-container">
+    <div class="search-actions-row">
+        <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input type="text" class="search-input" placeholder="Search purchase orders" value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        </div>
+        <div class="filter-wrapper">
+            <select class="status-filter" @bind="selectedStatus" @bind:after="OnStatusFilterChanged" disabled="@showPendingOnly">
+                <option value="">All Status</option>
+                <option value="Pending">Pending</option>
+                <option value="Approved">Approved</option>
+            </select>
+        </div>
+        <button class="view-pending-btn @(showPendingOnly ? "active" : "")" @onclick="TogglePendingView" title="@(showPendingOnly ? "View All Purchase Orders" : "View Pending Purchase Orders")">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 12l2 2 4-4"></path>
+                <path d="M21 12c-1 0-3-1-3-3s2-3 3-3 3 1 3 3-2 3-3 3"></path>
+                <path d="M3 12c1 0 3-1 3-3s-2-3-3-3-3 1-3 3 2 3 3 3"></path>
+                <path d="M12 3c0 1-1 3-3 3s-3-2-3-3 1-3 3-3 3 2 3 3"></path>
+                <path d="M12 21c0-1-1-3-3-3s-3 2-3 3 1 3 3 3 3-2 3-3"></path>
+            </svg>
+            <span>@(showPendingOnly ? "View All" : "View Pending")</span>
+        </button>
+        <div class="action-buttons">
+            <button class="view-cancelled-btn" @onclick="NavigateToCancelled" title="View Cancelled Purchase Orders">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 12l2 2 4-4"></path>
+                    <path d="M21 12c-1 0-3-1-3-3s2-3 3-3 3 1 3 3-2 3-3 3"></path>
+                    <path d="M3 12c1 0 3-1 3-3s-2-3-3-3-3 1-3 3 2 3 3 3"></path>
+                    <path d="M12 3c0 1-1 3-3 3s-3-2-3-3 1-3 3-3 3 2 3 3"></path>
+                    <path d="M12 21c0-1-1-3-3-3s-3 2-3 3 1 3 3 3 3-2 3-3"></path>
+                </svg>
+                <span>View Cancelled</span>
+            </button>
+            <button class="view-completed-btn" @onclick="NavigateToCompleted" title="View Completed Purchase Orders">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+                <span>View Completed</span>
+            </button>
+            <button class="add-supplier-btn" @onclick="HandleCreatePO">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="16"></line>
+                    <line x1="8" y1="12" x2="16" y2="12"></line>
+                </svg>
+                <span>Create PO</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <div class="table-header">List</div>
+        <table class="suppliers-table">
+            <thead>
+                <tr>
+                    <th>PO Number</th>
+                    <th>Supplier</th>
+                    <th>Status</th>
+                    <th>Total Amount</th>
+                    <th>Expected Delivery</th>
+                    <th>Created At</th>
+                    <th>Created By</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="8" class="loading-cell">Loading...</td>
+                    </tr>
+                }
+                else if (purchaseOrders.Count == 0)
+                {
+                    <tr>
+                        <td colspan="8" class="empty-cell">No purchase orders found</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var po in purchaseOrders)
+                    {
+                        <tr class="clickable-row" @onclick="() => HandleRowClick(po.Id)">
+                            <td class="supplier-name">@po.PONumber</td>
+                            <td>@po.SupplierName</td>
+                            <td>
+                                <span class="status-badge @GetStatusClass(po.Status)">@po.Status</span>
+                            </td>
+                            <td>@po.TotalAmount.ToString("N2")</td>
+                            <td>
+                                @if (po.ExpectedDeliveryDate.HasValue)
+                                {
+                                    <div style="display: flex; align-items: center; gap: 6px;">
+                                        <span>@po.ExpectedDeliveryDate.Value.ToString("MMM dd, yyyy")</span>
+                                        @if (IsOverdue(po.ExpectedDeliveryDate.Value, po.Status))
+                                        {
+                                            <span class="overdue-badge" title="Overdue - Expected delivery date has passed">⚠️ Overdue</span>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span>N/A</span>
+                                }
+                            </td>
+                            <td>@po.CreatedAt.ToString("MMM dd, yyyy")</td>
+                            <td>@(string.IsNullOrEmpty(po.CreatedByName) ? "N/A" : po.CreatedByName)</td>
+                            <td class="actions-cell" @onclick:stopPropagation>
+                                @if (po.Status == "Pending")
+                                {
+                                    @* Only Seller can approve *@
+                                    @if (IsSeller())
+                                    {
+                                        <button class="action-btn approve-btn" @onclick='() => HandleStatusChange(po.Id, "Approved")' title="Approve">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <polyline points="20 6 9 17 4 12"></polyline>
+                                            </svg>
+                                        </button>
+                                    }
+                                    @* Only Stock Clerk can cancel *@
+                                    @if (IsStockClerk())
+                                    {
+                                        <button class="action-btn cancel-btn" @onclick='() => HandleStatusChange(po.Id, "Cancelled")' title="Cancel">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                                <line x1="18" y1="6" x2="6" y2="18" stroke="#F59E0B"></line>
+                                                <line x1="6" y1="6" x2="18" y2="18" stroke="#F59E0B"></line>
+                                            </svg>
+                                        </button>
+                                    }
+                                }
+                                @if (po.Status == "Approved")
+                                {
+                                    <button class="action-btn complete-btn" @onclick='() => HandleStatusChange(po.Id, "Completed")' title="Mark as Completed">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                        </svg>
+                                    </button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                var pageNum = i;
+                @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
+                {
+                    <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 2 || i == currentPage + 2)
+                {
+                    <span class="page-ellipsis">...</span>
+                }
+            }
+
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+@* Purchase Order Details Modal *@
+@if (showPODetails && poDetails != null)
+{
+    <div class="modal-overlay" @onclick="ClosePODetails">
+        <div class="modal-container" @onclick:stopPropagation>
+            <div class="modal-header">
+                <div class="modal-title">
+                    <svg class="modal-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                    <span>Purchase Order Details</span>
+                </div>
+                <button class="modal-close" @onclick="ClosePODetails" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                    <span class="modal-close-text">Close</span>
+                </button>
+            </div>
+
+            <div class="modal-content">
+                <div class="details-list">
+                    <div class="detail-item">
+                        <span class="detail-label">PO NUMBER:</span>
+                        <span class="detail-value">@poDetails.PONumber</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">SUPPLIER:</span>
+                        <span class="detail-value">@poDetails.SupplierName</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">SUPPLIER EMAIL:</span>
+                        <span class="detail-value">@(string.IsNullOrEmpty(poDetails.SupplierEmail) ? "N/A" : poDetails.SupplierEmail)</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">SUPPLIER CONTACT:</span>
+                        <span class="detail-value">@(string.IsNullOrEmpty(poDetails.SupplierContactNumber) ? "N/A" : poDetails.SupplierContactNumber)</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">STATUS:</span>
+                        <span class="detail-value">
+                            <span class="status-badge @GetStatusClass(poDetails.Status)">@poDetails.Status</span>
+                        </span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">TOTAL AMOUNT:</span>
+                        <span class="detail-value">@poDetails.TotalAmount.ToString("N2")</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">EXPECTED DELIVERY:</span>
+                        <span class="detail-value">
+                            @if (poDetails.ExpectedDeliveryDate.HasValue)
+                            {
+                                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                    <span>@poDetails.ExpectedDeliveryDate.Value.ToString("MMMM dd, yyyy")</span>
+                                    @if (IsOverdue(poDetails.ExpectedDeliveryDate.Value, poDetails.Status))
+                                    {
+                                        <span class="overdue-badge" title="Overdue - Expected delivery date has passed">⚠️ Overdue</span>
+                                    }
+                                    @if (poDetails.Status != "Completed" && poDetails.Status != "Cancelled")
+                                    {
+                                        <button class="update-date-btn" @onclick="() => ShowUpdateDateModal(poDetails.Id)" title="Update Expected Delivery Date">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
+                                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                            </svg>
+                                        </button>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span>N/A</span>
+                                    @if (poDetails.Status != "Completed" && poDetails.Status != "Cancelled")
+                                    {
+                                        <button class="update-date-btn" @onclick="() => ShowUpdateDateModal(poDetails.Id)" title="Set Expected Delivery Date">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
+                                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                            </svg>
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">NOTES:</span>
+                        <span class="detail-value">@(string.IsNullOrEmpty(poDetails.Notes) ? "N/A" : poDetails.Notes)</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">CREATED BY:</span>
+                        <span class="detail-value">@poDetails.CreatedByName</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">CREATED AT:</span>
+                        <span class="detail-value">@poDetails.CreatedAt.ToString("MMMM dd, yyyy 'at' HH:mm")</span>
+                    </div>
+                    @if (poDetails.UpdatedAt.HasValue)
+                    {
+                        <div class="detail-item">
+                            <span class="detail-label">UPDATED BY:</span>
+                            <span class="detail-value">@(string.IsNullOrEmpty(poDetails.UpdatedByName) ? "N/A" : poDetails.UpdatedByName)</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">UPDATED AT:</span>
+                            <span class="detail-value">@poDetails.UpdatedAt.Value.ToString("MMMM dd, yyyy 'at' HH:mm")</span>
+                        </div>
+                    }
+                </div>
+
+                @if (poDetails.Items.Count > 0)
+                {
+                    <div class="po-items-section">
+                        <h3 class="po-items-title">Items</h3>
+                        <table class="po-items-table">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Variant</th>
+                                    <th>Size</th>
+                                    <th>Color</th>
+                                    <th>Quantity</th>
+                                    <th>Unit Price</th>
+                                    <th>Total</th>
+                                    <th>Received</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in poDetails.Items)
+                                {
+                                    <tr>
+                                        <td>@item.ProductName</td>
+                                        <td>@item.VariantName</td>
+                                        <td>@(string.IsNullOrEmpty(item.SizeName) ? "N/A" : item.SizeName)</td>
+                                        <td>
+                                            @if (!string.IsNullOrEmpty(item.ColorName))
+                                            {
+                                                <div style="display: flex; align-items: center; gap: 6px;">
+                                                    @if (!string.IsNullOrEmpty(item.ColorHexValue))
+                                                    {
+                                                        <span style="display: inline-block; width: 16px; height: 16px; border-radius: 3px; border: 1px solid #ddd; background-color: @item.ColorHexValue;"></span>
+                                                    }
+                                                    <span>@item.ColorName</span>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <span>N/A</span>
+                                            }
+                                        </td>
+                                        <td>@item.Quantity</td>
+                                        <td>@item.UnitPrice.ToString("N2")</td>
+                                        <td>@item.TotalPrice.ToString("N2")</td>
+                                        <td>@item.ReceivedQuantity</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@* Update Expected Delivery Date Modal *@
+@if (showUpdateDateModal && poDetails != null)
+{
+    <div class="modal-overlay" @onclick="CloseUpdateDateModal">
+        <div class="modal-container" @onclick:stopPropagation style="max-width: 500px;">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <span>Update Expected Delivery Date</span>
+                </div>
+                <button class="modal-close" @onclick="CloseUpdateDateModal" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-content">
+                <EditForm Model="@_updateDateModel" OnValidSubmit="UpdateExpectedDateAsync">
+                    <DataAnnotationsValidator />
+                    <div class="form-field">
+                        <label class="field-label">New Expected Delivery Date <span class="required">*</span></label>
+                        <InputDate class="form-input" @bind-Value="_updateDateModel.ExpectedDeliveryDate" min="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                        <ValidationMessage For="@(() => _updateDateModel.ExpectedDeliveryDate)" />
+                    </div>
+                    <div class="modal-footer" style="margin-top: 20px; display: flex; gap: 12px; justify-content: flex-end;">
+                        <button type="button" class="modal-btn secondary" @onclick="CloseUpdateDateModal">Cancel</button>
+                        <button type="submit" class="modal-btn primary">Update Date</button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@* Create Purchase Order Modal *@
+@if (showCreatePOModal)
+{
+    <div class="modal-overlay" @onclick="CloseCreatePOModal">
+        <div class="add-supplier-modal" @onclick:stopPropagation style="max-width: 900px;">
+            <div class="modal-header">
+                <h2 class="modal-title-text">Create Purchase Order</h2>
+                <button class="modal-close-btn" @onclick="CloseCreatePOModal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <EditForm EditContext="@_createPOEditContext" OnValidSubmit="SavePurchaseOrderAsync">
+                    <DataAnnotationsValidator />
+                    
+                    <div class="form-grid">
+                        <div class="form-field full-width">
+                            <label class="field-label">Supplier <span class="required">*</span></label>
+                            <InputSelect class="form-input" @bind-Value="_createPOModel.SupplierId">
+                                <option value="0">Select Supplier</option>
+                                @foreach (var supplier in availableSuppliers)
+                                {
+                                    <option value="@supplier.Id">@supplier.CompanyName</option>
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => _createPOModel.SupplierId)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Expected Delivery Date</label>
+                            <InputDate class="form-input" @bind-Value="_createPOModel.ExpectedDeliveryDate" min="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                            <ValidationMessage For="@(() => _createPOModel.ExpectedDeliveryDate)" />
+                        </div>
+                        <div class="form-field full-width">
+                            <label class="field-label">Notes</label>
+                            <InputTextArea class="form-textarea" @bind-Value="_createPOModel.Notes" placeholder="Optional notes for this purchase order" rows="3" />
+                        </div>
+                    </div>
+
+                    <div class="po-items-section" style="margin-top: 24px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                            <h3 class="po-items-title" style="margin: 0;">Items</h3>
+                            <button type="button" class="add-item-btn" @onclick="AddPOItem">
+                                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <line x1="12" y1="8" x2="12" y2="16"></line>
+                                    <line x1="8" y1="12" x2="16" y2="12"></line>
+                                </svg>
+                                <span>Add Item</span>
+                            </button>
+                        </div>
+
+                        @if (_createPOModel.Items.Count == 0)
+                        {
+                            <p style="text-align: center; color: #6B7280; padding: 20px;">No items added. Click "Add Item" to add items to this purchase order.</p>
+                        }
+                        else
+                        {
+                            <div class="po-items-list">
+                                @for (int i = 0; i < _createPOModel.Items.Count; i++)
+                                {
+                                    var item = _createPOModel.Items[i];
+                                    var itemIndex = i;
+                                    <div class="po-item-card">
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                            <h4 style="margin: 0; font-size: 14px; font-weight: 600; color: #304D6D;">Item @(itemIndex + 1)</h4>
+                                            @if (_createPOModel.Items.Count > 1)
+                                            {
+                                                <button type="button" class="remove-item-btn" @onclick="() => RemovePOItem(itemIndex)">
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <circle cx="12" cy="12" r="10"></circle>
+                                                        <line x1="15" y1="9" x2="9" y2="15"></line>
+                                                        <line x1="9" y1="9" x2="15" y2="15"></line>
+                                                    </svg>
+                                                </button>
+                                            }
+                                        </div>
+                                        <div class="form-grid">
+                                            <div class="form-field full-width">
+                                                <label class="field-label">Variant <span class="required">*</span></label>
+                                                <InputSelect class="form-input" @bind-Value="item.VariantId" @bind-Value:after="() => OnItemVariantSelected(itemIndex)">
+                                                    <option value="0">Select Variant</option>
+                                                    @foreach (var variant in availableVariants)
+                                                    {
+                                                        <option value="@variant.Id">@variant.ProductName - @variant.Name</option>
+                                                    }
+                                                </InputSelect>
+                                            </div>
+                                            <div class="form-field">
+                                                <label class="field-label">Size</label>
+                                                <InputSelect class="form-input" @bind-Value="item.SizeId" disabled="@(itemVariantDetails.ContainsKey(itemIndex) == false || itemVariantDetails[itemIndex] == null || itemVariantDetails[itemIndex]?.SizeIds.Count == 0)">
+                                                    <option value="0">Select Size (Optional)</option>
+                                                    @if (itemVariantDetails.ContainsKey(itemIndex) && itemVariantDetails[itemIndex] != null && itemVariantDetails[itemIndex]?.SizeIds.Count > 0)
+                                                    {
+                                                        @for (int j = 0; j < itemVariantDetails[itemIndex].SizeIds.Count; j++)
+                                                        {
+                                                            <option value="@itemVariantDetails[itemIndex].SizeIds[j]">@itemVariantDetails[itemIndex].SizeNames[j]</option>
+                                                        }
+                                                    }
+                                                </InputSelect>
+                                            </div>
+                                            <div class="form-field">
+                                                <label class="field-label">Color</label>
+                                                <InputSelect class="form-input" @bind-Value="item.ColorId" disabled="@(itemVariantDetails.ContainsKey(itemIndex) == false || itemVariantDetails[itemIndex] == null || itemVariantDetails[itemIndex]?.ColorIds.Count == 0)">
+                                                    <option value="0">Select Color (Optional)</option>
+                                                    @if (itemVariantDetails.ContainsKey(itemIndex) && itemVariantDetails[itemIndex] != null && itemVariantDetails[itemIndex]?.ColorIds.Count > 0)
+                                                    {
+                                                        @for (int j = 0; j < itemVariantDetails[itemIndex].ColorIds.Count; j++)
+                                                        {
+                                                            <option value="@itemVariantDetails[itemIndex].ColorIds[j]">@itemVariantDetails[itemIndex].ColorNames[j]</option>
+                                                        }
+                                                    }
+                                                </InputSelect>
+                                            </div>
+                                            <div class="form-field">
+                                                <label class="field-label">Quantity <span class="required">*</span></label>
+                                                <InputNumber class="form-input" @bind-Value="item.Quantity" @bind-Value:after="() => CalculateTotalAmount()" />
+                                            </div>
+                                            <div class="form-field">
+                                                <label class="field-label">Unit Price <span class="required">*</span></label>
+                                                <InputNumber class="form-input" @bind-Value="item.UnitPrice" @bind-Value:after="() => CalculateTotalAmount()" step="0.01" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                            <div style="margin-top: 16px; padding: 16px; background: #F9F9F9; border-radius: 8px; text-align: right;">
+                                <strong style="font-size: 18px; color: #304D6D;">Total Amount: @CalculateTotalAmount().ToString("N2")</strong>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-btn" @onclick="CloseCreatePOModal">Cancel</button>
+                        <button type="submit" class="save-supplier-btn" disabled="@(_createPOModel.Items.Count == 0 || _createPOModel.SupplierId == 0)">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                <polyline points="7 3 7 8 15 8"></polyline>
+                            </svg>
+                            <span>Create Purchase Order</span>
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = false;
+    private string searchTerm = string.Empty;
+    private string selectedStatus = string.Empty;
+    private bool showPendingOnly = false;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling(totalCount / (double)pageSize);
+    private List<IT13_Final.Services.Data.PurchaseOrderModel> purchaseOrders = new();
+    private int sellerUserId = 0;
+
+    private bool showPODetails = false;
+    private IT13_Final.Services.Data.PurchaseOrderDetailsModel? poDetails = null;
+
+    private bool showCreatePOModal = false;
+    private CreatePOModel _createPOModel = new();
+    private EditContext? _createPOEditContext;
+    private List<IT13_Final.Services.Data.SupplierModel> availableSuppliers = new();
+    private List<IT13_Final.Services.Data.VariantModel> availableVariants = new();
+    private Dictionary<int, IT13_Final.Services.Data.VariantDetailsModel?> itemVariantDetails = new();
+
+    private bool showUpdateDateModal = false;
+    private UpdateDateModel _updateDateModel = new();
+    private int? _updatingPOId = null;
+
+    public class CreatePOModel
+    {
+        [Required(ErrorMessage = "Supplier is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Please select a supplier")]
+        public int SupplierId { get; set; }
+
+        public string? Notes { get; set; }
+        
+        [CustomValidation(typeof(CreatePOModel), nameof(ValidateExpectedDeliveryDate))]
+        public DateTime? ExpectedDeliveryDate { get; set; }
+        
+        public List<CreatePOItemModel> Items { get; set; } = new();
+        
+        public static ValidationResult? ValidateExpectedDeliveryDate(DateTime? expectedDeliveryDate, ValidationContext context)
+        {
+            if (expectedDeliveryDate.HasValue && expectedDeliveryDate.Value.Date < DateTime.Today)
+            {
+                return new ValidationResult("Expected delivery date cannot be in the past.");
+            }
+            return ValidationResult.Success;
+        }
+    }
+
+    public class UpdateDateModel
+    {
+        [Required(ErrorMessage = "Expected delivery date is required")]
+        [CustomValidation(typeof(UpdateDateModel), nameof(ValidateExpectedDeliveryDate))]
+        public DateTime? ExpectedDeliveryDate { get; set; }
+
+        public static ValidationResult? ValidateExpectedDeliveryDate(DateTime? expectedDeliveryDate, ValidationContext context)
+        {
+            if (!expectedDeliveryDate.HasValue)
+            {
+                return new ValidationResult("Expected delivery date is required.");
+            }
+            if (expectedDeliveryDate.Value.Date < DateTime.Today)
+            {
+                return new ValidationResult("Expected delivery date cannot be in the past.");
+            }
+            return ValidationResult.Success;
+        }
+    }
+
+    public class CreatePOItemModel
+    {
+        public int VariantId { get; set; }
+        public int? SizeId { get; set; }
+        public int? ColorId { get; set; }
+        public int Quantity { get; set; } = 1;
+        public decimal UnitPrice { get; set; } = 0;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSellerUserId();
+        if (sellerUserId > 0)
+        {
+            await LoadPurchaseOrdersAsync();
+            await LoadSuppliersAsync();
+            await LoadVariantsAsync();
+        }
+    }
+
+    private async Task LoadSuppliersAsync()
+    {
+        try
+        {
+            if (sellerUserId > 0)
+            {
+                availableSuppliers = await SupplierService.GetSuppliersAsync(sellerUserId, null, 1, 1000);
+            }
+        }
+        catch (Exception)
+        {
+            availableSuppliers = new List<IT13_Final.Services.Data.SupplierModel>();
+        }
+    }
+
+    private async Task LoadVariantsAsync()
+    {
+        try
+        {
+            if (sellerUserId > 0)
+            {
+                availableVariants = await VariantService.GetVariantsAsync(sellerUserId, null, 1, 1000);
+            }
+        }
+        catch (Exception)
+        {
+            availableVariants = new List<IT13_Final.Services.Data.VariantModel>();
+        }
+    }
+
+    private async Task LoadSellerUserId()
+    {
+        if (AuthState.CurrentUser != null)
+        {
+            try
+            {
+                const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+                using var conn = new SqlConnection(connectionString);
+                await conn.OpenAsync();
+
+                var sql = "SELECT user_id FROM dbo.tbl_users WHERE id = @UserId AND archived_at IS NULL";
+                using var cmd = new SqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@UserId", AuthState.CurrentUser.Id);
+
+                var result = await cmd.ExecuteScalarAsync();
+                if (result != null && result != DBNull.Value)
+                {
+                    sellerUserId = Convert.ToInt32(result);
+                }
+            }
+            catch
+            {
+                sellerUserId = 0;
+            }
+        }
+    }
+
+    private async Task LoadPurchaseOrdersAsync()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            if (sellerUserId > 0)
+            {
+                // If showPendingOnly is true, force status to "Pending"
+                var statusFilter = showPendingOnly ? "Pending" : (string.IsNullOrEmpty(selectedStatus) ? null : selectedStatus);
+                
+                await JSRuntime.InvokeVoidAsync("console.log", $"Loading POs with sellerUserId: {sellerUserId}, searchTerm: '{searchTerm}', status: '{statusFilter}', showPendingOnly: {showPendingOnly}");
+                totalCount = await PurchaseOrderService.GetPurchaseOrdersCountAsync(sellerUserId, searchTerm, statusFilter);
+                purchaseOrders = await PurchaseOrderService.GetPurchaseOrdersAsync(sellerUserId, searchTerm, statusFilter, currentPage, pageSize);
+                await JSRuntime.InvokeVoidAsync("console.log", $"Loaded {purchaseOrders.Count} POs out of {totalCount} total");
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("console.warn", "sellerUserId is 0, cannot load purchase orders");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading purchase orders: {ex.Message}");
+            purchaseOrders = new List<IT13_Final.Services.Data.PurchaseOrderModel>();
+            totalCount = 0;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task TogglePendingView()
+    {
+        showPendingOnly = !showPendingOnly;
+        if (showPendingOnly)
+        {
+            selectedStatus = string.Empty; // Clear status filter when showing pending only
+        }
+        currentPage = 1;
+        await LoadPurchaseOrdersAsync();
+    }
+
+    private System.Threading.Timer? _searchTimer;
+    private void HandleSearchInput(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? string.Empty;
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            currentPage = 1;
+            await InvokeAsync(async () => await LoadPurchaseOrdersAsync());
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _searchTimer?.Dispose();
+            currentPage = 1;
+            await LoadPurchaseOrdersAsync();
+        }
+    }
+
+    private async Task OnStatusFilterChanged()
+    {
+        currentPage = 1;
+        await LoadPurchaseOrdersAsync();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages && page != currentPage)
+        {
+            currentPage = page;
+            await LoadPurchaseOrdersAsync();
+        }
+    }
+
+    private async Task HandleRowClick(int poId)
+    {
+        try
+        {
+            if (sellerUserId > 0)
+            {
+                poDetails = await PurchaseOrderService.GetPurchaseOrderDetailsAsync(poId, sellerUserId);
+                if (poDetails != null)
+                {
+                    showPODetails = true;
+                    StateHasChanged();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading PO details: {ex.Message}");
+        }
+    }
+
+    private void ClosePODetails()
+    {
+        showPODetails = false;
+        poDetails = null;
+    }
+
+    private async Task HandleCreatePO()
+    {
+        _createPOModel = new CreatePOModel();
+        _createPOModel.Items.Add(new CreatePOItemModel());
+        _createPOEditContext = new EditContext(_createPOModel);
+        
+        // Ensure suppliers and variants are loaded
+        if (availableSuppliers.Count == 0)
+        {
+            await LoadSuppliersAsync();
+        }
+        if (availableVariants.Count == 0)
+        {
+            await LoadVariantsAsync();
+        }
+        
+        showCreatePOModal = true;
+        StateHasChanged();
+    }
+
+    private async Task HandleStatusChange(int poId, string newStatus)
+    {
+        if (sellerUserId > 0)
+        {
+            var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to change the status to {newStatus}?");
+            if (confirmed)
+            {
+                try
+                {
+                    await JSRuntime.InvokeVoidAsync("console.log", $"Attempting to update PO {poId} to status '{newStatus}' with sellerUserId: {sellerUserId}");
+                    var result = await PurchaseOrderService.UpdatePurchaseOrderStatusAsync(poId, newStatus, sellerUserId);
+                    if (result)
+                    {
+                        await JSRuntime.InvokeVoidAsync("console.log", $"Successfully updated PO {poId} to status '{newStatus}'");
+                        await JSRuntime.InvokeVoidAsync("alert", $"Purchase order status updated to {newStatus}!");
+                        await LoadPurchaseOrdersAsync();
+                    }
+                    else
+                    {
+                        await JSRuntime.InvokeVoidAsync("console.error", $"UpdatePurchaseOrderStatusAsync returned false for PO {poId}, status '{newStatus}', sellerUserId: {sellerUserId}");
+                        await JSRuntime.InvokeVoidAsync("alert", "Failed to update purchase order status. Please check the browser console and Visual Studio Debug output for details.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    await JSRuntime.InvokeVoidAsync("console.error", $"Exception in HandleStatusChange: {ex.Message}");
+                    await JSRuntime.InvokeVoidAsync("console.error", $"Stack trace: {ex.StackTrace}");
+                    if (ex.InnerException != null)
+                    {
+                        await JSRuntime.InvokeVoidAsync("console.error", $"Inner exception: {ex.InnerException.Message}");
+                    }
+                    await JSRuntime.InvokeVoidAsync("alert", $"Error updating purchase order status: {ex.Message}");
+                }
+            }
+        }
+    }
+
+    private void NavigateToCancelled()
+    {
+        Nav.NavigateTo("/stockclerk/Cancelled_Purchase_Orders");
+    }
+
+    private void NavigateToCompleted()
+    {
+        Nav.NavigateTo("/stockclerk/Completed_Purchase_Orders");
+    }
+
+    private bool IsOverdue(DateTime expectedDate, string status)
+    {
+        // Only show overdue if status is not Completed or Cancelled
+        if (status == "Completed" || status == "Cancelled")
+            return false;
+        
+        return expectedDate.Date < DateTime.Today;
+    }
+
+    private void ShowUpdateDateModal(int poId)
+    {
+        _updatingPOId = poId;
+        _updateDateModel = new UpdateDateModel
+        {
+            ExpectedDeliveryDate = poDetails?.ExpectedDeliveryDate
+        };
+        showUpdateDateModal = true;
+    }
+
+    private void CloseUpdateDateModal()
+    {
+        showUpdateDateModal = false;
+        _updatingPOId = null;
+        _updateDateModel = new UpdateDateModel();
+    }
+
+    private async Task UpdateExpectedDateAsync()
+    {
+        if (_updatingPOId.HasValue && sellerUserId > 0)
+        {
+            var result = await PurchaseOrderService.UpdatePurchaseOrderExpectedDateAsync(_updatingPOId.Value, _updateDateModel.ExpectedDeliveryDate, sellerUserId);
+            if (result)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Expected delivery date updated successfully!");
+                CloseUpdateDateModal();
+                // Reload PO details if modal is open
+                if (showPODetails && poDetails != null)
+                {
+                    poDetails = await PurchaseOrderService.GetPurchaseOrderDetailsAsync(_updatingPOId.Value, sellerUserId);
+                }
+                await LoadPurchaseOrdersAsync();
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Failed to update expected delivery date.");
+            }
+        }
+    }
+
+    private string GetStatusClass(string status)
+    {
+        return status switch
+        {
+            "Pending" => "pending",
+            "Approved" => "approved",
+            "Cancelled" => "cancelled",
+            "Completed" => "completed",
+            _ => "inactive"
+        };
+    }
+
+    private bool IsSeller()
+    {
+        return AuthState.CurrentUser?.Role?.ToLowerInvariant() == "seller";
+    }
+
+    private bool IsStockClerk()
+    {
+        return AuthState.CurrentUser?.Role?.ToLowerInvariant() == "stockclerk";
+    }
+
+    private void CloseCreatePOModal()
+    {
+        showCreatePOModal = false;
+        _createPOModel = new CreatePOModel();
+        _createPOEditContext = new EditContext(_createPOModel);
+        itemVariantDetails.Clear();
+    }
+
+    private void AddPOItem()
+    {
+        _createPOModel.Items.Add(new CreatePOItemModel());
+        StateHasChanged();
+    }
+
+    private void RemovePOItem(int index)
+    {
+        if (_createPOModel.Items.Count > 1)
+        {
+            _createPOModel.Items.RemoveAt(index);
+            itemVariantDetails.Remove(index);
+            // Reindex remaining items
+            var keys = itemVariantDetails.Keys.Where(k => k > index).OrderBy(k => k).ToList();
+            var newDict = new Dictionary<int, IT13_Final.Services.Data.VariantDetailsModel?>();
+            foreach (var kvp in itemVariantDetails.Where(kvp => kvp.Key < index))
+            {
+                newDict[kvp.Key] = kvp.Value;
+            }
+            foreach (var key in keys)
+            {
+                newDict[key - 1] = itemVariantDetails[key];
+            }
+            itemVariantDetails = newDict;
+            CalculateTotalAmount();
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnItemVariantSelected(int itemIndex)
+    {
+        var item = _createPOModel.Items[itemIndex];
+        if (item.VariantId > 0 && sellerUserId > 0)
+        {
+            try
+            {
+                itemVariantDetails[itemIndex] = await VariantService.GetVariantDetailsAsync(item.VariantId, sellerUserId);
+                // Reset size and color when variant changes
+                item.SizeId = null;
+                item.ColorId = null;
+                // Set default unit price to variant price
+                if (itemVariantDetails[itemIndex] != null)
+                {
+                    item.UnitPrice = itemVariantDetails[itemIndex].Price;
+                }
+                CalculateTotalAmount();
+            }
+            catch (Exception ex)
+            {
+                itemVariantDetails[itemIndex] = null;
+                await JSRuntime.InvokeVoidAsync("console.error", $"Error loading variant details: {ex.Message}");
+            }
+        }
+        else
+        {
+            itemVariantDetails[itemIndex] = null;
+            item.SizeId = null;
+            item.ColorId = null;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private decimal CalculateTotalAmount()
+    {
+        return _createPOModel.Items.Sum(item => item.Quantity * item.UnitPrice);
+    }
+
+    private async Task SavePurchaseOrderAsync()
+    {
+        try
+        {
+            // Validate supplier is selected
+            if (_createPOModel.SupplierId == 0)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Please select a supplier.");
+                return;
+            }
+
+            if (sellerUserId <= 0)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Seller user ID not loaded. Please refresh the page.");
+                return;
+            }
+
+            if (_createPOModel.Items.Count == 0)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Please add at least one item to the purchase order.");
+                return;
+            }
+
+            // Validate items
+            var invalidItems = _createPOModel.Items.Where(item => item.VariantId == 0 || item.Quantity <= 0 || item.UnitPrice <= 0).ToList();
+            if (invalidItems.Count > 0)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Please ensure all items have a variant, quantity > 0, and unit price > 0.");
+                return;
+            }
+
+            if (AuthState.CurrentUser == null)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "User not authenticated.");
+                return;
+            }
+
+            var createModel = new IT13_Final.Services.Data.CreatePOModel
+            {
+                SupplierId = _createPOModel.SupplierId,
+                Notes = _createPOModel.Notes,
+                ExpectedDeliveryDate = _createPOModel.ExpectedDeliveryDate,
+                Items = _createPOModel.Items.Select(item => new IT13_Final.Services.Data.CreatePOItemModel
+                {
+                    VariantId = item.VariantId,
+                    SizeId = item.SizeId == 0 || item.SizeId == null ? null : item.SizeId,
+                    ColorId = item.ColorId == 0 || item.ColorId == null ? null : item.ColorId,
+                    Quantity = item.Quantity,
+                    UnitPrice = item.UnitPrice
+                }).ToList()
+            };
+
+            await JSRuntime.InvokeVoidAsync("console.log", $"Creating PO with sellerUserId: {sellerUserId}, createdByUserId: {AuthState.CurrentUser.Id}, supplierId: {createModel.SupplierId}, items: {createModel.Items.Count}");
+
+            var poId = await PurchaseOrderService.CreatePurchaseOrderAsync(sellerUserId, AuthState.CurrentUser.Id, createModel);
+            if (poId.HasValue)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Purchase order created successfully!");
+                CloseCreatePOModal();
+                await LoadPurchaseOrdersAsync();
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Failed to create purchase order. The supplier may not belong to your account, or there was a database error. Please check the console for details.");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error creating purchase order: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("console.error", $"Stack trace: {ex.StackTrace}");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error creating purchase order: {ex.Message}\n\nCheck the browser console for more details.");
+        }
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+    }
+}
+

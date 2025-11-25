@@ -1,6 +1,7 @@
-﻿@page "/seller/Archive_Category_Record"
+@page "/seller/Archive_Category_Record"
 @layout IT13_Final.Components.Layout.Seller.Seller
 @inject IT13_Final.Services.Data.ICategoryService CategoryService
+@inject IT13_Final.Services.Auth.AuthState AuthState
 @inject IJSRuntime JSRuntime
 @inject NavigationManager Nav
 @implements IDisposable
@@ -210,8 +211,9 @@
 
         try
         {
-            totalCount = await CategoryService.GetArchivedCategoriesCountAsync(searchTerm);
-            archivedCategories = await CategoryService.GetArchivedCategoriesAsync(searchTerm, currentPage, pageSize);
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            totalCount = await CategoryService.GetArchivedCategoriesCountAsync(userId, searchTerm);
+            archivedCategories = await CategoryService.GetArchivedCategoriesAsync(userId, searchTerm, currentPage, pageSize);
         }
         catch (Exception)
         {
@@ -273,7 +275,8 @@
         
         try
         {
-            var success = await CategoryService.RestoreCategoryAsync(categoryId);
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            var success = await CategoryService.RestoreCategoryAsync(categoryId, userId);
             
             if (success)
             {
@@ -308,7 +311,8 @@
 
         try
         {
-            categoryDetails = await CategoryService.GetArchivedCategoryDetailsAsync(categoryId);
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            categoryDetails = await CategoryService.GetArchivedCategoryDetailsAsync(categoryId, userId);
         }
         catch
         {
@@ -333,4 +337,5 @@
         _successBannerTimer?.Dispose();
     }
 }
+
 

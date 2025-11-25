@@ -1,6 +1,7 @@
 @page "/seller/Archive_Size_Record"
 @layout IT13_Final.Components.Layout.Seller.Seller
 @inject IT13_Final.Services.Data.ISizeService SizeService
+@inject IT13_Final.Services.Auth.AuthState AuthState
 @inject IJSRuntime JSRuntime
 @inject NavigationManager Nav
 @implements IDisposable
@@ -210,8 +211,9 @@
 
         try
         {
-            totalCount = await SizeService.GetArchivedSizesCountAsync(searchTerm);
-            archivedSizes = await SizeService.GetArchivedSizesAsync(searchTerm, currentPage, pageSize);
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            totalCount = await SizeService.GetArchivedSizesCountAsync(userId, searchTerm);
+            archivedSizes = await SizeService.GetArchivedSizesAsync(userId, searchTerm, currentPage, pageSize);
         }
         catch (Exception)
         {
@@ -273,7 +275,8 @@
         
         try
         {
-            var success = await SizeService.RestoreSizeAsync(sizeId);
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            var success = await SizeService.RestoreSizeAsync(sizeId, userId);
             
             if (success)
             {
@@ -308,7 +311,8 @@
 
         try
         {
-            sizeDetails = await SizeService.GetArchivedSizeDetailsAsync(sizeId);
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            sizeDetails = await SizeService.GetArchivedSizeDetailsAsync(sizeId, userId);
         }
         catch
         {
@@ -333,4 +337,5 @@
         _successBannerTimer?.Dispose();
     }
 }
+
 

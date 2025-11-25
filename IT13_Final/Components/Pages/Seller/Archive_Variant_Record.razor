@@ -1,6 +1,7 @@
 @page "/seller/Archive_Variant_Record"
 @layout IT13_Final.Components.Layout.Seller.Seller
 @inject IT13_Final.Services.Data.IVariantService VariantService
+@inject IT13_Final.Services.Auth.AuthState AuthState
 @inject IJSRuntime JSRuntime
 @inject NavigationManager Nav
 @implements IDisposable
@@ -245,8 +246,9 @@
 
         try
         {
-            totalCount = await VariantService.GetArchivedVariantsCountAsync(searchTerm);
-            archivedVariants = await VariantService.GetArchivedVariantsAsync(searchTerm, currentPage, pageSize);
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            totalCount = await VariantService.GetArchivedVariantsCountAsync(userId, searchTerm);
+            archivedVariants = await VariantService.GetArchivedVariantsAsync(userId, searchTerm, currentPage, pageSize);
         }
         catch (Exception)
         {
@@ -312,7 +314,8 @@
         {
             try
             {
-                var success = await VariantService.RestoreVariantAsync(variantId);
+                var userId = AuthState.CurrentUser?.Id ?? 0;
+                var success = await VariantService.RestoreVariantAsync(variantId, userId);
                 if (success)
                 {
                     ShowSuccessMessage("Variant restored successfully!");
@@ -337,7 +340,8 @@
 
         try
         {
-            variantDetails = await VariantService.GetArchivedVariantDetailsAsync(variantId);
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            variantDetails = await VariantService.GetArchivedVariantDetailsAsync(variantId, userId);
             if (variantDetails != null)
             {
                 // Set first color as default if available
@@ -395,4 +399,5 @@
         _successBannerTimer?.Dispose();
     }
 }
+
 

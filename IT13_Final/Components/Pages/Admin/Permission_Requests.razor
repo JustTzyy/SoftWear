@@ -2,6 +2,7 @@
 @layout IT13_Final.Components.Layout.Admin.Admin
 @inject IT13_Final.Services.Data.IUserService UserService
 @inject IT13_Final.Services.Data.IAddressService AddressService
+@inject IT13_Final.Services.Auth.AuthState AuthState
 @inject IJSRuntime JSRuntime
 @inject NavigationManager Nav
 @using System.Linq
@@ -350,8 +351,9 @@
 
         try
         {
-            totalCount = await UserService.GetPermissionRequestsCountAsync(searchTerm);
-            permissionRequests = await UserService.GetPermissionRequestsAsync(searchTerm, currentPage, pageSize);
+            var adminId = AuthState.CurrentUser?.Id ?? 0;
+            totalCount = await UserService.GetPermissionRequestsCountAsync(adminId, searchTerm);
+            permissionRequests = await UserService.GetPermissionRequestsAsync(adminId, searchTerm, currentPage, pageSize);
         }
         catch (Exception)
         {

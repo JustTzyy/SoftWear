@@ -53,17 +53,17 @@ namespace IT13_Final.Services.Data
 
     public interface IVariantService
     {
-        Task<List<VariantModel>> GetVariantsAsync(string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
-        Task<int> GetVariantsCountAsync(string? searchTerm = null, CancellationToken ct = default);
-        Task<VariantDetailsModel?> GetVariantDetailsAsync(int variantId, CancellationToken ct = default);
-        Task<int?> CreateVariantAsync(string name, decimal price, decimal? costPrice, int productId, List<int> sizeIds, List<int> colorIds, CancellationToken ct = default);
-        Task<bool> UpdateVariantAsync(int variantId, string name, decimal price, decimal? costPrice, int productId, List<int> sizeIds, List<int> colorIds, CancellationToken ct = default);
-        Task<bool> ArchiveVariantAsync(int variantId, CancellationToken ct = default);
-        Task<List<ArchivedVariantModel>> GetArchivedVariantsAsync(string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
-        Task<int> GetArchivedVariantsCountAsync(string? searchTerm = null, CancellationToken ct = default);
-        Task<bool> RestoreVariantAsync(int variantId, CancellationToken ct = default);
-        Task<VariantDetailsModel?> GetArchivedVariantDetailsAsync(int variantId, CancellationToken ct = default);
-        Task<List<ProductOption>> GetActiveProductsAsync(CancellationToken ct = default);
+        Task<List<VariantModel>> GetVariantsAsync(int userId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
+        Task<int> GetVariantsCountAsync(int userId, string? searchTerm = null, CancellationToken ct = default);
+        Task<VariantDetailsModel?> GetVariantDetailsAsync(int variantId, int userId, CancellationToken ct = default);
+        Task<int?> CreateVariantAsync(int userId, string name, decimal price, decimal? costPrice, int productId, List<int> sizeIds, List<int> colorIds, CancellationToken ct = default);
+        Task<bool> UpdateVariantAsync(int variantId, int userId, string name, decimal price, decimal? costPrice, int productId, List<int> sizeIds, List<int> colorIds, CancellationToken ct = default);
+        Task<bool> ArchiveVariantAsync(int variantId, int userId, CancellationToken ct = default);
+        Task<List<ArchivedVariantModel>> GetArchivedVariantsAsync(int userId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
+        Task<int> GetArchivedVariantsCountAsync(int userId, string? searchTerm = null, CancellationToken ct = default);
+        Task<bool> RestoreVariantAsync(int variantId, int userId, CancellationToken ct = default);
+        Task<VariantDetailsModel?> GetArchivedVariantDetailsAsync(int variantId, int userId, CancellationToken ct = default);
+        Task<List<ProductOption>> GetActiveProductsAsync(int userId, CancellationToken ct = default);
     }
 
     public class VariantService : IVariantService
@@ -71,7 +71,7 @@ namespace IT13_Final.Services.Data
         private readonly string _connectionString =
             "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
 
-        public async Task<List<VariantModel>> GetVariantsAsync(string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
+        public async Task<List<VariantModel>> GetVariantsAsync(int userId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
         {
             var variants = new List<VariantModel>();
             using var conn = new SqlConnection(_connectionString);
@@ -82,7 +82,7 @@ namespace IT13_Final.Services.Data
                        v.created_at
                 FROM dbo.tbl_variants v
                 INNER JOIN dbo.tbl_products p ON v.product_id = p.id
-                WHERE v.archived_at IS NULL";
+                WHERE v.archived_at IS NULL AND v.user_id = @UserId";
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -92,6 +92,7 @@ namespace IT13_Final.Services.Data
             sql += " ORDER BY v.created_at DESC OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
@@ -148,7 +149,7 @@ namespace IT13_Final.Services.Data
                 SELECT s.name
                 FROM dbo.tbl_variant_sizes vs
                 INNER JOIN dbo.tbl_sizes s ON vs.size_id = s.id
-                WHERE vs.variant_id = @VariantId
+                WHERE vs.variant_id = @VariantId AND s.archived_at IS NULL
                 ORDER BY s.name";
 
             using var cmd = new SqlCommand(sql, conn);
@@ -170,7 +171,7 @@ namespace IT13_Final.Services.Data
                 SELECT c.name
                 FROM dbo.tbl_variant_colors vc
                 INNER JOIN dbo.tbl_colors c ON vc.color_id = c.id
-                WHERE vc.variant_id = @VariantId
+                WHERE vc.variant_id = @VariantId AND c.archived_at IS NULL
                 ORDER BY c.name";
 
             using var cmd = new SqlCommand(sql, conn);
@@ -185,7 +186,7 @@ namespace IT13_Final.Services.Data
             return colors;
         }
 
-        public async Task<int> GetVariantsCountAsync(string? searchTerm = null, CancellationToken ct = default)
+        public async Task<int> GetVariantsCountAsync(int userId, string? searchTerm = null, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -194,7 +195,7 @@ namespace IT13_Final.Services.Data
                 SELECT COUNT(*) 
                 FROM dbo.tbl_variants v
                 INNER JOIN dbo.tbl_products p ON v.product_id = p.id
-                WHERE v.archived_at IS NULL";
+                WHERE v.archived_at IS NULL AND v.user_id = @UserId";
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -202,6 +203,7 @@ namespace IT13_Final.Services.Data
             }
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
@@ -210,7 +212,7 @@ namespace IT13_Final.Services.Data
             return (int)await cmd.ExecuteScalarAsync(ct);
         }
 
-        public async Task<VariantDetailsModel?> GetVariantDetailsAsync(int variantId, CancellationToken ct = default)
+        public async Task<VariantDetailsModel?> GetVariantDetailsAsync(int variantId, int userId, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -220,9 +222,10 @@ namespace IT13_Final.Services.Data
                        p.image, p.image_content_type, v.created_at
                 FROM dbo.tbl_variants v
                 INNER JOIN dbo.tbl_products p ON v.product_id = p.id
-                WHERE v.id = @VariantId AND v.archived_at IS NULL";
+                WHERE v.id = @VariantId AND v.user_id = @UserId AND v.archived_at IS NULL";
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             cmd.Parameters.AddWithValue("@VariantId", variantId);
 
             using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -249,12 +252,12 @@ namespace IT13_Final.Services.Data
 
                 reader.Close();
 
-                // Load size IDs and names
+                // Load size IDs and names (only active sizes)
                 var sizeSql = @"
                     SELECT vs.size_id, s.name
                     FROM dbo.tbl_variant_sizes vs
                     INNER JOIN dbo.tbl_sizes s ON vs.size_id = s.id
-                    WHERE vs.variant_id = @VariantId
+                    WHERE vs.variant_id = @VariantId AND s.archived_at IS NULL
                     ORDER BY s.name";
 
                 using var sizeCmd = new SqlCommand(sizeSql, conn);
@@ -267,12 +270,12 @@ namespace IT13_Final.Services.Data
                 }
                 sizeReader.Close();
 
-                // Load color IDs, names, and hex values
+                // Load color IDs, names, and hex values (only active colors)
                 var colorSql = @"
                     SELECT vc.color_id, c.name, c.hex_value
                     FROM dbo.tbl_variant_colors vc
                     INNER JOIN dbo.tbl_colors c ON vc.color_id = c.id
-                    WHERE vc.variant_id = @VariantId
+                    WHERE vc.variant_id = @VariantId AND c.archived_at IS NULL
                     ORDER BY c.name";
 
                 using var colorCmd = new SqlCommand(colorSql, conn);
@@ -290,7 +293,7 @@ namespace IT13_Final.Services.Data
             return null;
         }
 
-        public async Task<int?> CreateVariantAsync(string name, decimal price, decimal? costPrice, int productId, List<int> sizeIds, List<int> colorIds, CancellationToken ct = default)
+        public async Task<int?> CreateVariantAsync(int userId, string name, decimal price, decimal? costPrice, int productId, List<int> sizeIds, List<int> colorIds, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -300,11 +303,12 @@ namespace IT13_Final.Services.Data
             {
                 // Insert variant
                 var sql = @"
-                    INSERT INTO dbo.tbl_variants (name, price, cost_price, product_id, created_at)
-                    VALUES (@Name, @Price, @CostPrice, @ProductId, SYSUTCDATETIME());
+                    INSERT INTO dbo.tbl_variants (user_id, name, price, cost_price, product_id, created_at)
+                    VALUES (@UserId, @Name, @Price, @CostPrice, @ProductId, SYSUTCDATETIME());
                     SELECT CAST(SCOPE_IDENTITY() as int);";
 
                 using var cmd = new SqlCommand(sql, conn, transaction);
+                cmd.Parameters.AddWithValue("@UserId", userId);
                 cmd.Parameters.AddWithValue("@Name", name);
                 cmd.Parameters.AddWithValue("@Price", price);
                 cmd.Parameters.AddWithValue("@CostPrice", (object?)costPrice ?? DBNull.Value);
@@ -361,7 +365,7 @@ namespace IT13_Final.Services.Data
             }
         }
 
-        public async Task<bool> UpdateVariantAsync(int variantId, string name, decimal price, decimal? costPrice, int productId, List<int> sizeIds, List<int> colorIds, CancellationToken ct = default)
+        public async Task<bool> UpdateVariantAsync(int variantId, int userId, string name, decimal price, decimal? costPrice, int productId, List<int> sizeIds, List<int> colorIds, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -447,7 +451,7 @@ namespace IT13_Final.Services.Data
             }
         }
 
-        public async Task<bool> ArchiveVariantAsync(int variantId, CancellationToken ct = default)
+        public async Task<bool> ArchiveVariantAsync(int variantId, int userId, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -459,13 +463,14 @@ namespace IT13_Final.Services.Data
                 WHERE id = @VariantId AND archived_at IS NULL";
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             cmd.Parameters.AddWithValue("@VariantId", variantId);
 
             var rowsAffected = await cmd.ExecuteNonQueryAsync(ct);
             return rowsAffected > 0;
         }
 
-        public async Task<List<ArchivedVariantModel>> GetArchivedVariantsAsync(string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
+        public async Task<List<ArchivedVariantModel>> GetArchivedVariantsAsync(int userId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
         {
             var variants = new List<ArchivedVariantModel>();
             using var conn = new SqlConnection(_connectionString);
@@ -475,7 +480,7 @@ namespace IT13_Final.Services.Data
                 SELECT v.id, v.name, v.price, p.name as product_name, v.archived_at
                 FROM dbo.tbl_variants v
                 INNER JOIN dbo.tbl_products p ON v.product_id = p.id
-                WHERE v.archived_at IS NOT NULL";
+                WHERE v.archived_at IS NOT NULL AND v.user_id = @UserId";
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -485,6 +490,7 @@ namespace IT13_Final.Services.Data
             sql += " ORDER BY v.archived_at DESC OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
@@ -508,7 +514,7 @@ namespace IT13_Final.Services.Data
             return variants;
         }
 
-        public async Task<int> GetArchivedVariantsCountAsync(string? searchTerm = null, CancellationToken ct = default)
+        public async Task<int> GetArchivedVariantsCountAsync(int userId, string? searchTerm = null, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -517,7 +523,7 @@ namespace IT13_Final.Services.Data
                 SELECT COUNT(*) 
                 FROM dbo.tbl_variants v
                 INNER JOIN dbo.tbl_products p ON v.product_id = p.id
-                WHERE v.archived_at IS NOT NULL";
+                WHERE v.archived_at IS NOT NULL AND v.user_id = @UserId";
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -525,6 +531,7 @@ namespace IT13_Final.Services.Data
             }
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
@@ -533,7 +540,7 @@ namespace IT13_Final.Services.Data
             return (int)await cmd.ExecuteScalarAsync(ct);
         }
 
-        public async Task<bool> RestoreVariantAsync(int variantId, CancellationToken ct = default)
+        public async Task<bool> RestoreVariantAsync(int variantId, int userId, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -545,13 +552,14 @@ namespace IT13_Final.Services.Data
                 WHERE id = @VariantId AND archived_at IS NOT NULL";
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             cmd.Parameters.AddWithValue("@VariantId", variantId);
 
             var rowsAffected = await cmd.ExecuteNonQueryAsync(ct);
             return rowsAffected > 0;
         }
 
-        public async Task<VariantDetailsModel?> GetArchivedVariantDetailsAsync(int variantId, CancellationToken ct = default)
+        public async Task<VariantDetailsModel?> GetArchivedVariantDetailsAsync(int variantId, int userId, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -561,9 +569,10 @@ namespace IT13_Final.Services.Data
                        p.image, p.image_content_type, v.created_at
                 FROM dbo.tbl_variants v
                 INNER JOIN dbo.tbl_products p ON v.product_id = p.id
-                WHERE v.id = @VariantId AND v.archived_at IS NOT NULL";
+                WHERE v.id = @VariantId AND v.user_id = @UserId AND v.archived_at IS NOT NULL";
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             cmd.Parameters.AddWithValue("@VariantId", variantId);
 
             using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -590,12 +599,12 @@ namespace IT13_Final.Services.Data
 
                 reader.Close();
 
-                // Load size IDs and names
+                // Load size IDs and names (only active sizes)
                 var sizeSql = @"
                     SELECT vs.size_id, s.name
                     FROM dbo.tbl_variant_sizes vs
                     INNER JOIN dbo.tbl_sizes s ON vs.size_id = s.id
-                    WHERE vs.variant_id = @VariantId
+                    WHERE vs.variant_id = @VariantId AND s.archived_at IS NULL
                     ORDER BY s.name";
 
                 using var sizeCmd = new SqlCommand(sizeSql, conn);
@@ -608,12 +617,12 @@ namespace IT13_Final.Services.Data
                 }
                 sizeReader.Close();
 
-                // Load color IDs, names, and hex values
+                // Load color IDs, names, and hex values (only active colors)
                 var colorSql = @"
                     SELECT vc.color_id, c.name, c.hex_value
                     FROM dbo.tbl_variant_colors vc
                     INNER JOIN dbo.tbl_colors c ON vc.color_id = c.id
-                    WHERE vc.variant_id = @VariantId
+                    WHERE vc.variant_id = @VariantId AND c.archived_at IS NULL
                     ORDER BY c.name";
 
                 using var colorCmd = new SqlCommand(colorSql, conn);
@@ -631,7 +640,7 @@ namespace IT13_Final.Services.Data
             return null;
         }
 
-        public async Task<List<ProductOption>> GetActiveProductsAsync(CancellationToken ct = default)
+        public async Task<List<ProductOption>> GetActiveProductsAsync(int userId, CancellationToken ct = default)
         {
             var products = new List<ProductOption>();
             using var conn = new SqlConnection(_connectionString);
@@ -640,10 +649,11 @@ namespace IT13_Final.Services.Data
             var sql = @"
                 SELECT id, name, image, image_content_type
                 FROM dbo.tbl_products 
-                WHERE archived_at IS NULL 
+                WHERE archived_at IS NULL AND user_id = @UserId
                 ORDER BY name";
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             using var reader = await cmd.ExecuteReaderAsync(ct);
 
             while (await reader.ReadAsync(ct))
@@ -668,4 +678,5 @@ namespace IT13_Final.Services.Data
         }
     }
 }
+
 

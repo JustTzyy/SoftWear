@@ -142,6 +142,1123 @@
             }
         };
 
+        // Function to generate and print sales report PDF
+        window.generateAndPrintSalesReport = function(sales, userName, fromDate, toDate) {
+            try {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                
+                // Header
+                doc.setFontSize(18);
+                doc.setTextColor(40, 40, 40);
+                doc.text('Sales Report', 14, 20);
+                
+                // User and Date Range Info
+                doc.setFontSize(10);
+                doc.setTextColor(100, 100, 100);
+                doc.text(`Cashier: ${userName}`, 14, 30);
+                doc.text(`Date Range: ${fromDate} - ${toDate}`, 14, 36);
+                doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 42);
+                
+                // Table Data
+                const tableData = sales.map(sale => [
+                    sale.saleNumber || '',
+                    '₱' + parseFloat(sale.amount || 0).toFixed(2),
+                    sale.paymentMethod || '',
+                    `${sale.date || ''} ${sale.time || ''}`
+                ]);
+                
+                // Calculate total
+                const totalAmount = sales.reduce((sum, sale) => sum + parseFloat(sale.amount || 0), 0);
+                
+                // Create table
+                doc.autoTable({
+                    startY: 48,
+                    head: [['Sale Number', 'Amount', 'Payment Method', 'Date']],
+                    body: tableData,
+                    theme: 'striped',
+                    headStyles: {
+                        fillColor: [162, 185, 205],
+                        textColor: [45, 45, 45],
+                        fontStyle: 'bold'
+                    },
+                    styles: {
+                        fontSize: 8,
+                        cellPadding: 3
+                    },
+                    columnStyles: {
+                        0: { cellWidth: 50 },
+                        1: { cellWidth: 35 },
+                        2: { cellWidth: 40 },
+                        3: { cellWidth: 60 }
+                    },
+                    foot: [['Total', '₱' + totalAmount.toFixed(2), '', '']],
+                    footStyles: {
+                        fillColor: [162, 185, 205],
+                        textColor: [45, 45, 45],
+                        fontStyle: 'bold'
+                    }
+                });
+                
+                // Footer
+                const pageCount = doc.internal.getNumberOfPages();
+                for (let i = 1; i <= pageCount; i++) {
+                    doc.setPage(i);
+                    doc.setFontSize(8);
+                    doc.setTextColor(150, 150, 150);
+                    doc.text(
+                        `Page ${i} of ${pageCount}`,
+                        doc.internal.pageSize.getWidth() / 2,
+                        doc.internal.pageSize.getHeight() - 10,
+                        { align: 'center' }
+                    );
+                }
+                
+                // Generate PDF blob
+                const pdfBlob = doc.output('blob');
+                
+                // Download PDF
+                doc.save('Sales_Report.pdf');
+                
+                // Open PDF in new window for printing
+                const pdfUrl = URL.createObjectURL(pdfBlob);
+                const printWindow = window.open(pdfUrl);
+                
+                if (printWindow) {
+                    // Wait for PDF to load, then trigger print
+                    setTimeout(() => {
+                        printWindow.focus();
+                        printWindow.print();
+                        // Clean up the object URL after printing
+                        setTimeout(() => {
+                            URL.revokeObjectURL(pdfUrl);
+                        }, 1000);
+                    }, 1000);
+                } else {
+                    // If popup blocked, try alternative method
+                    const link = document.createElement('a');
+                    link.href = pdfUrl;
+                    link.target = '_blank';
+                    link.click();
+                }
+            } catch (error) {
+                console.error('Error generating PDF:', error);
+                // Fallback to regular print
+                window.print();
+            }
+        };
+
+        // Function to generate and print returns report PDF
+        // Function to generate and print dashboard PDF
+        window.generateAndPrintDashboard = function(dashboardData, userName, fromDate, toDate) {
+            try {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                let yPos = 20;
+
+                // Header
+                doc.setFontSize(20);
+                doc.setTextColor(48, 77, 109); // YInMn Blue
+                doc.text('Dashboard Report', 14, yPos);
+                yPos += 10;
+
+                // User and Date Range Info
+                doc.setFontSize(10);
+                doc.setTextColor(100, 100, 100);
+                doc.text(`Cashier: ${userName}`, 14, yPos);
+                yPos += 6;
+                doc.text(`Date Range: ${fromDate} - ${toDate}`, 14, yPos);
+                yPos += 6;
+                doc.text(`Generated: ${new Date().toLocaleString()}`, 14, yPos);
+                yPos += 12;
+
+                // Summary Cards Section
+                doc.setFontSize(14);
+                doc.setTextColor(48, 77, 109);
+                doc.text('Summary Statistics', 14, yPos);
+                yPos += 8;
+
+                doc.setFontSize(9);
+                doc.setTextColor(45, 45, 45);
+                
+                // Create summary table
+                const summaryData = [
+                    ['Metric', 'Value'],
+                    ['Total Sales', dashboardData.stats.totalSales.toString()],
+                    ['Total Revenue', `₱${dashboardData.stats.totalRevenue.toFixed(2)}`],
+                    ['Total Returns', dashboardData.stats.totalReturns.toString()],
+                    ['Today\'s Sales', dashboardData.stats.todaySales.toString()],
+                    ['Today\'s Revenue', `₱${dashboardData.stats.todayRevenue.toFixed(2)}`],
+                    ['Today\'s Returns', dashboardData.stats.todayReturns.toString()],
+                    ['Net Sales', (dashboardData.stats.totalSales - dashboardData.stats.totalReturns).toString()],
+                    ['Avg Daily Revenue', `₱${(dashboardData.stats.totalRevenue / Math.max(1, dashboardData.days)).toFixed(2)}`]
+                ];
+
+                doc.autoTable({
+                    startY: yPos,
+                    head: [summaryData[0]],
+                    body: summaryData.slice(1),
+                    theme: 'striped',
+                    headStyles: {
+                        fillColor: [162, 185, 205], // light-blue-gray
+                        textColor: [48, 77, 109],
+                        fontStyle: 'bold'
+                    },
+                    styles: {
+                        fontSize: 9,
+                        cellPadding: 4,
+                        textColor: [45, 45, 45]
+                    },
+                    columnStyles: {
+                        0: { cellWidth: 60, fontStyle: 'bold' },
+                        1: { cellWidth: 40, halign: 'right' }
+                    }
+                });
+
+                yPos = doc.autoTable.previous.finalY + 12;
+
+                // Check if we need a new page
+                if (yPos > 250) {
+                    doc.addPage();
+                    yPos = 20;
+                }
+
+                // Sales Trend Data
+                if (dashboardData.salesData && dashboardData.salesData.length > 0) {
+                    doc.setFontSize(14);
+                    doc.setTextColor(48, 77, 109);
+                    doc.text('Sales Trend (Last ' + dashboardData.days + ' Days)', 14, yPos);
+                    yPos += 8;
+
+                    const salesTableData = dashboardData.salesData.map(item => [
+                        new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                        item.count.toString(),
+                        `₱${item.revenue.toFixed(2)}`
+                    ]);
+
+                    doc.autoTable({
+                        startY: yPos,
+                        head: [['Date', 'Sales Count', 'Revenue']],
+                        body: salesTableData,
+                        theme: 'striped',
+                        headStyles: {
+                            fillColor: [162, 185, 205],
+                            textColor: [48, 77, 109],
+                            fontStyle: 'bold'
+                        },
+                        styles: {
+                            fontSize: 8,
+                            cellPadding: 3,
+                            textColor: [45, 45, 45]
+                        },
+                        columnStyles: {
+                            0: { cellWidth: 50 },
+                            1: { cellWidth: 40, halign: 'center' },
+                            2: { cellWidth: 50, halign: 'right' }
+                        }
+                    });
+
+                    yPos = doc.autoTable.previous.finalY + 12;
+                }
+
+                // Check if we need a new page
+                if (yPos > 250) {
+                    doc.addPage();
+                    yPos = 20;
+                }
+
+                // Returns Trend Data
+                if (dashboardData.returnsData && dashboardData.returnsData.length > 0) {
+                    doc.setFontSize(14);
+                    doc.setTextColor(48, 77, 109);
+                    doc.text('Returns Trend (Last ' + dashboardData.days + ' Days)', 14, yPos);
+                    yPos += 8;
+
+                    const returnsTableData = dashboardData.returnsData
+                        .filter(item => item.count > 0)
+                        .map(item => [
+                            new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                            item.count.toString()
+                        ]);
+
+                    if (returnsTableData.length > 0) {
+                        doc.autoTable({
+                            startY: yPos,
+                            head: [['Date', 'Returns Count']],
+                            body: returnsTableData,
+                            theme: 'striped',
+                            headStyles: {
+                                fillColor: [162, 185, 205],
+                                textColor: [48, 77, 109],
+                                fontStyle: 'bold'
+                            },
+                            styles: {
+                                fontSize: 8,
+                                cellPadding: 3,
+                                textColor: [45, 45, 45]
+                            },
+                            columnStyles: {
+                                0: { cellWidth: 70 },
+                                1: { cellWidth: 70, halign: 'center' }
+                            }
+                        });
+
+                        yPos = doc.autoTable.previous.finalY + 12;
+                    } else {
+                        doc.setFontSize(9);
+                        doc.setTextColor(100, 100, 100);
+                        doc.text('No returns data available', 14, yPos);
+                        yPos += 10;
+                    }
+                }
+
+                // Check if we need a new page
+                if (yPos > 250) {
+                    doc.addPage();
+                    yPos = 20;
+                }
+
+                // Top Selling Products
+                if (dashboardData.topProducts && dashboardData.topProducts.length > 0) {
+                    doc.setFontSize(14);
+                    doc.setTextColor(48, 77, 109);
+                    doc.text('Top Selling Products', 14, yPos);
+                    yPos += 8;
+
+                    const productsTableData = dashboardData.topProducts.map((product, index) => [
+                        (index + 1).toString(),
+                        product.productName + ' - ' + product.variantName,
+                        product.totalQuantity.toString(),
+                        `₱${product.totalRevenue.toFixed(2)}`,
+                        product.saleCount.toString()
+                    ]);
+
+                    doc.autoTable({
+                        startY: yPos,
+                        head: [['Rank', 'Product', 'Qty Sold', 'Revenue', 'Sales']],
+                        body: productsTableData,
+                        theme: 'striped',
+                        headStyles: {
+                            fillColor: [162, 185, 205],
+                            textColor: [48, 77, 109],
+                            fontStyle: 'bold'
+                        },
+                        styles: {
+                            fontSize: 8,
+                            cellPadding: 3,
+                            textColor: [45, 45, 45]
+                        },
+                        columnStyles: {
+                            0: { cellWidth: 15, halign: 'center' },
+                            1: { cellWidth: 70 },
+                            2: { cellWidth: 25, halign: 'center' },
+                            3: { cellWidth: 35, halign: 'right' },
+                            4: { cellWidth: 25, halign: 'center' }
+                        }
+                    });
+
+                    yPos = doc.autoTable.previous.finalY + 12;
+                }
+
+                // Check if we need a new page
+                if (yPos > 250) {
+                    doc.addPage();
+                    yPos = 20;
+                }
+
+                // Payment Method Breakdown
+                if (dashboardData.paymentMethods && dashboardData.paymentMethods.length > 0) {
+                    doc.setFontSize(14);
+                    doc.setTextColor(48, 77, 109);
+                    doc.text('Payment Method Breakdown', 14, yPos);
+                    yPos += 8;
+
+                    const paymentTableData = dashboardData.paymentMethods.map(method => [
+                        method.paymentMethod,
+                        method.count.toString(),
+                        `₱${method.totalAmount.toFixed(2)}`,
+                        `${method.percentage.toFixed(1)}%`
+                    ]);
+
+                    doc.autoTable({
+                        startY: yPos,
+                        head: [['Method', 'Count', 'Total Amount', 'Percentage']],
+                        body: paymentTableData,
+                        theme: 'striped',
+                        headStyles: {
+                            fillColor: [162, 185, 205],
+                            textColor: [48, 77, 109],
+                            fontStyle: 'bold'
+                        },
+                        styles: {
+                            fontSize: 8,
+                            cellPadding: 3,
+                            textColor: [45, 45, 45]
+                        },
+                        columnStyles: {
+                            0: { cellWidth: 40 },
+                            1: { cellWidth: 30, halign: 'center' },
+                            2: { cellWidth: 40, halign: 'right' },
+                            3: { cellWidth: 30, halign: 'right' }
+                        }
+                    });
+
+                    yPos = doc.autoTable.previous.finalY + 12;
+                }
+
+                // Check if we need a new page
+                if (yPos > 250) {
+                    doc.addPage();
+                    yPos = 20;
+                }
+
+                // Recent Transactions
+                if (dashboardData.recentTransactions && dashboardData.recentTransactions.length > 0) {
+                    doc.setFontSize(14);
+                    doc.setTextColor(48, 77, 109);
+                    doc.text('Recent Transactions', 14, yPos);
+                    yPos += 8;
+
+                    const transactionsTableData = dashboardData.recentTransactions.map(trans => [
+                        trans.saleNumber,
+                        `₱${trans.amount.toFixed(2)}`,
+                        trans.paymentMethod,
+                        new Date(trans.timestamps).toLocaleString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric', 
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        })
+                    ]);
+
+                    doc.autoTable({
+                        startY: yPos,
+                        head: [['Sale Number', 'Amount', 'Payment Method', 'Date']],
+                        body: transactionsTableData,
+                        theme: 'striped',
+                        headStyles: {
+                            fillColor: [162, 185, 205],
+                            textColor: [48, 77, 109],
+                            fontStyle: 'bold'
+                        },
+                        styles: {
+                            fontSize: 8,
+                            cellPadding: 3,
+                            textColor: [45, 45, 45]
+                        },
+                        columnStyles: {
+                            0: { cellWidth: 50 },
+                            1: { cellWidth: 35, halign: 'right' },
+                            2: { cellWidth: 35 },
+                            3: { cellWidth: 60 }
+                        }
+                    });
+
+                    yPos = doc.autoTable.previous.finalY + 12;
+                }
+
+                // Performance Insights
+                if (dashboardData.averageTransactionValue > 0 || dashboardData.hourlySalesData) {
+                    doc.setFontSize(14);
+                    doc.setTextColor(48, 77, 109);
+                    doc.text('Performance Insights', 14, yPos);
+                    yPos += 8;
+
+                    const insights = [];
+                    if (dashboardData.averageTransactionValue > 0) {
+                        insights.push(['Average Transaction Value', `₱${dashboardData.averageTransactionValue.toFixed(2)}`]);
+                    }
+                    
+                    if (dashboardData.hourlySalesData && dashboardData.hourlySalesData.length > 0) {
+                        const bestHour = dashboardData.hourlySalesData.reduce((max, item) => 
+                            item.count > max.count ? item : max, dashboardData.hourlySalesData[0]);
+                        insights.push(['Best Sales Hour', `${bestHour.hour}:00 (${bestHour.count} sales)`]);
+                    }
+
+                    if (dashboardData.topProducts && dashboardData.topProducts.length > 0) {
+                        insights.push(['Top Product', dashboardData.topProducts[0].productName + ' - ' + dashboardData.topProducts[0].variantName]);
+                    }
+
+                    if (dashboardData.paymentMethods && dashboardData.paymentMethods.length > 0) {
+                        const preferred = dashboardData.paymentMethods.reduce((max, item) => 
+                            item.count > max.count ? item : max, dashboardData.paymentMethods[0]);
+                        insights.push(['Preferred Payment', preferred.paymentMethod]);
+                    }
+
+                    if (insights.length > 0) {
+                        doc.autoTable({
+                            startY: yPos,
+                            head: [['Metric', 'Value']],
+                            body: insights,
+                            theme: 'striped',
+                            headStyles: {
+                                fillColor: [162, 185, 205],
+                                textColor: [48, 77, 109],
+                                fontStyle: 'bold'
+                            },
+                            styles: {
+                                fontSize: 9,
+                                cellPadding: 4,
+                                textColor: [45, 45, 45]
+                            },
+                            columnStyles: {
+                                0: { cellWidth: 80, fontStyle: 'bold' },
+                                1: { cellWidth: 60 }
+                            }
+                        });
+                    }
+                }
+
+                // Footer
+                const pageCount = doc.internal.getNumberOfPages();
+                for (let i = 1; i <= pageCount; i++) {
+                    doc.setPage(i);
+                    doc.setFontSize(8);
+                    doc.setTextColor(150, 150, 150);
+                    doc.text(
+                        `Page ${i} of ${pageCount}`,
+                        doc.internal.pageSize.getWidth() / 2,
+                        doc.internal.pageSize.getHeight() - 10,
+                        { align: 'center' }
+                    );
+                }
+
+                // Generate PDF blob
+                const pdfBlob = doc.output('blob');
+
+                // Download PDF
+                doc.save('Dashboard_Report.pdf');
+
+                // Open PDF in new window for printing
+                const pdfUrl = URL.createObjectURL(pdfBlob);
+                const printWindow = window.open(pdfUrl);
+
+                if (printWindow) {
+                    // Wait for PDF to load, then trigger print
+                    setTimeout(() => {
+                        printWindow.focus();
+                        printWindow.print();
+                        // Clean up the object URL after printing
+                        setTimeout(() => {
+                            URL.revokeObjectURL(pdfUrl);
+                        }, 1000);
+                    }, 1000);
+                } else {
+                    // If popup blocked, try alternative method
+                    const link = document.createElement('a');
+                    link.href = pdfUrl;
+                    link.target = '_blank';
+                    link.click();
+                }
+            } catch (error) {
+                console.error('Error generating Dashboard PDF:', error);
+                alert('Error generating Dashboard PDF. Please try again.');
+            }
+        };
+
+        window.generateAndPrintReturnsReport = function(returns, userName, fromDate, toDate) {
+            try {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                
+                // Header
+                doc.setFontSize(18);
+                doc.setTextColor(40, 40, 40);
+                doc.text('Returns Report', 14, 20);
+                
+                // User and Date Range Info
+                doc.setFontSize(10);
+                doc.setTextColor(100, 100, 100);
+                doc.text(`Cashier: ${userName}`, 14, 30);
+                doc.text(`Date Range: ${fromDate} - ${toDate}`, 14, 36);
+                doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 42);
+                
+                // Table Data
+                const tableData = returns.map(returnItem => [
+                    returnItem.returnNumber || '',
+                    returnItem.saleNumber || '',
+                    returnItem.status || '',
+                    `${returnItem.date || ''} ${returnItem.time || ''}`
+                ]);
+                
+                // Create table
+                doc.autoTable({
+                    startY: 48,
+                    head: [['Return Number', 'Sale Number', 'Status', 'Date']],
+                    body: tableData,
+                    theme: 'striped',
+                    headStyles: {
+                        fillColor: [162, 185, 205],
+                        textColor: [45, 45, 45],
+                        fontStyle: 'bold'
+                    },
+                    styles: {
+                        fontSize: 8,
+                        cellPadding: 3
+                    },
+                    columnStyles: {
+                        0: { cellWidth: 50 },
+                        1: { cellWidth: 50 },
+                        2: { cellWidth: 35 },
+                        3: { cellWidth: 60 }
+                    }
+                });
+                
+                // Footer
+                const pageCount = doc.internal.getNumberOfPages();
+                for (let i = 1; i <= pageCount; i++) {
+                    doc.setPage(i);
+                    doc.setFontSize(8);
+                    doc.setTextColor(150, 150, 150);
+                    doc.text(
+                        `Page ${i} of ${pageCount}`,
+                        doc.internal.pageSize.getWidth() / 2,
+                        doc.internal.pageSize.getHeight() - 10,
+                        { align: 'center' }
+                    );
+                }
+                
+                // Generate PDF blob
+                const pdfBlob = doc.output('blob');
+                
+                // Download PDF
+                doc.save('Returns_Report.pdf');
+                
+                // Open PDF in new window for printing
+                const pdfUrl = URL.createObjectURL(pdfBlob);
+                const printWindow = window.open(pdfUrl);
+                
+                if (printWindow) {
+                    // Wait for PDF to load, then trigger print
+                    setTimeout(() => {
+                        printWindow.focus();
+                        printWindow.print();
+                        // Clean up the object URL after printing
+                        setTimeout(() => {
+                            URL.revokeObjectURL(pdfUrl);
+                        }, 1000);
+                    }, 1000);
+                } else {
+                    // If popup blocked, try alternative method
+                    const link = document.createElement('a');
+                    link.href = pdfUrl;
+                    link.target = '_blank';
+                    link.click();
+                }
+            } catch (error) {
+                console.error('Error generating PDF:', error);
+                // Fallback to regular print
+                window.print();
+            }
+        };
+
+        // Function to generate and print receipt (HTML-based)
+        window.printReceipt = function(receiptData) {
+            try {
+                // Build items HTML
+                let itemsHtml = '';
+                receiptData.items.forEach(item => {
+                    const details = [];
+                    if (item.sizeName) details.push(`Size: ${item.sizeName}`);
+                    if (item.colorName) details.push(`Color: ${item.colorName}`);
+                    
+                    const detailsHtml = details.length > 0 ? '<div class="item-details">' + details.join(', ') + '</div>' : '';
+                    itemsHtml += '<tr>' +
+                        '<td class="item-name">' +
+                        '<div>' + item.productName + ' - ' + item.variantName + '</div>' +
+                        detailsHtml +
+                        '</td>' +
+                        '<td class="item-qty">' + item.quantity + '</td>' +
+                        '<td class="item-price">₱' + item.subtotal.toFixed(2) + '</td>' +
+                        '</tr>';
+                });
+                
+                // Build payment info HTML
+                let paymentInfoHtml = '';
+                if (receiptData.paymentMethod === 'Cash' && receiptData.changeGiven > 0) {
+                    paymentInfoHtml += `<div class="receipt-row"><span>Change:</span><span>₱${receiptData.changeGiven.toFixed(2)}</span></div>`;
+                }
+                if (receiptData.paymentMethod === 'GCash' && receiptData.referenceNumber) {
+                    paymentInfoHtml += `<div class="receipt-row"><span>Ref #:</span><span>${receiptData.referenceNumber}</span></div>`;
+                }
+                
+                // Create HTML receipt
+                const receiptHtml = `
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <meta charset="UTF-8">
+                        <title>Receipt - ${receiptData.saleNumber}</title>
+                        <style>
+                            @media print {
+                                @page {
+                                    size: 80mm auto;
+                                    margin: 5mm;
+                                }
+                                body {
+                                    margin: 0;
+                                    padding: 0;
+                                }
+                                .no-print {
+                                    display: none;
+                                }
+                            }
+                            * {
+                                margin: 0;
+                                padding: 0;
+                                box-sizing: border-box;
+                            }
+                            body {
+                                font-family: 'Courier New', monospace;
+                                font-size: 12px;
+                                width: 70mm;
+                                margin: 0 auto;
+                                padding: 10px;
+                                background: white;
+                            }
+                            .receipt-header {
+                                text-align: center;
+                                margin-bottom: 15px;
+                            }
+                            .store-name {
+                                font-size: 18px;
+                                font-weight: bold;
+                                margin-bottom: 5px;
+                            }
+                            .thank-you {
+                                font-size: 10px;
+                                color: #666;
+                                margin-bottom: 10px;
+                            }
+                            .divider {
+                                border-top: 1px dashed #ccc;
+                                margin: 10px 0;
+                            }
+                            .receipt-info {
+                                margin-bottom: 10px;
+                                font-size: 11px;
+                            }
+                            .receipt-info div {
+                                margin: 3px 0;
+                            }
+                            .items-table {
+                                width: 100%;
+                                margin: 10px 0;
+                                border-collapse: collapse;
+                            }
+                            .items-table th {
+                                text-align: left;
+                                font-size: 10px;
+                                padding: 5px 0;
+                                border-bottom: 1px dashed #ccc;
+                            }
+                            .items-table td {
+                                padding: 5px 0;
+                                font-size: 10px;
+                            }
+                            .item-name {
+                                width: 60%;
+                            }
+                            .item-qty {
+                                width: 15%;
+                                text-align: center;
+                            }
+                            .item-price {
+                                width: 25%;
+                                text-align: right;
+                            }
+                            .item-details {
+                                font-size: 9px;
+                                color: #666;
+                                margin-top: 2px;
+                            }
+                            .receipt-total {
+                                margin: 10px 0;
+                                font-size: 12px;
+                                font-weight: bold;
+                                text-align: right;
+                            }
+                            .receipt-row {
+                                display: flex;
+                                justify-content: space-between;
+                                margin: 5px 0;
+                                font-size: 10px;
+                            }
+                            .receipt-footer {
+                                text-align: center;
+                                margin-top: 15px;
+                                font-size: 10px;
+                                color: #666;
+                            }
+                            .print-button {
+                                position: fixed;
+                                top: 10px;
+                                right: 10px;
+                                padding: 10px 20px;
+                                background: #304D6D;
+                                color: white;
+                                border: none;
+                                border-radius: 5px;
+                                cursor: pointer;
+                                font-size: 14px;
+                            }
+                            .print-button:hover {
+                                background: #1e3a52;
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        <button class="print-button no-print" onclick="window.print()">Print Receipt</button>
+                        
+                        <div class="receipt-header">
+                            <div class="store-name">SoftWear Store</div>
+                            <div class="thank-you">Thank you for your purchase!</div>
+                        </div>
+                        
+                        <div class="divider"></div>
+                        
+                        <div class="receipt-info">
+                            <div><strong>Sale #:</strong> ${receiptData.saleNumber}</div>
+                            <div><strong>Date:</strong> ${receiptData.dateTime}</div>
+                            <div><strong>Cashier:</strong> ${receiptData.cashierName}</div>
+                        </div>
+                        
+                        <div class="divider"></div>
+                        
+                        <table class="items-table">
+                            <thead>
+                                <tr>
+                                    <th>Item</th>
+                                    <th class="item-qty">Qty</th>
+                                    <th class="item-price">Price</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${itemsHtml}
+                            </tbody>
+                        </table>
+                        
+                        <div class="divider"></div>
+                        
+                        <div class="receipt-total">
+                            Total: ₱${receiptData.totalAmount.toFixed(2)}
+                        </div>
+                        
+                        <div class="receipt-row">
+                            <span><strong>Payment Method:</strong></span>
+                            <span>${receiptData.paymentMethod}</span>
+                        </div>
+                        <div class="receipt-row">
+                            <span><strong>Amount Paid:</strong></span>
+                            <span>₱${receiptData.amountPaid.toFixed(2)}</span>
+                        </div>
+                        ${paymentInfoHtml}
+                        
+                        <div class="divider"></div>
+                        
+                        <div class="receipt-footer">
+                            <div>Thank you for shopping with us!</div>
+                            <div>Please come again!</div>
+                        </div>
+                    </body>
+                    </html>
+                `;
+                
+                // Use iframe method (works best with MAUI Blazor WebView)
+                const printFrame = document.createElement('iframe');
+                printFrame.name = 'receiptPrintFrame';
+                printFrame.style.position = 'fixed';
+                printFrame.style.right = '0';
+                printFrame.style.bottom = '0';
+                printFrame.style.width = '1px';
+                printFrame.style.height = '1px';
+                printFrame.style.border = 'none';
+                printFrame.style.opacity = '0.01';
+                printFrame.style.pointerEvents = 'none';
+                
+                document.body.appendChild(printFrame);
+                
+                // Write HTML directly to iframe (no data URI needed)
+                const printDoc = printFrame.contentDocument || printFrame.contentWindow.document;
+                printDoc.open();
+                printDoc.write(receiptHtml);
+                printDoc.close();
+                
+                // Wait for iframe to load, then print
+                setTimeout(function() {
+                    try {
+                        if (printFrame.contentWindow && printFrame.contentWindow.document.readyState === 'complete') {
+                            printFrame.contentWindow.focus();
+                            printFrame.contentWindow.print();
+                        } else {
+                            // If not ready, wait a bit more
+                            printFrame.onload = function() {
+                                setTimeout(function() {
+                                    try {
+                                        printFrame.contentWindow.focus();
+                                        printFrame.contentWindow.print();
+                                    } catch (e) {
+                                        console.error('Error printing:', e);
+                                        alert('Receipt ready! Please use Ctrl+P or the Print button to print.');
+                                    }
+                                }, 500);
+                            };
+                        }
+                    } catch (e) {
+                        console.error('Error printing from iframe:', e);
+                        alert('Receipt ready! Please use Ctrl+P to print.');
+                    }
+                    
+                    // Clean up iframe after printing
+                    setTimeout(function() {
+                        if (document.body.contains(printFrame)) {
+                            document.body.removeChild(printFrame);
+                        }
+                    }, 3000);
+                }, 1000);
+            } catch (error) {
+                console.error('Error generating receipt:', error);
+                alert('Error generating receipt. Please try again.');
+            }
+        };
+
+        // Function to print return receipt
+        window.printReturnReceipt = function(returnData) {
+            try {
+                // Build items HTML
+                let itemsHtml = '';
+                returnData.items.forEach(item => {
+                    const details = [];
+                    if (item.sizeName) details.push(`Size: ${item.sizeName}`);
+                    if (item.colorName) details.push(`Color: ${item.colorName}`);
+                    if (item.condition) details.push(`Condition: ${item.condition}`);
+                    
+                    const detailsHtml = details.length > 0 ? '<div class="item-details">' + details.join(', ') + '</div>' : '';
+                    itemsHtml += '<tr>' +
+                        '<td class="item-name">' +
+                        '<div>' + item.productName + ' - ' + item.variantName + '</div>' +
+                        detailsHtml +
+                        '</td>' +
+                        '<td class="item-qty">' + item.quantity + '</td>' +
+                        '</tr>';
+                });
+                
+                // Create HTML receipt
+                const receiptHtml = `
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <meta charset="UTF-8">
+                        <title>Return Receipt - ${returnData.returnNumber}</title>
+                        <style>
+                            @media print {
+                                @page {
+                                    size: 80mm auto;
+                                    margin: 5mm;
+                                }
+                                body {
+                                    margin: 0;
+                                    padding: 0;
+                                }
+                                .no-print {
+                                    display: none;
+                                }
+                            }
+                            * {
+                                margin: 0;
+                                padding: 0;
+                                box-sizing: border-box;
+                            }
+                            body {
+                                font-family: 'Courier New', monospace;
+                                font-size: 12px;
+                                width: 70mm;
+                                margin: 0 auto;
+                                padding: 10px;
+                                background: white;
+                            }
+                            .receipt-header {
+                                text-align: center;
+                                margin-bottom: 15px;
+                            }
+                            .store-name {
+                                font-size: 18px;
+                                font-weight: bold;
+                                margin-bottom: 5px;
+                            }
+                            .thank-you {
+                                font-size: 10px;
+                                color: #666;
+                                margin-bottom: 10px;
+                            }
+                            .divider {
+                                border-top: 1px dashed #ccc;
+                                margin: 10px 0;
+                            }
+                            .receipt-info {
+                                margin-bottom: 10px;
+                                font-size: 11px;
+                            }
+                            .receipt-info div {
+                                margin: 3px 0;
+                            }
+                            .items-table {
+                                width: 100%;
+                                margin: 10px 0;
+                                border-collapse: collapse;
+                            }
+                            .items-table th {
+                                text-align: left;
+                                font-size: 10px;
+                                padding: 5px 0;
+                                border-bottom: 1px dashed #ccc;
+                            }
+                            .items-table td {
+                                padding: 5px 0;
+                                font-size: 10px;
+                            }
+                            .item-name {
+                                width: 70%;
+                            }
+                            .item-qty {
+                                width: 30%;
+                                text-align: center;
+                            }
+                            .item-details {
+                                font-size: 9px;
+                                color: #666;
+                                margin-top: 2px;
+                            }
+                            .receipt-row {
+                                display: flex;
+                                justify-content: space-between;
+                                margin: 5px 0;
+                                font-size: 10px;
+                            }
+                            .receipt-footer {
+                                text-align: center;
+                                margin-top: 15px;
+                                font-size: 10px;
+                                color: #666;
+                            }
+                            .print-button {
+                                position: fixed;
+                                top: 10px;
+                                right: 10px;
+                                padding: 10px 20px;
+                                background: #304D6D;
+                                color: white;
+                                border: none;
+                                border-radius: 5px;
+                                cursor: pointer;
+                                font-size: 14px;
+                            }
+                            .print-button:hover {
+                                background: #1e3a52;
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        <button class="print-button no-print" onclick="window.print()">Print Receipt</button>
+                        
+                        <div class="receipt-header">
+                            <div class="store-name">SoftWear Store</div>
+                            <div class="thank-you">Return Receipt</div>
+                        </div>
+                        
+                        <div class="divider"></div>
+                        
+                        <div class="receipt-info">
+                            <div><strong>Return #:</strong> ${returnData.returnNumber}</div>
+                            <div><strong>Sale #:</strong> ${returnData.saleNumber}</div>
+                            <div><strong>Date:</strong> ${returnData.dateTime}</div>
+                            <div><strong>Cashier:</strong> ${returnData.cashierName}</div>
+                            <div><strong>Status:</strong> ${returnData.status}</div>
+                            ${returnData.reason ? '<div><strong>Reason:</strong> ' + returnData.reason + '</div>' : ''}
+                        </div>
+                        
+                        <div class="divider"></div>
+                        
+                        <table class="items-table">
+                            <thead>
+                                <tr>
+                                    <th>Item</th>
+                                    <th class="item-qty">Qty</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${itemsHtml}
+                            </tbody>
+                        </table>
+                        
+                        <div class="divider"></div>
+                        
+                        <div class="receipt-footer">
+                            <div>Thank you!</div>
+                        </div>
+                    </body>
+                    </html>
+                `;
+                
+                // Use iframe method (works best with MAUI Blazor WebView)
+                const printFrame = document.createElement('iframe');
+                printFrame.name = 'returnReceiptPrintFrame';
+                printFrame.style.position = 'fixed';
+                printFrame.style.right = '0';
+                printFrame.style.bottom = '0';
+                printFrame.style.width = '1px';
+                printFrame.style.height = '1px';
+                printFrame.style.border = 'none';
+                printFrame.style.opacity = '0.01';
+                printFrame.style.pointerEvents = 'none';
+                
+                document.body.appendChild(printFrame);
+                
+                // Write HTML directly to iframe (no data URI needed)
+                const printDoc = printFrame.contentDocument || printFrame.contentWindow.document;
+                printDoc.open();
+                printDoc.write(receiptHtml);
+                printDoc.close();
+                
+                // Wait for iframe to load, then print
+                setTimeout(function() {
+                    try {
+                        if (printFrame.contentWindow && printFrame.contentWindow.document.readyState === 'complete') {
+                            printFrame.contentWindow.focus();
+                            printFrame.contentWindow.print();
+                        } else {
+                            // If not ready, wait a bit more
+                            printFrame.onload = function() {
+                                setTimeout(function() {
+                                    try {
+                                        printFrame.contentWindow.focus();
+                                        printFrame.contentWindow.print();
+                                    } catch (e) {
+                                        console.error('Error printing:', e);
+                                        alert('Return receipt ready! Please use Ctrl+P or the Print button to print.');
+                                    }
+                                }, 500);
+                            };
+                        }
+                    } catch (e) {
+                        console.error('Error printing from iframe:', e);
+                        alert('Return receipt ready! Please use Ctrl+P to print.');
+                    }
+                    
+                    // Clean up iframe after printing
+                    setTimeout(function() {
+                        if (document.body.contains(printFrame)) {
+                            document.body.removeChild(printFrame);
+                        }
+                    }, 3000);
+                }, 1000);
+            } catch (error) {
+                console.error('Error generating return receipt:', error);
+                alert('Error generating return receipt. Please try again.');
+            }
+        };
+
         // Function to filter input to allow only letters and specific characters
         window.filterNameInput = function(elementId) {
             const element = document.getElementById(elementId);

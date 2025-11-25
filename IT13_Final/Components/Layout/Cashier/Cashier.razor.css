@@ -1,0 +1,25 @@
+/* All styles have been converted to Tailwind CSS utility classes */
+/* Custom color palette:
+   - Light Blue Gray: #A2B9CD
+   - Platinum: #E0E0E0
+   - Uranian Blue: #A7CCED
+   - YInMn Blue: #304D6D
+   - Air Superiority Blue: #82A0BC
+*/
+
+/* Only make main content scrollable, sidebar stays fixed */
+.grid.min-h-screen {
+    height: 100vh;
+    overflow: hidden;
+}
+
+.grid.grid-rows-\[64px_1fr\] {
+    overflow: hidden;
+    height: 100vh;
+}
+
+main.p-6 {
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
