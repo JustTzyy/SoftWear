@@ -117,8 +117,8 @@ namespace IT13_Final.Services.Data
     {
         Task<SaleResult?> CreateSaleAsync(CreateSaleModel sale, CancellationToken ct = default);
         Task<string> GenerateSaleNumberAsync(CancellationToken ct = default);
-        Task<List<SaleReportModel>> GetSalesForReportsAsync(int cashierUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
-        Task<int> GetSalesCountForReportsAsync(int cashierUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, CancellationToken ct = default);
+        Task<List<SaleReportModel>> GetSalesForReportsAsync(int cashierUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, bool onlyApprovedDays = false, int page = 1, int pageSize = 10, CancellationToken ct = default);
+        Task<int> GetSalesCountForReportsAsync(int cashierUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, bool onlyApprovedDays = false, CancellationToken ct = default);
         Task<SaleReportModel?> GetSaleForReportAsync(int saleId, int cashierUserId, CancellationToken ct = default);
         Task<List<SaleReportItemModel>> GetSaleItemsForReportAsync(int saleId, CancellationToken ct = default);
         Task<DashboardStatsModel> GetDashboardStatsAsync(int cashierUserId, CancellationToken ct = default);
@@ -271,7 +271,7 @@ namespace IT13_Final.Services.Data
             }
         }
 
-        public async Task<List<SaleReportModel>> GetSalesForReportsAsync(int cashierUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
+        public async Task<List<SaleReportModel>> GetSalesForReportsAsync(int cashierUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, bool onlyApprovedDays = false, int page = 1, int pageSize = 10, CancellationToken ct = default)
         {
             var sales = new List<SaleReportModel>();
             var offset = (page - 1) * pageSize;
@@ -286,7 +286,8 @@ namespace IT13_Final.Services.Data
                 FROM dbo.tbl_sales s
                 INNER JOIN dbo.tbl_users u ON s.user_id = u.id
                 LEFT JOIN dbo.tbl_payments p ON s.id = p.sale_id
-                WHERE s.archives IS NULL AND s.status = 'Completed' AND s.user_id = @CashierUserId";
+                WHERE s.archives IS NULL AND s.status = 'Completed'
+                AND (@CashierUserId = 0 OR s.user_id = @CashierUserId)";
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -301,6 +302,18 @@ namespace IT13_Final.Services.Data
             if (endDate.HasValue)
             {
                 sql += " AND CAST(s.timestamps AS DATE) <= @EndDate";
+            }
+
+            // Filter by approved daily sales verification if requested
+            if (onlyApprovedDays)
+            {
+                sql += @"
+                    AND EXISTS (
+                        SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
+                        WHERE dsv.cashier_user_id = s.user_id
+                        AND CAST(dsv.sale_date AS DATE) = CAST(s.timestamps AS DATE)
+                        AND dsv.status = 'Approved'
+                        AND dsv.archived_at IS NULL)";
             }
 
             sql += " ORDER BY s.timestamps DESC OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
@@ -342,7 +355,7 @@ namespace IT13_Final.Services.Data
             return sales;
         }
 
-        public async Task<int> GetSalesCountForReportsAsync(int cashierUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, CancellationToken ct = default)
+        public async Task<int> GetSalesCountForReportsAsync(int cashierUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, bool onlyApprovedDays = false, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -350,7 +363,8 @@ namespace IT13_Final.Services.Data
             var sql = @"
                 SELECT COUNT(*)
                 FROM dbo.tbl_sales s
-                WHERE s.archives IS NULL AND s.status = 'Completed' AND s.user_id = @CashierUserId";
+                WHERE s.archives IS NULL AND s.status = 'Completed'
+                AND (@CashierUserId = 0 OR s.user_id = @CashierUserId)";
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -365,6 +379,18 @@ namespace IT13_Final.Services.Data
             if (endDate.HasValue)
             {
                 sql += " AND CAST(s.timestamps AS DATE) <= @EndDate";
+            }
+
+            // Filter by approved daily sales verification if requested
+            if (onlyApprovedDays)
+            {
+                sql += @"
+                    AND EXISTS (
+                        SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
+                        WHERE dsv.cashier_user_id = s.user_id
+                        AND CAST(dsv.sale_date AS DATE) = CAST(s.timestamps AS DATE)
+                        AND dsv.status = 'Approved'
+                        AND dsv.archived_at IS NULL)";
             }
 
             using var cmd = new SqlCommand(sql, conn);
@@ -398,7 +424,9 @@ namespace IT13_Final.Services.Data
                 FROM dbo.tbl_sales s
                 INNER JOIN dbo.tbl_users u ON s.user_id = u.id
                 LEFT JOIN dbo.tbl_payments p ON s.id = p.sale_id
-                WHERE s.id = @SaleId AND s.user_id = @CashierUserId AND s.archives IS NULL AND s.status = 'Completed'";
+                WHERE s.id = @SaleId
+                AND (@CashierUserId = 0 OR s.user_id = @CashierUserId)
+                AND s.archives IS NULL AND s.status = 'Completed'";
 
             using var cmd = new SqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@SaleId", saleId);

@@ -2,9 +2,89 @@
 @layout IT13_Final.Components.Layout.Seller.Seller
 @inject IT13_Final.Services.Auth.AuthState AuthState
 @inject IT13_Final.Services.Data.IUserService UserService
+@inject IT13_Final.Services.Data.IInventoryService InventoryService
+@inject IT13_Final.Services.Data.IStockInService StockInService
+@inject IT13_Final.Services.Data.IStockOutService StockOutService
+@inject IT13_Final.Services.Data.IStockAdjustmentService StockAdjustmentService
+@inject IT13_Final.Services.Data.IPurchaseOrderService PurchaseOrderService
+@inject IT13_Final.Services.Data.IIncomeBreakdownService IncomeBreakdownService
+@inject IT13_Final.Services.Data.IExpenseService ExpenseService
+@inject IT13_Final.Services.Data.IDailySalesVerificationService DailySalesVerificationService
+@inject IT13_Final.Services.Audit.IHistoryService HistoryService
 @inject NavigationManager Nav
+@inject IJSRuntime JSRuntime
+@using System.Linq
+@implements IDisposable
 
-<h1 class="page-title">Dashboard Reports</h1>
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">@GetGreeting(), @(AuthState.CurrentUser?.FullName ?? "Seller")!</h1>
+        <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintDashboard" title="Print Dashboard">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                <rect x="6" y="14" width="12" height="8"></rect>
+            </svg>
+        </button>
+    </div>
+</div>
+
+@* Search and Date Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.35-4.35"></path>
+        </svg>
+        <input type="text" id="dashboard-search-input" class="search-input" placeholder="Search metrics, products..." @bind="searchTerm" @bind:event="oninput" @bind:after="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            <button class="clear-search-btn" @onclick="HandleClearSearch" title="Clear">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        }
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date"
+               class="date-input"
+               value="@(startDate?.ToString("yyyy-MM-dd"))"
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleFromDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date"
+               class="date-input"
+               value="@(endDate?.ToString("yyyy-MM-dd"))"
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleToDateChange" />
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
 
 @if (showSecurityAlert)
 {
@@ -16,121 +96,1490 @@
                     <path d="M9 12l2 2 4-4"></path>
                 </svg>
                 <span>Security Alert</span>
-                <button class="alert-close" @onclick="HandleLater">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                </button>
+                <button class="alert-close" @onclick="HandleLater">×</button>
             </div>
-            
             <div class="security-alert-body">
-                <svg class="warning-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                    <line x1="12" y1="9" x2="12" y2="13"></line>
-                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                </svg>
-                <p class="alert-message">You are currently using a default password. For security reasons, please change your password immediately.</p>
+                <p>You are currently using a default password. For security reasons, please change your password immediately.</p>
             </div>
-
             <div class="security-alert-footer">
-                <button class="alert-btn later-btn" @onclick="HandleLater">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                    <span>Later</span>
-                </button>
-                <button class="alert-btn change-password-btn" @onclick="HandleChangePassword">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>  
-                    </svg>
-                    <span>Change Password</span>
-                </button>
+                <button class="btn-secondary" @onclick="HandleLater">Later</button>
+                <button class="btn-primary" @onclick="HandleChangePassword">Change Password</button>
             </div>
         </div>
     </div>
 }
 
-<div class="search-row">
-    <input class="search" placeholder="Search dashboard data" />
-    <button class="print">Print Report</button>
-    <div class="fill"></div>
-</div>
+@if (isLoading)
+{
+    <div class="loading-state">
+        <div class="loading-spinner"></div>
+        <p>Loading dashboard...</p>
+    </div>
+}
+else
+{
+    @* Key Financial KPIs *@
+    @if (showKpiSection)
+    {
+    <div class="kpi-row">
+        <div class="kpi-card kpi-income" @onclick='() => Nav.NavigateTo("/seller/AccountingIncomeBreakdown")'>
+            <div class="kpi-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="1" x2="12" y2="23"></line>
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                </svg>
+            </div>
+            <div class="kpi-content">
+                <span class="kpi-label">Total Sales</span>
+                <span class="kpi-value">₱@totalIncome.ToString("N0")</span>
+                <span class="kpi-trend @(totalIncome > 0 ? "trend-up" : "")">
+                    @if (totalIncome > 0)
+                    {
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                    }
+                    <span>Gross sales for period</span>
+                </span>
+            </div>
+        </div>
 
-<section class="card">
-    <h2 class="card-title">Financial Revenue Summary</h2>
-    <div class="subtext">Overview of total revenue, payments, and financial performance</div>
+        <div class="kpi-card kpi-net" @onclick='() => Nav.NavigateTo("/seller/AccountingProfitLossReports")'>
+            <div class="kpi-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+                    <polyline points="17 6 23 6 23 12"></polyline>
+                </svg>
+            </div>
+            <div class="kpi-content">
+                <span class="kpi-label">Net Income</span>
+                <span class="kpi-value @(netIncome >= 0 ? "positive" : "negative")">₱@netIncome.ToString("N0")</span>
+                <span class="kpi-trend @(netIncome >= 0 ? "trend-up" : "trend-down")">
+                    @if (netIncome >= 0)
+                    {
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                    }
+                    else
+                    {
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    }
+                    <span>After returns & expenses</span>
+                </span>
+            </div>
+        </div>
 
-    <div class="grid-5">
-        <div class="metric">
-            <div class="label">SUBTOTAL</div>
-            <div class="value">₱230,807.50</div>
+        <div class="kpi-card kpi-expenses" @onclick='() => Nav.NavigateTo("/seller/AccountingExpenseReports")'>
+            <div class="kpi-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                    <line x1="1" y1="10" x2="23" y2="10"></line>
+                </svg>
+            </div>
+            <div class="kpi-content">
+                <span class="kpi-label">Total Expenses</span>
+                <span class="kpi-value">₱@totalExpensesAmount.ToString("N0")</span>
+                <span class="kpi-trend trend-down">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    <span>Operating costs</span>
+                </span>
+            </div>
         </div>
-        <div class="metric">
-            <div class="label">TAX</div>
-            <div class="value">₱27,690.00</div>
+
+        <div class="kpi-card kpi-returns" @onclick='() => Nav.NavigateTo("/seller/CashierReturnsReports")'>
+            <div class="kpi-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="1 4 1 10 7 10"></polyline>
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                </svg>
+            </div>
+            <div class="kpi-content">
+                <span class="kpi-label">Returns</span>
+                <span class="kpi-value">₱@totalReturnsAmount.ToString("N0")</span>
+                <span class="kpi-trend">
+                    <span>Refunded amount</span>
+                </span>
+            </div>
         </div>
-        <div class="metric">
-            <div class="label">TOTAL AMOUNT</div>
-            <div class="value">₱258,497.50</div>
-        </div>
-        <div class="metric">
-            <div class="label">PAYMENTS</div>
-            <div class="value">173</div>
-        </div>
-        <div class="metric">
-            <div class="label">AVERAGE PER PAYMENT</div>
-            <div class="value">₱1,494.21</div>
+
+        <div class="kpi-card kpi-supplier" @onclick='() => Nav.NavigateTo("/seller/StockClerkPurchaseOrderReports")'>
+            <div class="kpi-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+            </div>
+            <div class="kpi-content">
+                <span class="kpi-label">Supplier Payments</span>
+                <span class="kpi-value">₱@supplierPaymentsTotal.ToString("N0")</span>
+                <span class="kpi-trend trend-down">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    <span>@supplierPaymentsCount payments</span>
+                </span>
+            </div>
         </div>
     </div>
-</section>
+    }
 
-<section class="card">
-    <h2 class="card-title">Staff Management Overview</h2>
-    <div class="subtext">Summary of active staff members across all departments</div>
-    <div class="grid-4">
-        <div class="metric sm">
-            <div class="label">ACCOUNTING STAFF</div>
-            <div class="value">@accountingCount</div>
+    @* Quick Actions *@
+    @if (showQuickActions)
+    {
+    <div class="quick-actions">
+        <button class="quick-action-btn" @onclick='() => Nav.NavigateTo("/seller/CashierSalesReports")'>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+            </svg>
+            <span>Sales Reports</span>
+        </button>
+        <button class="quick-action-btn" @onclick='() => Nav.NavigateTo("/seller/Product")'>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+            </svg>
+            <span>Products</span>
+        </button>
+        <button class="quick-action-btn" @onclick='() => Nav.NavigateTo("/seller/StockClerkStockInReports")'>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10l-6-4"></path>
+            </svg>
+            <span>Stock In</span>
+        </button>
+        <button class="quick-action-btn" @onclick='() => Nav.NavigateTo("/seller/AccountingDailySalesVerificationReports")'>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            <span>Verify Sales</span>
+        </button>
+        <button class="quick-action-btn" @onclick='() => Nav.NavigateTo("/seller/AccountingTaxReports")'>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 4h16v16H4z"></path>
+                <path d="M8 8h8M8 12h5"></path>
+            </svg>
+            <span>Tax Reports</span>
+        </button>
+        <button class="quick-action-btn" @onclick='() => Nav.NavigateTo("/seller/StockClerkPurchaseOrderReports")'>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <path d="M16 10a4 4 0 0 1-8 0"></path>
+            </svg>
+            <span>Purchase Orders</span>
+        </button>
+    </div>
+    }
+
+    @* Main Charts Row *@
+    @if (showSalesChart || showTaxChart)
+    {
+    <div class="charts-grid">
+        @* Sales Trend Chart *@
+        @if (showSalesChart)
+        {
+        <div class="chart-card chart-wide" @onclick='() => Nav.NavigateTo("/seller/CashierSalesReports")'>
+            <div class="chart-header">
+                <h3>Daily Sales Trend</h3>
+                <span class="chart-subtitle">Revenue over selected period</span>
+            </div>
+            <div class="chart-body">
+                <svg class="line-chart" viewBox="0 0 800 300" preserveAspectRatio="xMidYMid meet">
+                    @if (dailySalesData.Any() && dailySalesData.Any(d => d.Amount > 0))
+                    {
+                        var maxAmount = dailySalesData.Max(d => d.Amount);
+                        var chartHeight = 220.0;
+                        var chartWidth = 700.0;
+                        var dataCount = dailySalesData.Count;
+                        var pointSpacing = chartWidth / Math.Max(dataCount - 1, 1);
+
+                        @* Draw gradient fill under line *@
+                        var fillPath = "M 60,240 ";
+                        var linePath = "M ";
+                        for (int i = 0; i < dailySalesData.Count; i++)
+                        {
+                            var item = dailySalesData[i];
+                            var x = 60 + (i * pointSpacing);
+                            var y = maxAmount > 0 ? 240 - ((double)item.Amount / (double)maxAmount) * chartHeight : 240;
+                            
+                            if (i == 0)
+                            {
+                                linePath += $"{x},{y} ";
+                                fillPath += $"L {x},{y} ";
+                            }
+                            else
+                            {
+                                linePath += $"L {x},{y} ";
+                                fillPath += $"L {x},{y} ";
+                            }
+                        }
+                        fillPath += $"L {60 + (dailySalesData.Count - 1) * pointSpacing},240 Z";
+
+                        <defs>
+                            <linearGradient id="salesGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" style="stop-color:#10B981;stop-opacity:0.3" />
+                                <stop offset="100%" style="stop-color:#10B981;stop-opacity:0" />
+                            </linearGradient>
+                        </defs>
+
+                        <path d="@fillPath" fill="url(#salesGradient)" />
+                        <path d="@linePath" fill="none" stroke="#10B981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+
+                        @* Data points *@
+                        @for (int i = 0; i < dailySalesData.Count; i++)
+                        {
+                            var item = dailySalesData[i];
+                            var x = 60 + (i * pointSpacing);
+                            var y = maxAmount > 0 ? 240 - ((double)item.Amount / (double)maxAmount) * chartHeight : 240;
+                            
+                            if (item.Amount > 0 && (i == 0 || i == dailySalesData.Count - 1 || i % 5 == 0))
+                            {
+                                <circle cx="@x" cy="@y" r="5" fill="#10B981" stroke="#fff" stroke-width="2" class="data-point" />
+                            }
+                        }
+
+                        @* X-axis labels *@
+                        @for (int i = 0; i < dailySalesData.Count; i += Math.Max(1, dailySalesData.Count / 6))
+                        {
+                            var item = dailySalesData[i];
+                            var x = 60 + (i * pointSpacing);
+                            @((MarkupString)$"<text x=\"{x}\" y=\"265\" font-size=\"10\" fill=\"#6b7280\" text-anchor=\"middle\">{item.Date.ToString("MMM d")}</text>")
+                        }
+
+                        @* Y-axis labels *@
+                        @for (int i = 0; i <= 4; i++)
+                        {
+                            var value = maxAmount * (4 - i) / 4.0m;
+                            var y = 20 + (i * chartHeight / 4);
+                            @((MarkupString)$"<text x=\"55\" y=\"{y + 4}\" font-size=\"10\" fill=\"#6b7280\" text-anchor=\"end\">₱{value:N0}</text>")
+                            <line x1="60" y1="@y" x2="760" y2="@y" stroke="#e5e7eb" stroke-width="1" stroke-dasharray="4"/>
+                        }
+                    }
+                    else
+                    {
+                        @: <text x="400" y="150" font-size="14" fill="#9ca3af" text-anchor="middle">No sales data available for this period</text>
+                    }
+                </svg>
+            </div>
         </div>
-        <div class="metric sm">
-            <div class="label">CASHIER STAFF</div>
-            <div class="value">@cashierCount</div>
+
+        @* Income vs Expenses Chart *@
+        <div class="chart-card" @onclick='() => Nav.NavigateTo("/seller/AccountingProfitLossReports")'>
+            <div class="chart-header">
+                <h3>Income vs Expenses</h3>
+                <span class="chart-subtitle">Financial overview</span>
+            </div>
+            <div class="chart-body">
+                @{
+                    var totalAllExpenses = totalExpensesAmount + supplierPaymentsTotal;
+                    var netAfterAll = netIncome - supplierPaymentsTotal;
+                    var finMax = Math.Max((double)totalIncome, Math.Max((double)totalAllExpenses, Math.Max((double)supplierPaymentsTotal, Math.Abs((double)netAfterAll))));
+                    if (finMax <= 0) finMax = 1;
+                }
+                <div class="horizontal-bars">
+                    <div class="bar-row">
+                        <span class="bar-label">Income</span>
+                        <div class="bar-track">
+                            <div class="bar-fill bar-income" style="width: @((totalIncome > 0 ? (double)totalIncome / finMax * 100 : 0).ToString("F1"))%"></div>
+                        </div>
+                        <span class="bar-value">₱@totalIncome.ToString("N0")</span>
+                    </div>
+                    <div class="bar-row">
+                        <span class="bar-label">Op. Expenses</span>
+                        <div class="bar-track">
+                            <div class="bar-fill bar-expense" style="width: @((totalExpensesAmount > 0 ? (double)totalExpensesAmount / finMax * 100 : 0).ToString("F1"))%"></div>
+                        </div>
+                        <span class="bar-value">₱@totalExpensesAmount.ToString("N0")</span>
+                    </div>
+                    <div class="bar-row">
+                        <span class="bar-label">Supplier Pay</span>
+                        <div class="bar-track">
+                            <div class="bar-fill bar-supplier" style="width: @((supplierPaymentsTotal > 0 ? (double)supplierPaymentsTotal / finMax * 100 : 0).ToString("F1"))%"></div>
+                        </div>
+                        <span class="bar-value">₱@supplierPaymentsTotal.ToString("N0")</span>
+                    </div>
+                    <div class="bar-row">
+                        <span class="bar-label">Net Profit</span>
+                        <div class="bar-track">
+                            <div class="bar-fill @(netAfterAll >= 0 ? "bar-profit" : "bar-loss")" style="width: @((netAfterAll != 0 ? Math.Abs((double)netAfterAll) / finMax * 100 : 0).ToString("F1"))%"></div>
+                        </div>
+                        <span class="bar-value @(netAfterAll >= 0 ? "positive" : "negative")">₱@netAfterAll.ToString("N0")</span>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="metric sm">
-            <div class="label">STOCK CLERK STAFF</div>
-            <div class="value">@stockClerkCount</div>
-        </div>
-        <div class="metric sm">
-            <div class="label">TOTAL STAFF</div>
-            <div class="value">@(accountingCount + cashierCount + stockClerkCount)</div>
+        }
+    </div>
+    }
+
+    @* Tax & Fees Summary *@
+    @if (showTaxChart)
+    {
+    <div class="tax-summary-row" @onclick='() => Nav.NavigateTo("/seller/AccountingTaxReports")'>
+        <div class="tax-card">
+            <div class="tax-header">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                    <polyline points="22,6 12,13 2,6"></polyline>
+                </svg>
+                <h3>Tax & Fees Summary</h3>
+                <span class="tax-badge">Click for full report</span>
+            </div>
+            <div class="tax-items">
+                <div class="tax-item">
+                    <div class="tax-icon vat">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                    </div>
+                    <div class="tax-info">
+                        <span class="tax-label">VAT (12%)</span>
+                        <span class="tax-desc">Value Added Tax on sales</span>
+                    </div>
+                    <span class="tax-amount">₱@vatAmount.ToString("N0")</span>
+                </div>
+                <div class="tax-divider"></div>
+                <div class="tax-item">
+                    <div class="tax-icon admin">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="3" y1="9" x2="21" y2="9"></line>
+                            <line x1="9" y1="21" x2="9" y2="9"></line>
+                        </svg>
+                    </div>
+                    <div class="tax-info">
+                        <span class="tax-label">Admin Fee (2%)</span>
+                        <span class="tax-desc">Platform fee per product</span>
+                    </div>
+                    <span class="tax-amount">₱@adminFeeAmount.ToString("N0")</span>
+                </div>
+                <div class="tax-divider"></div>
+                <div class="tax-item tax-total">
+                    <div class="tax-icon total">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="1" x2="12" y2="23"></line>
+                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                        </svg>
+                    </div>
+                    <div class="tax-info">
+                        <span class="tax-label">Total Tax & Fees</span>
+                        <span class="tax-desc">Combined obligations</span>
+                    </div>
+                    <span class="tax-amount total">₱@totalTaxAndFees.ToString("N0")</span>
+                </div>
+            </div>
         </div>
     </div>
-</section>
+    }
 
-<section class="card">
-    <h2 class="card-title">POS Operations KPIs</h2>
-    <div class="subtext">Point of Sale system performance metrics</div>
-    <div class="grid-4">
-        <div class="metric sm"><div class="label">TODAY'S SALES</div><div class="value">₱0.00</div></div>
-        <div class="metric sm"><div class="label">TODAY'S TRANSACTIONS</div><div class="value">0</div></div>
-        <div class="metric sm"><div class="label">AVG TRANSACTION</div><div class="value">₱0.00</div></div>
-        <div class="metric sm"><div class="label">PRODUCTS SOLD</div><div class="value">0</div></div>
+    @* Secondary Stats Row *@
+    @if (showStatsGrid)
+    {
+    <div class="stats-grid">
+        <div class="stat-card stat-stock-in" @onclick='() => Nav.NavigateTo("/seller/StockClerkStockInReports")'>
+            <div class="stat-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 5v14M5 12l7-7 7 7"></path>
+                </svg>
+            </div>
+            <div class="stat-info">
+                <span class="stat-value">@stats.TotalStockIn</span>
+                <span class="stat-label">Stock In</span>
+            </div>
+            <span class="stat-badge">@stats.TodayStockIn today</span>
+        </div>
+
+        <div class="stat-card stat-stock-out" @onclick='() => Nav.NavigateTo("/seller/StockClerkStockOutReports")'>
+            <div class="stat-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 19V5M5 12l7 7 7-7"></path>
+                </svg>
+            </div>
+            <div class="stat-info">
+                <span class="stat-value">@stats.TotalStockOut</span>
+                <span class="stat-label">Stock Out</span>
+            </div>
+            <span class="stat-badge">@stats.TodayStockOut today</span>
+        </div>
+
+        <div class="stat-card stat-adjustments" @onclick='() => Nav.NavigateTo("/seller/StockClerkStockAdjustmentReports")'>
+            <div class="stat-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+            </div>
+            <div class="stat-info">
+                <span class="stat-value">@stats.TotalAdjustments</span>
+                <span class="stat-label">Adjustments</span>
+            </div>
+            <span class="stat-badge">@stats.TodayAdjustments today</span>
+        </div>
+
+        <div class="stat-card stat-low-stock @(stats.LowStockItems > 0 ? "alert" : "")" @onclick='() => Nav.NavigateTo("/seller/Product")'>
+            <div class="stat-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                    <line x1="12" y1="9" x2="12" y2="13"></line>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+            </div>
+            <div class="stat-info">
+                <span class="stat-value">@stats.LowStockItems</span>
+                <span class="stat-label">Low Stock</span>
+            </div>
+            <span class="stat-badge @(stats.LowStockItems > 0 ? "badge-alert" : "badge-ok")">@(stats.LowStockItems > 0 ? "Needs attention" : "All good")</span>
+        </div>
+
+        <div class="stat-card stat-products" @onclick='() => Nav.NavigateTo("/seller/Product")'>
+            <div class="stat-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                    <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                </svg>
+            </div>
+            <div class="stat-info">
+                <span class="stat-value">@stats.TotalProducts</span>
+                <span class="stat-label">Products</span>
+            </div>
+            <span class="stat-badge">Total variants</span>
+        </div>
+
+        <div class="stat-card stat-verification" @onclick='() => Nav.NavigateTo("/seller/AccountingDailySalesVerificationReports")'>
+            <div class="stat-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+            </div>
+            <div class="stat-info">
+                <span class="stat-value">@verificationsPending</span>
+                <span class="stat-label">Pending Verifications</span>
+            </div>
+            <span class="stat-badge badge-pending">@verificationsApproved approved</span>
+        </div>
     </div>
-</section>
+    }
+
+    @* Bottom Section: Charts and Lists *@
+    @if (showStockChart || showTopProducts || showLowStock || showCashierPerformance)
+    {
+    <div class="bottom-grid">
+        @* Stock Trends Chart *@
+        @if (showStockChart)
+        {
+        <div class="chart-card" @onclick='() => Nav.NavigateTo("/seller/StockClerkStockInReports")'>
+            <div class="chart-header">
+                <h3>Stock Movement Trend</h3>
+                <span class="chart-subtitle">Stock in vs stock out</span>
+            </div>
+            <div class="chart-body">
+                <svg class="bar-chart" viewBox="0 0 600 280" preserveAspectRatio="xMidYMid meet">
+                    @if ((stockInData.Any() && stockInData.Any(d => d.Count > 0)) || (stockOutData.Any() && stockOutData.Any(d => d.Count > 0)))
+                    {
+                        var maxIn = stockInData.Any() ? stockInData.Max(d => d.Count) : 0;
+                        var maxOut = stockOutData.Any() ? stockOutData.Max(d => d.Count) : 0;
+                        var maxValue = Math.Max(maxIn, maxOut);
+                        if (maxValue == 0) maxValue = 1;
+                        var chartHeight = 200.0;
+                        var dataCount = Math.Max(stockInData.Count, stockOutData.Count);
+                        var barSpacing = 520.0 / Math.Max(dataCount, 1);
+                        var barWidth = Math.Max(4, barSpacing * 0.35);
+
+                        @for (int i = 0; i < dataCount; i++)
+                        {
+                            var stockIn = i < stockInData.Count ? stockInData[i] : null;
+                            var stockOut = i < stockOutData.Count ? stockOutData[i] : null;
+                            var xPos = 50 + (i * barSpacing);
+                            
+                            var inHeight = stockIn != null && maxValue > 0 ? (stockIn.Count / (double)maxValue) * chartHeight : 0;
+                            var outHeight = stockOut != null && maxValue > 0 ? (stockOut.Count / (double)maxValue) * chartHeight : 0;
+
+                            <rect x="@xPos" y="@(220 - inHeight)" width="@barWidth" height="@inHeight" fill="#10B981" rx="2" />
+                            <rect x="@(xPos + barWidth + 2)" y="@(220 - outHeight)" width="@barWidth" height="@outHeight" fill="#EF4444" rx="2" />
+
+                            @if (i % 5 == 0 || i == dataCount - 1)
+                            {
+                                var date = stockIn?.Date ?? stockOut?.Date ?? DateTime.Today;
+                                @((MarkupString)$"<text x=\"{xPos + barWidth}\" y=\"240\" font-size=\"9\" fill=\"#6b7280\" text-anchor=\"middle\">{date.ToString("MMM d")}</text>")
+                            }
+                        }
+
+                        @* Legend *@
+                        <rect x="450" y="10" width="12" height="12" fill="#10B981" rx="2" />
+                        @: <text x="467" y="20" font-size="10" fill="#6b7280">Stock In</text>
+                        <rect x="520" y="10" width="12" height="12" fill="#EF4444" rx="2" />
+                        @: <text x="537" y="20" font-size="10" fill="#6b7280">Stock Out</text>
+                    }
+                    else
+                    {
+                        @: <text x="300" y="140" font-size="14" fill="#9ca3af" text-anchor="middle">No stock movement data</text>
+                    }
+                </svg>
+            </div>
+        </div>
+        }
+
+        @* Top Selling Products *@
+        @if (showTopProducts)
+        {
+        <div class="list-card">
+            <div class="list-header">
+                <h3>Top Selling Products</h3>
+                <button class="view-all-btn" @onclick='() => Nav.NavigateTo("/seller/CashierSalesReports")'>View All</button>
+            </div>
+            <div class="list-body">
+                @if (topSellingProducts.Any())
+                {
+                    @foreach (var (product, index) in topSellingProducts.Select((p, i) => (p, i)))
+                    {
+                        <div class="list-item">
+                            <span class="rank-badge rank-@(index + 1)">@(index + 1)</span>
+                            <div class="item-info">
+                                <span class="item-name">@product.ProductName</span>
+                                <span class="item-detail">@product.QuantitySold units sold</span>
+                            </div>
+                            <span class="item-value">₱@product.TotalRevenue.ToString("N0")</span>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="empty-state">
+                        <p>No sales data available</p>
+                    </div>
+                }
+            </div>
+        </div>
+        }
+
+        @* Low Stock Items *@
+        @if (showLowStock)
+        {
+        <div class="list-card @(lowStockItems.Any() ? "alert-card" : "")">
+            <div class="list-header">
+                <h3>Low Stock Alerts</h3>
+                <button class="view-all-btn" @onclick='() => Nav.NavigateTo("/seller/Product")'>View All</button>
+            </div>
+            <div class="list-body">
+                @if (lowStockItems.Any())
+                {
+                    @foreach (var (item, index) in lowStockItems.Take(5).Select((p, i) => (p, i)))
+                    {
+                        <div class="list-item alert-item">
+                            <div class="alert-indicator"></div>
+                            <div class="item-info">
+                                <span class="item-name">@item.ProductName</span>
+                                <span class="item-detail">@item.VariantName @(item.SizeName != null ? $"- {item.SizeName}" : "")</span>
+                            </div>
+                            <div class="stock-info">
+                                <span class="current-stock">@item.CurrentStock</span>
+                                <span class="reorder-level">/ @item.ReorderLevel</span>
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="empty-state success">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
+                        <p>All stock levels are healthy!</p>
+                    </div>
+                }
+            </div>
+        </div>
+        }
+
+        @* Cashier Performance *@
+        @if (showCashierPerformance)
+        {
+        <div class="list-card">
+            <div class="list-header">
+                <h3>Cashier Performance</h3>
+                <button class="view-all-btn" @onclick='() => Nav.NavigateTo("/seller/AccountingDailySalesVerificationReports")'>View All</button>
+            </div>
+            <div class="list-body">
+                @if (cashierPerformance.Any())
+                {
+                    @foreach (var (cashier, index) in cashierPerformance.Select((c, i) => (c, i)))
+                    {
+                        <div class="list-item">
+                            <span class="rank-badge rank-@(index + 1)">@(index + 1)</span>
+                            <div class="item-info">
+                                <span class="item-name">@cashier.CashierName</span>
+                                <span class="item-detail">@cashier.TransactionCount transactions</span>
+                            </div>
+                            <span class="item-value">₱@cashier.TotalSales.ToString("N0")</span>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="empty-state">
+                        <p>No cashier data available</p>
+                    </div>
+                }
+            </div>
+        </div>
+        }
+    </div>
+    }
+
+    @* No Results Message *@
+    @if (!string.IsNullOrWhiteSpace(searchTerm) && !showKpiSection && !showQuickActions && !showSalesChart && !showTaxChart && !showStatsGrid && !showStockChart && !showTopProducts && !showLowStock && !showCashierPerformance)
+    {
+        <div class="no-results-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width: 64px; height: 64px; margin-bottom: 16px; opacity: 0.5;">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <h3 style="margin: 0 0 8px; color: #374151;">No results found</h3>
+            <p style="margin: 0; color: #6b7280;">No dashboard sections match "<strong>@searchTerm</strong>"</p>
+            <button class="filter-btn" style="margin-top: 16px;" @onclick="HandleClearSearch">Clear Search</button>
+        </div>
+    }
+}
 
 @code {
     private bool showSecurityAlert = false;
-    private int accountingCount = 0;
-    private int cashierCount = 0;
-    private int stockClerkCount = 0;
+    private bool isLoading = true;
+    private int sellerUserId = 0;
+    
+    // Inventory stats
+    private IT13_Final.Services.Data.InventoryDashboardStatsModel stats = new();
+    private List<IT13_Final.Services.Data.DailyStockInData> stockInData = new();
+    private List<IT13_Final.Services.Data.DailyStockOutData> stockOutData = new();
+    private List<IT13_Final.Services.Data.DailyAdjustmentData> adjustmentData = new();
+    private List<IT13_Final.Services.Data.LowStockItemModel> lowStockItems = new();
+
+    // Financial stats
+    private decimal totalIncome = 0;
+    private decimal totalReturnsAmount = 0;
+    private decimal netIncome = 0;
+    private decimal totalExpensesAmount = 0;
+    private int verificationsApproved = 0;
+    private int verificationsPending = 0;
+    private int verificationsRejected = 0;
+
+    // Supplier payments
+    private decimal supplierPaymentsTotal = 0;
+    private int supplierPaymentsCount = 0;
+
+    // Tax & Fees (12% VAT on sales, 2% admin fee on product revenue)
+    private decimal vatAmount = 0;
+    private decimal adminFeeAmount = 0;
+    private decimal totalTaxAndFees = 0;
+
+    // Daily sales data for line chart
+    private List<DailySalesData> dailySalesData = new();
+    
+    // Top selling products
+    private List<TopSellingProduct> topSellingProducts = new();
+    
+    // Cashier performance
+    private List<CashierPerformanceData> cashierPerformance = new();
+
+    // Search and Filter variables
+    private string searchTerm = string.Empty;
+    private string selectedDateRange = "";
+    private DateTime? startDate = null;
+    private DateTime? endDate = null;
+
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue;
+    private System.Threading.Timer? _searchTimer;
+
+    // Search visibility flags
+    private bool showKpiSection => IsSearchMatch("sales", "income", "net", "expense", "return", "supplier", "payment", "financial");
+    private bool showQuickActions => IsSearchMatch("sales", "report", "product", "stock", "verify", "tax", "purchase", "order");
+    private bool showSalesChart => IsSearchMatch("daily", "sales", "trend", "chart", "revenue");
+    private bool showTaxChart => IsSearchMatch("tax", "fee", "vat", "admin", "breakdown");
+    private bool showStatsGrid => IsSearchMatch("stock", "in", "out", "adjustment", "low", "product", "verification", "pending");
+    private bool showStockChart => IsSearchMatch("stock", "movement", "trend", "in", "out");
+    private bool showTopProducts => IsSearchMatch("top", "selling", "product", "best") || (string.IsNullOrWhiteSpace(searchTerm) && topSellingProducts.Any());
+    private bool showLowStock => IsSearchMatch("low", "stock", "alert", "warning") || (string.IsNullOrWhiteSpace(searchTerm) && lowStockItems.Any());
+    private bool showCashierPerformance => IsSearchMatch("cashier", "performance", "staff") || (string.IsNullOrWhiteSpace(searchTerm) && cashierPerformance.Any());
+
+    private bool IsSearchMatch(params string[] keywords)
+    {
+        if (string.IsNullOrWhiteSpace(searchTerm))
+            return true;
+        
+        var searchLower = searchTerm.ToLowerInvariant().Trim();
+        return keywords.Any(k => k.ToLowerInvariant().Contains(searchLower) || searchLower.Contains(k.ToLowerInvariant()));
+    }
+
+    // Data models
+    private class DailySalesData
+    {
+        public DateTime Date { get; set; }
+        public decimal Amount { get; set; }
+        public int Count { get; set; }
+    }
+
+    private class TopSellingProduct
+    {
+        public string ProductName { get; set; } = "";
+        public int QuantitySold { get; set; }
+        public decimal TotalRevenue { get; set; }
+    }
+
+    private class CashierPerformanceData
+    {
+        public string CashierName { get; set; } = "";
+        public int TransactionCount { get; set; }
+        public decimal TotalSales { get; set; }
+    }
+
+    private string GetGreeting()
+    {
+        var hour = DateTime.Now.Hour;
+        if (hour < 12) return "Good morning";
+        if (hour < 17) return "Good afternoon";
+        return "Good evening";
+    }
 
     protected override async Task OnInitializedAsync()
     {
         await CheckPasswordChangeRequired();
-        await LoadStaffCounts();
+        await LoadSellerUserId();
+        await LoadDashboardData();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (sellerUserId > 0 && !isLoading)
+        {
+            await LoadDashboardData();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("setupSearchInputFilter", "dashboard-search-input");
+            }
+            catch (Exception)
+            {
+                // JavaScript function might not be available yet, ignore
+            }
+        }
+    }
+
+    private async Task LoadSellerUserId()
+    {
+        if (AuthState.CurrentUser != null)
+        {
+            // For sellers, their own id IS the seller_user_id that staff reference
+            // Staff have user_id = seller's id, but sellers have user_id = NULL
+            sellerUserId = AuthState.CurrentUser.Id;
+        }
+    }
+
+    private async Task<List<int>> GetStockClerkUserIdsAsync()
+    {
+        var clerkIds = new List<int>();
+        
+        if (sellerUserId <= 0) return clerkIds;
+
+        try
+        {
+            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+            using var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            var sql = @"
+                SELECT u.id
+                FROM dbo.tbl_users u
+                JOIN dbo.tbl_roles r ON r.id = u.role_id
+                WHERE u.user_id = @SellerId
+                AND LOWER(r.name) = 'stockclerk'
+                AND u.archived_at IS NULL";
+
+            using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@SellerId", sellerUserId);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                clerkIds.Add(reader.GetInt32(0));
+            }
+        }
+        catch { }
+
+        return clerkIds;
+    }
+
+    private async Task<List<int>> GetCashierUserIdsAsync()
+    {
+        var cashierIds = new List<int>();
+        
+        if (sellerUserId <= 0) return cashierIds;
+
+        try
+        {
+            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+            using var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            var sql = @"
+                SELECT u.id
+                FROM dbo.tbl_users u
+                JOIN dbo.tbl_roles r ON r.id = u.role_id
+                WHERE u.user_id = @SellerId
+                AND LOWER(r.name) = 'cashier'
+                AND u.archived_at IS NULL";
+
+            using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@SellerId", sellerUserId);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                cashierIds.Add(reader.GetInt32(0));
+            }
+        }
+        catch { }
+
+        return cashierIds;
+    }
+
+    private async Task<List<int>> GetAllStaffUserIdsAsync()
+    {
+        var staffIds = new List<int>();
+        
+        if (sellerUserId <= 0) return staffIds;
+
+        try
+        {
+            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+            using var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            // Get ALL staff under this seller (cashiers, stock clerks, accounting)
+            var sql = @"
+                SELECT u.id
+                FROM dbo.tbl_users u
+                WHERE u.user_id = @SellerId
+                AND u.archived_at IS NULL";
+
+            using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@SellerId", sellerUserId);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                staffIds.Add(reader.GetInt32(0));
+            }
+        }
+        catch { }
+
+        return staffIds;
+    }
+
+    private async Task LoadDashboardData()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            if (sellerUserId <= 0)
+            {
+                await LoadSellerUserId();
+                
+                if (sellerUserId <= 0)
+                {
+                    ResetData();
+                    isLoading = false;
+                    StateHasChanged();
+                    return;
+                }
+            }
+
+            // Get staff IDs under this seller ONCE
+            var clerkIds = await GetStockClerkUserIdsAsync();
+            var cashierIds = await GetCashierUserIdsAsync();
+            var days = GetDaysFromDateRange();
+            
+            // Load all data in parallel for better performance
+            var statsTask = InventoryService.GetDashboardStatsAsync(sellerUserId);
+            var lowStockTask = InventoryService.GetLowStockItemsAsync(sellerUserId, 10);
+            var incomeTask = IncomeBreakdownService.GetIncomeBreakdownAsync(sellerUserId, startDate, endDate, true);
+            var expenseTask = ExpenseService.GetTotalExpensesAsync(sellerUserId, startDate, endDate);
+            var verificationTask = DailySalesVerificationService.GetAllDailySalesVerificationsForReportAsync(sellerUserId, null, startDate, endDate, null);
+
+            await Task.WhenAll(statsTask, lowStockTask, incomeTask, expenseTask, verificationTask);
+
+            stats = await statsTask;
+            lowStockItems = await lowStockTask;
+            
+            var income = await incomeTask;
+            totalIncome = income.TotalGrossSales;
+            totalReturnsAmount = income.TotalReturns;
+            netIncome = income.NetIncome;
+            
+            totalExpensesAmount = await expenseTask;
+
+            var verifications = await verificationTask;
+            verificationsApproved = verifications.Count(v => v.Status == "Approved");
+            verificationsPending = verifications.Count(v => v.Status == "Pending");
+            verificationsRejected = verifications.Count(v => v.Status == "Rejected");
+
+            // Load stock movement data (using stock clerk IDs)
+            await LoadDashboardDataByStockClerks(clerkIds, days);
+
+            // Load daily sales data for line chart (using cashier IDs)
+            await LoadDailySalesData(cashierIds);
+
+            // Load top selling products (using cashier IDs)
+            await LoadTopSellingProducts(cashierIds);
+
+            // Load cashier performance (using cashier IDs)
+            await LoadCashierPerformance(cashierIds);
+
+            // Load supplier payments
+            await LoadSupplierPayments();
+
+            // Calculate Tax & Fees (based on total sales)
+            vatAmount = totalIncome * 0.12m;         // 12% VAT on sales
+            adminFeeAmount = totalIncome * 0.02m;    // 2% admin fee on product revenue
+            totalTaxAndFees = vatAmount + adminFeeAmount;
+
+            FilterDataByDateRange();
+            CalculateStatsFromFilteredData();
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                ApplySearchFilter();
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Dashboard error: {ex.Message}");
+            ResetData();
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ResetData()
+    {
+        stats = new IT13_Final.Services.Data.InventoryDashboardStatsModel();
+        stockInData = new List<IT13_Final.Services.Data.DailyStockInData>();
+        stockOutData = new List<IT13_Final.Services.Data.DailyStockOutData>();
+        adjustmentData = new List<IT13_Final.Services.Data.DailyAdjustmentData>();
+        lowStockItems = new List<IT13_Final.Services.Data.LowStockItemModel>();
+        dailySalesData = new List<DailySalesData>();
+        topSellingProducts = new List<TopSellingProduct>();
+        cashierPerformance = new List<CashierPerformanceData>();
+        supplierPaymentsTotal = 0;
+        supplierPaymentsCount = 0;
+        vatAmount = 0;
+        adminFeeAmount = 0;
+        totalTaxAndFees = 0;
+    }
+
+    private async Task LoadSupplierPayments()
+    {
+        supplierPaymentsTotal = 0;
+        supplierPaymentsCount = 0;
+        
+        try
+        {
+            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+            using var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            var sql = @"
+                SELECT 
+                    COALESCE(SUM(sp.amount_paid), 0) as total_amount,
+                    COUNT(*) as payment_count
+                FROM dbo.tbl_supplier_payments sp
+                WHERE sp.archived_at IS NULL
+                AND sp.seller_user_id = @SellerUserId";
+
+            if (startDate.HasValue)
+            {
+                sql += " AND sp.payment_date >= @StartDate";
+            }
+            if (endDate.HasValue)
+            {
+                sql += " AND sp.payment_date <= @EndDate";
+            }
+
+            using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+            }
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                supplierPaymentsTotal = reader.GetDecimal(0);
+                supplierPaymentsCount = reader.GetInt32(1);
+            }
+        }
+        catch { }
+    }
+
+    private async Task LoadDailySalesData(List<int> cashierIds)
+    {
+        dailySalesData = new List<DailySalesData>();
+        
+        try
+        {
+            if (cashierIds.Count == 0)
+            {
+                // Fill with zeros if no cashiers
+                var start = startDate ?? DateTime.Today.AddDays(-30);
+                var end = endDate ?? DateTime.Today;
+                for (var date = start; date <= end; date = date.AddDays(1))
+                {
+                    dailySalesData.Add(new DailySalesData { Date = date, Amount = 0, Count = 0 });
+                }
+                return;
+            }
+
+            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+            using var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            // Build parameterized IN clause for cashier IDs
+            var cashierParams = new List<string>();
+            for (int i = 0; i < cashierIds.Count; i++)
+            {
+                cashierParams.Add($"@CashierId{i}");
+            }
+            var cashierIdsInClause = string.Join(",", cashierParams);
+
+            var sql = $@"
+                SELECT CAST(s.timestamps AS DATE) as sale_date, 
+                       COALESCE(SUM(s.amount), 0) as total_amount,
+                       COUNT(*) as transaction_count
+                FROM dbo.tbl_sales s
+                WHERE s.archives IS NULL 
+                AND s.status = 'Completed'
+                AND s.user_id IN ({cashierIdsInClause})
+                AND CAST(s.timestamps AS DATE) >= @StartDate
+                AND CAST(s.timestamps AS DATE) <= @EndDate
+                AND EXISTS (
+                    SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
+                    WHERE dsv.cashier_user_id = s.user_id
+                    AND dsv.sale_date = CAST(s.timestamps AS DATE)
+                    AND dsv.status = 'Approved'
+                    AND dsv.archived_at IS NULL
+                    AND dsv.seller_user_id = @SellerUserId
+                )
+                GROUP BY CAST(s.timestamps AS DATE)
+                ORDER BY sale_date";
+
+            using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
+            for (int i = 0; i < cashierIds.Count; i++)
+            {
+                cmd.Parameters.AddWithValue($"@CashierId{i}", cashierIds[i]);
+            }
+            cmd.Parameters.AddWithValue("@StartDate", startDate ?? DateTime.Today.AddDays(-30));
+            cmd.Parameters.AddWithValue("@EndDate", endDate ?? DateTime.Today);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            var dataDict = new Dictionary<DateTime, DailySalesData>();
+            
+            while (await reader.ReadAsync())
+            {
+                var date = reader.GetDateTime(0);
+                dataDict[date] = new DailySalesData
+                {
+                    Date = date,
+                    Amount = reader.GetDecimal(1),
+                    Count = reader.GetInt32(2)
+                };
+            }
+
+            // Fill in missing dates
+            var startFill = startDate ?? DateTime.Today.AddDays(-30);
+            var endFill = endDate ?? DateTime.Today;
+            for (var date = startFill; date <= endFill; date = date.AddDays(1))
+            {
+                if (dataDict.ContainsKey(date))
+                {
+                    dailySalesData.Add(dataDict[date]);
+                }
+                else
+                {
+                    dailySalesData.Add(new DailySalesData { Date = date, Amount = 0, Count = 0 });
+                }
+            }
+        }
+        catch { }
+    }
+
+    private async Task LoadTopSellingProducts(List<int> cashierIds)
+    {
+        topSellingProducts = new List<TopSellingProduct>();
+        
+        try
+        {
+            if (cashierIds.Count == 0) return;
+
+            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+            using var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            // Build parameterized IN clause for cashier IDs
+            var cashierParams = new List<string>();
+            for (int i = 0; i < cashierIds.Count; i++)
+            {
+                cashierParams.Add($"@CashierId{i}");
+            }
+            var cashierIdsInClause = string.Join(",", cashierParams);
+
+            var sql = $@"
+                SELECT TOP 5
+                    p.name as product_name,
+                    SUM(si.quantity) as quantity_sold,
+                    SUM(si.price * si.quantity) as total_revenue
+                FROM dbo.tbl_sales_items si
+                INNER JOIN dbo.tbl_sales s ON si.sale_id = s.id
+                INNER JOIN dbo.tbl_variants v ON si.variant_id = v.id
+                INNER JOIN dbo.tbl_products p ON v.product_id = p.id
+                WHERE s.archives IS NULL 
+                AND si.archives IS NULL
+                AND s.status = 'Completed'
+                AND s.user_id IN ({cashierIdsInClause})
+                AND CAST(s.timestamps AS DATE) >= @StartDate
+                AND CAST(s.timestamps AS DATE) <= @EndDate
+                AND EXISTS (
+                    SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
+                    WHERE dsv.cashier_user_id = s.user_id
+                    AND dsv.sale_date = CAST(s.timestamps AS DATE)
+                    AND dsv.status = 'Approved'
+                    AND dsv.archived_at IS NULL
+                    AND dsv.seller_user_id = @SellerUserId
+                )
+                GROUP BY p.name
+                ORDER BY total_revenue DESC";
+
+            using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
+            for (int i = 0; i < cashierIds.Count; i++)
+            {
+                cmd.Parameters.AddWithValue($"@CashierId{i}", cashierIds[i]);
+            }
+            cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+            cmd.Parameters.AddWithValue("@StartDate", startDate ?? DateTime.Today.AddDays(-30));
+            cmd.Parameters.AddWithValue("@EndDate", endDate ?? DateTime.Today);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                topSellingProducts.Add(new TopSellingProduct
+                {
+                    ProductName = reader.GetString(0),
+                    QuantitySold = reader.GetInt32(1),
+                    TotalRevenue = reader.GetDecimal(2)
+                });
+            }
+        }
+        catch { }
+    }
+
+    private async Task LoadCashierPerformance(List<int> cashierIds)
+    {
+        cashierPerformance = new List<CashierPerformanceData>();
+        
+        try
+        {
+            if (cashierIds.Count == 0) return;
+
+            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+            using var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            // Build parameterized IN clause for cashier IDs
+            var cashierParams = new List<string>();
+            for (int i = 0; i < cashierIds.Count; i++)
+            {
+                cashierParams.Add($"@CashierId{i}");
+            }
+            var cashierIdsInClause = string.Join(",", cashierParams);
+
+            var sql = $@"
+                SELECT TOP 5
+                    COALESCE(u.name, (LTRIM(RTRIM(ISNULL(u.fname,''))) + ' ' + LTRIM(RTRIM(ISNULL(u.lname,''))))) as cashier_name,
+                    COUNT(*) as transaction_count,
+                    COALESCE(SUM(s.amount), 0) as total_sales
+                FROM dbo.tbl_sales s
+                INNER JOIN dbo.tbl_users u ON s.user_id = u.id
+                WHERE s.archives IS NULL 
+                AND s.status = 'Completed'
+                AND s.user_id IN ({cashierIdsInClause})
+                AND u.archived_at IS NULL
+                AND CAST(s.timestamps AS DATE) >= @StartDate
+                AND CAST(s.timestamps AS DATE) <= @EndDate
+                AND EXISTS (
+                    SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
+                    WHERE dsv.cashier_user_id = s.user_id
+                    AND dsv.sale_date = CAST(s.timestamps AS DATE)
+                    AND dsv.status = 'Approved'
+                    AND dsv.archived_at IS NULL
+                    AND dsv.seller_user_id = @SellerUserId
+                )
+                GROUP BY u.id, u.name, u.fname, u.lname
+                ORDER BY total_sales DESC";
+
+            using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
+            for (int i = 0; i < cashierIds.Count; i++)
+            {
+                cmd.Parameters.AddWithValue($"@CashierId{i}", cashierIds[i]);
+            }
+            cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+            cmd.Parameters.AddWithValue("@StartDate", startDate ?? DateTime.Today.AddDays(-30));
+            cmd.Parameters.AddWithValue("@EndDate", endDate ?? DateTime.Today);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                cashierPerformance.Add(new CashierPerformanceData
+                {
+                    CashierName = reader.GetString(0),
+                    TransactionCount = reader.GetInt32(1),
+                    TotalSales = reader.GetDecimal(2)
+                });
+            }
+        }
+        catch { }
+    }
+
+    private async Task LoadDashboardDataByStockClerks(List<int> clerkIds, int days)
+    {
+        if (clerkIds.Count == 0)
+        {
+            stockInData = new List<IT13_Final.Services.Data.DailyStockInData>();
+            stockOutData = new List<IT13_Final.Services.Data.DailyStockOutData>();
+            adjustmentData = new List<IT13_Final.Services.Data.DailyAdjustmentData>();
+            return;
+        }
+
+        try
+        {
+            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+            using var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            var stockInStartDate = DateTime.Today.AddDays(-days);
+
+            var userIdParams = new List<string>();
+            for (int i = 0; i < clerkIds.Count; i++)
+            {
+                userIdParams.Add($"@clerkId{i}");
+            }
+            var clerkIdsInClause = userIdParams.Count > 0 ? string.Join(",", userIdParams) : "0";
+
+            // Load Stock In Data
+            var stockInSql = $@"
+                SELECT CAST(si.timestamps AS DATE) as date, COUNT(*) as count, COALESCE(SUM(si.quantity_added), 0) as quantity
+                FROM dbo.tbl_stock_in si
+                WHERE si.archives IS NULL 
+                AND si.user_id IN ({clerkIdsInClause})
+                AND CAST(si.timestamps AS DATE) >= @StartDate
+                GROUP BY CAST(si.timestamps AS DATE)
+                ORDER BY date";
+
+            using (var cmd = new Microsoft.Data.SqlClient.SqlCommand(stockInSql, conn))
+            {
+                for (int i = 0; i < clerkIds.Count; i++)
+                {
+                    cmd.Parameters.AddWithValue($"@clerkId{i}", clerkIds[i]);
+                }
+                cmd.Parameters.AddWithValue("@StartDate", stockInStartDate);
+
+                var tempStockInData = new List<IT13_Final.Services.Data.DailyStockInData>();
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    tempStockInData.Add(new IT13_Final.Services.Data.DailyStockInData
+                    {
+                        Date = reader.GetDateTime(0),
+                        Count = reader.GetInt32(1),
+                        Quantity = reader.GetInt32(2)
+                    });
+                }
+
+                // Fill missing dates
+                stockInData = new List<IT13_Final.Services.Data.DailyStockInData>();
+                for (int i = 0; i < days; i++)
+                {
+                    var date = stockInStartDate.AddDays(i);
+                    var existing = tempStockInData.FirstOrDefault(d => d.Date.Date == date.Date);
+                    stockInData.Add(existing ?? new IT13_Final.Services.Data.DailyStockInData { Date = date, Count = 0, Quantity = 0 });
+                }
+            }
+
+            // Load Stock Out Data
+            var stockOutSql = $@"
+                SELECT CAST(so.timestamps AS DATE) as date, COUNT(*) as count, COALESCE(SUM(so.quantity_removed), 0) as quantity
+                FROM dbo.tbl_stock_out so
+                WHERE so.archives IS NULL 
+                AND so.user_id IN ({clerkIdsInClause})
+                AND CAST(so.timestamps AS DATE) >= @StartDate
+                GROUP BY CAST(so.timestamps AS DATE)
+                ORDER BY date";
+
+            using (var cmd = new Microsoft.Data.SqlClient.SqlCommand(stockOutSql, conn))
+            {
+                for (int i = 0; i < clerkIds.Count; i++)
+                {
+                    cmd.Parameters.AddWithValue($"@clerkId{i}", clerkIds[i]);
+                }
+                cmd.Parameters.AddWithValue("@StartDate", stockInStartDate);
+
+                var tempStockOutData = new List<IT13_Final.Services.Data.DailyStockOutData>();
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    tempStockOutData.Add(new IT13_Final.Services.Data.DailyStockOutData
+                    {
+                        Date = reader.GetDateTime(0),
+                        Count = reader.GetInt32(1),
+                        Quantity = reader.GetInt32(2)
+                    });
+                }
+
+                stockOutData = new List<IT13_Final.Services.Data.DailyStockOutData>();
+                for (int i = 0; i < days; i++)
+                {
+                    var date = stockInStartDate.AddDays(i);
+                    var existing = tempStockOutData.FirstOrDefault(d => d.Date.Date == date.Date);
+                    stockOutData.Add(existing ?? new IT13_Final.Services.Data.DailyStockOutData { Date = date, Count = 0, Quantity = 0 });
+                }
+            }
+
+            // Load Adjustment Data
+            var adjustmentSql = $@"
+                SELECT CAST(sa.timestamps AS DATE) as date, 
+                       COUNT(*) as count,
+                       SUM(CASE WHEN sa.adjustment_type = 'Increase' THEN 1 ELSE 0 END) as increase_count,
+                       SUM(CASE WHEN sa.adjustment_type = 'Decrease' THEN 1 ELSE 0 END) as decrease_count
+                FROM dbo.tbl_stock_adjustments sa
+                WHERE sa.archives IS NULL 
+                AND sa.user_id IN ({clerkIdsInClause})
+                AND CAST(sa.timestamps AS DATE) >= @StartDate
+                GROUP BY CAST(sa.timestamps AS DATE)
+                ORDER BY date";
+
+            using (var cmd = new Microsoft.Data.SqlClient.SqlCommand(adjustmentSql, conn))
+            {
+                for (int i = 0; i < clerkIds.Count; i++)
+                {
+                    cmd.Parameters.AddWithValue($"@clerkId{i}", clerkIds[i]);
+                }
+                cmd.Parameters.AddWithValue("@StartDate", stockInStartDate);
+
+                var tempAdjustmentData = new List<IT13_Final.Services.Data.DailyAdjustmentData>();
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    tempAdjustmentData.Add(new IT13_Final.Services.Data.DailyAdjustmentData
+                    {
+                        Date = reader.GetDateTime(0),
+                        Count = reader.GetInt32(1),
+                        IncreaseCount = reader.GetInt32(2),
+                        DecreaseCount = reader.GetInt32(3)
+                    });
+                }
+
+                adjustmentData = new List<IT13_Final.Services.Data.DailyAdjustmentData>();
+                for (int i = 0; i < days; i++)
+                {
+                    var date = stockInStartDate.AddDays(i);
+                    var existing = tempAdjustmentData.FirstOrDefault(d => d.Date.Date == date.Date);
+                    adjustmentData.Add(existing ?? new IT13_Final.Services.Data.DailyAdjustmentData { Date = date, Count = 0, IncreaseCount = 0, DecreaseCount = 0 });
+                }
+            }
+        }
+        catch { }
+    }
+
+    private int GetDaysFromDateRange()
+    {
+        if (startDate.HasValue && endDate.HasValue)
+        {
+            return (endDate.Value - startDate.Value).Days + 1;
+        }
+        return 30;
+    }
+
+    private void FilterDataByDateRange()
+    {
+        if (startDate.HasValue && endDate.HasValue)
+        {
+            var start = startDate.Value.Date;
+            var end = endDate.Value.Date;
+
+            stockInData = stockInData.Where(d => d.Date.Date >= start && d.Date.Date <= end).ToList();
+            stockOutData = stockOutData.Where(d => d.Date.Date >= start && d.Date.Date <= end).ToList();
+            adjustmentData = adjustmentData.Where(d => d.Date.Date >= start && d.Date.Date <= end).ToList();
+        }
+    }
+
+    private void CalculateStatsFromFilteredData()
+    {
+        var start = startDate?.Date ?? DateTime.Today.AddDays(-30);
+        var end = endDate?.Date ?? DateTime.Today;
+
+        stats.TotalStockIn = stockInData.Sum(d => d.Count);
+        stats.TotalStockOut = stockOutData.Sum(d => d.Count);
+        stats.TotalAdjustments = adjustmentData.Sum(d => d.Count);
+
+        var endDateStockInData = stockInData.FirstOrDefault(d => d.Date.Date == end);
+        stats.TodayStockIn = endDateStockInData?.Count ?? 0;
+
+        var endDateStockOutData = stockOutData.FirstOrDefault(d => d.Date.Date == end);
+        stats.TodayStockOut = endDateStockOutData?.Count ?? 0;
+
+        var endDateAdjustmentData = adjustmentData.FirstOrDefault(d => d.Date.Date == end);
+        stats.TodayAdjustments = endDateAdjustmentData?.Count ?? 0;
+    }
+
+    private void ApplySearchFilter()
+    {
+        if (string.IsNullOrWhiteSpace(searchTerm))
+            return;
+
+        var searchLower = searchTerm.ToLowerInvariant();
+
+        if (lowStockItems.Any())
+        {
+            lowStockItems = lowStockItems
+                .Where(p => p.ProductName.ToLowerInvariant().Contains(searchLower) ||
+                           p.VariantName.ToLowerInvariant().Contains(searchLower) ||
+                           (p.SizeName != null && p.SizeName.ToLowerInvariant().Contains(searchLower)) ||
+                           (p.ColorName != null && p.ColorName.ToLowerInvariant().Contains(searchLower)))
+                .ToList();
+        }
+
+        if (topSellingProducts.Any())
+        {
+            topSellingProducts = topSellingProducts
+                .Where(p => p.ProductName.ToLowerInvariant().Contains(searchLower))
+                .ToList();
+        }
     }
 
     private async Task CheckPasswordChangeRequired()
@@ -149,25 +1598,6 @@
         }
     }
 
-    private async Task LoadStaffCounts()
-    {
-        if (AuthState.CurrentUser != null)
-        {
-            try
-            {
-                var sellerUserId = AuthState.CurrentUser.Id;
-                accountingCount = await UserService.GetAccountingUsersCountAsync(sellerUserId);
-                cashierCount = await UserService.GetCashierUsersCountAsync(sellerUserId);
-                stockClerkCount = await UserService.GetStockClerkUsersCountAsync(sellerUserId);
-                StateHasChanged();
-            }
-            catch
-            {
-                // Handle error silently
-            }
-        }
-    }
-
     private void HandleLater()
     {
         showSecurityAlert = false;
@@ -180,16 +1610,224 @@
         Nav.NavigateTo("/seller/settings?tab=password");
         StateHasChanged();
     }
+
+    private void HandleSearchInput()
+    {
+        var filtered = System.Text.RegularExpressions.Regex.Replace(searchTerm, @"[^a-zA-Z0-9\s\-_]", "");
+        if (filtered != searchTerm)
+        {
+            searchTerm = filtered;
+        }
+        
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                try
+                {
+                    if (AuthState.CurrentUser != null && !string.IsNullOrWhiteSpace(searchTerm))
+                    {
+                        await HistoryService.LogAsync(
+                            AuthState.CurrentUser.Id,
+                            "search",
+                            "Dashboard",
+                            $"Searched dashboard: {searchTerm}"
+                        );
+                    }
+                }
+                catch { }
+                await LoadDashboardData();
+            });
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await LoadDashboardData();
+        }
+    }
+
+    private async Task HandleClearSearch()
+    {
+        searchTerm = string.Empty;
+        await LoadDashboardData();
+        StateHasChanged();
+    }
+
+    private async void HandleDateRangeChange()
+    {
+        var now = DateTime.Now;
+        switch (selectedDateRange)
+        {
+            case "":
+                startDate = null;
+                endDate = null;
+                break;
+            case "today":
+                startDate = now.Date;
+                endDate = now.Date;
+                break;
+            case "yesterday":
+                startDate = now.Date.AddDays(-1);
+                endDate = now.Date.AddDays(-1);
+                break;
+            case "last7days":
+                startDate = now.Date.AddDays(-6);
+                endDate = now.Date;
+                break;
+            case "last30days":
+                startDate = now.Date.AddDays(-29);
+                endDate = now.Date;
+                break;
+            case "thismonth":
+                startDate = new DateTime(now.Year, now.Month, 1);
+                endDate = now.Date;
+                break;
+            case "thisyear":
+                startDate = new DateTime(now.Year, 1, 1);
+                endDate = now.Date;
+                break;
+        }
+
+        try
+        {
+            if (AuthState.CurrentUser != null)
+            {
+                await HistoryService.LogAsync(
+                    AuthState.CurrentUser.Id,
+                    "filter",
+                    "Dashboard",
+                    $"Date filter: {selectedDateRange}"
+                );
+            }
+        }
+        catch { }
+
+        await LoadDashboardData();
+        StateHasChanged();
+    }
+
+    private async void HandleFromDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            startDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            startDate = null;
+            selectedDateRange = "";
+        }
+        await LoadDashboardData();
+        StateHasChanged();
+    }
+
+    private async void HandleToDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            endDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            endDate = null;
+            selectedDateRange = "";
+        }
+        await LoadDashboardData();
+        StateHasChanged();
+    }
+
+    private async void ClearDateFilter()
+    {
+        selectedDateRange = "";
+        startDate = null;
+        endDate = null;
+        await LoadDashboardData();
+        StateHasChanged();
+    }
+
+    private async Task PrintDashboard()
+    {
+        try
+        {
+            if (AuthState.CurrentUser != null)
+            {
+                await HistoryService.LogAsync(
+                    AuthState.CurrentUser.Id,
+                    "print",
+                    "Dashboard",
+                    "Printed seller dashboard"
+                );
+            }
+
+            var dashboardData = new
+            {
+                title = "Seller Dashboard Report",
+                printedBy = AuthState.CurrentUser?.FullName ?? "Seller",
+                printedAt = DateTime.Now.ToString("MMMM dd, yyyy hh:mm tt"),
+                dateRange = startDate.HasValue && endDate.HasValue 
+                    ? $"{startDate?.ToString("MM/dd/yyyy")} - {endDate?.ToString("MM/dd/yyyy")}" 
+                    : "All Time",
+                
+                financials = new
+                {
+                    totalSales = totalIncome.ToString("N2"),
+                    totalReturns = totalReturnsAmount.ToString("N2"),
+                    totalExpenses = totalExpensesAmount.ToString("N2"),
+                    supplierPayments = supplierPaymentsTotal.ToString("N2"),
+                    netIncome = (netIncome - supplierPaymentsTotal).ToString("N2"),
+                    vatAmount = vatAmount.ToString("N2"),
+                    adminFee = adminFeeAmount.ToString("N2"),
+                    totalTaxAndFees = totalTaxAndFees.ToString("N2")
+                },
+
+                inventory = new
+                {
+                    totalStockIn = stats.TotalStockIn,
+                    totalStockOut = stats.TotalStockOut,
+                    totalAdjustments = stats.TotalAdjustments,
+                    lowStockItems = stats.LowStockItems,
+                    totalProducts = stats.TotalProducts
+                },
+
+                verifications = new
+                {
+                    approved = verificationsApproved,
+                    pending = verificationsPending,
+                    rejected = verificationsRejected
+                },
+
+                topProducts = topSellingProducts.Select(p => new
+                {
+                    name = p.ProductName,
+                    quantity = p.QuantitySold,
+                    revenue = p.TotalRevenue.ToString("N2")
+                }).ToList(),
+
+                lowStockList = lowStockItems.Take(10).Select(i => new
+                {
+                    product = i.ProductName,
+                    variant = i.VariantName,
+                    current = i.CurrentStock,
+                    reorder = i.ReorderLevel
+                }).ToList()
+            };
+
+            await JSRuntime.InvokeVoidAsync("printSellerDashboard", dashboardData);
+        }
+        catch { }
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+    }
 }
-
-
-
-
-
-
-
-
-
-
-
 

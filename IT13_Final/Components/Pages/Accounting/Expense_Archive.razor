@@ -1,0 +1,696 @@
+@page "/accounting/financial/expense-archive"
+@layout IT13_Final.Components.Layout.Accounting.Accounting
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IT13_Final.Services.Data.IExpenseService ExpenseService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Nav
+@using Microsoft.Data.SqlClient
+@using System.Linq
+@implements IDisposable
+
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Archived Expense Records</h1>
+        <p class="welcome-date">Manage archived expenses • @totalCount total archived</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintArchivedExpenses" title="Print records">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 9V2h12v7"></path>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                <rect x="6" y="14" width="12" height="8"></rect>
+            </svg>
+        </button>
+    </div>
+</div>
+
+@* Search and Date Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.3-4.3"></path>
+        </svg>
+        <input type="text" class="search-input" placeholder="Search by expense type or description..." @bind="searchTerm" @bind:event="oninput" @bind:after="OnSearchInput" />
+        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            <button class="clear-search-btn" @onclick="ClearSearch" title="Clear search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date" 
+               class="date-input" 
+               value="@(filterStartDate?.ToString("yyyy-MM-dd"))" 
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleStartDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date" 
+               class="date-input" 
+               value="@(filterEndDate?.ToString("yyyy-MM-dd"))" 
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleEndDateChange" />
+        <button class="filter-btn" @onclick="ApplyDateFilter" title="Apply filter">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            Apply
+        </button>
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
+
+@if (showSuccessMessage && !string.IsNullOrEmpty(successMessageText))
+{
+    <div class="success-banner">
+        <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+        </svg>
+        <span>@successMessageText</span>
+    </div>
+}
+
+@* Archived List Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Archived Expense List</h3>
+            <span class="card-subtitle">@totalCount archived expenses</span>
+        </div>
+        <div class="card-actions">
+            <button class="card-action-btn primary" @onclick="NavigateToExpenses">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+                <span>Back to Active</span>
+            </button>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Expense Type</th>
+                    <th>Amount</th>
+                    <th>Date</th>
+                    <th>Archived Date</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="6" class="loading-cell">Loading...</td>
+                    </tr>
+                }
+                else if (archivedExpenses.Count == 0)
+                {
+                    <tr>
+                        <td colspan="6" class="empty-cell">No archived expenses found</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var expense in archivedExpenses)
+                    {
+                        <tr class="clickable-row" @onclick="() => HandleRowClick(expense.Id)">
+                            <td>@expense.Id</td>
+                            <td class="expense-type">@expense.ExpenseType</td>
+                            <td style="font-weight: 600; color: #dc3545;">₱@expense.Amount.ToString("N2")</td>
+                            <td>@expense.ExpenseDate.ToString("MMM dd, yyyy")</td>
+                            <td>@expense.ArchivedAt.ToString("MMM dd, yyyy")</td>
+                            <td class="actions-cell" @onclick:stopPropagation>
+                                <button class="action-btn restore-btn" @onclick="() => HandleRestore(expense.Id)" title="Restore expense">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+                                        <path d="M21 3v5h-5"></path>
+                                        <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+                                        <path d="M8 16H3v5"></path>
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                var pageNum = i;
+                @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
+                {
+                    <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 2 || i == currentPage + 2)
+                {
+                    <span class="page-ellipsis">...</span>
+                }
+            }
+
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+@if (showExpenseDetails && expenseDetails != null)
+{
+    <div class="modal-overlay" @onclick="CloseExpenseDetails">
+        <div class="modal-container" @onclick:stopPropagation>
+            <div class="modal-header">
+                <div class="modal-title">
+                    <svg class="modal-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <line x1="10" y1="9" x2="8" y2="9"></line>
+                    </svg>
+                    <span>Archived Expense Details</span>
+                </div>
+                <button class="modal-close" @onclick="CloseExpenseDetails">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                    <span class="modal-close-text">Close</span>
+                </button>
+            </div>
+
+            <div class="modal-content">
+                <div class="details-column">
+                    <div class="details-section">
+                        <div class="details-section-header">
+                            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                            </svg>
+                            <span class="section-title">Expense Information</span>
+                        </div>
+                        <div class="details-list">
+                            <div class="detail-item">
+                                <span class="detail-label">Expense Type</span>
+                                <span class="detail-value">@expenseDetails.ExpenseType</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Amount</span>
+                                <span class="detail-value" style="font-weight: 600; color: #dc3545;">₱@expenseDetails.Amount.ToString("N2")</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Expense Date</span>
+                                <span class="detail-value">@expenseDetails.ExpenseDate.ToString("MMM dd, yyyy")</span>
+                            </div>
+                            @if (!string.IsNullOrEmpty(expenseDetails.Description))
+                            {
+                                <div class="detail-item">
+                                    <span class="detail-label">Description</span>
+                                    <span class="detail-value">@expenseDetails.Description</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <div class="details-column">
+                    <div class="details-section">
+                        <div class="details-section-header">
+                            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="12" cy="7" r="4"></circle>
+                            </svg>
+                            <span class="section-title">Archive Information</span>
+                        </div>
+                        <div class="details-list">
+                            <div class="detail-item">
+                                <span class="detail-label">Created By</span>
+                                <span class="detail-value">@expenseDetails.CreatedByName</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Archived Date</span>
+                                <span class="detail-value">@expenseDetails.ArchivedAt.ToString("MMM dd, yyyy HH:mm:ss")</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="close-btn" @onclick="CloseExpenseDetails">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                    <span>Close</span>
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<IT13_Final.Services.Data.ArchivedExpenseModel> archivedExpenses = new();
+    private List<IT13_Final.Services.Data.ArchivedExpenseModel> allFilteredArchived = new();
+    private string searchTerm = string.Empty;
+    private bool isLoading = true;
+    private bool isProcessing = false;
+    private int sellerUserId = 0;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling((double)totalCount / pageSize);
+    private bool showSuccessMessage = false;
+    private string successMessageText = string.Empty;
+    private System.Threading.Timer? _successBannerTimer;
+    private System.Threading.Timer? _searchTimer;
+    private bool showExpenseDetails = false;
+    private IT13_Final.Services.Data.ArchivedExpenseModel? expenseDetails = null;
+
+    // Date filter variables
+    private string selectedDateRange = "";
+    private DateTime? filterStartDate;
+    private DateTime? filterEndDate;
+
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || filterStartDate.HasValue || filterEndDate.HasValue;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSellerUserId();
+        await LoadArchivedExpensesAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JSRuntime.InvokeVoidAsync("setupSearchInputFilter", "expense-archive-search-input");
+        }
+    }
+
+    private async Task LoadSellerUserId()
+    {
+        if (AuthState.CurrentUser != null)
+        {
+            try
+            {
+                const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+                using var conn = new SqlConnection(connectionString);
+                await conn.OpenAsync();
+
+                var sql = "SELECT user_id FROM dbo.tbl_users WHERE id = @UserId AND archived_at IS NULL";
+                using var cmd = new SqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@UserId", AuthState.CurrentUser.Id);
+
+                var result = await cmd.ExecuteScalarAsync();
+                if (result != null && result != DBNull.Value)
+                {
+                    sellerUserId = Convert.ToInt32(result);
+                }
+            }
+            catch
+            {
+                sellerUserId = 0;
+            }
+        }
+    }
+
+    private async Task LoadArchivedExpensesAsync()
+    {
+        if (sellerUserId <= 0)
+        {
+            await LoadSellerUserId();
+            if (sellerUserId <= 0)
+            {
+                await JSRuntime.InvokeVoidAsync("console.error", "Seller User ID not found.");
+                isLoading = false;
+                StateHasChanged();
+                return;
+            }
+        }
+
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            // Get all archived expenses matching search term first
+            var allArchived = await ExpenseService.GetArchivedExpensesAsync(
+                sellerUserId,
+                string.IsNullOrWhiteSpace(searchTerm) ? null : searchTerm,
+                1,
+                10000
+            );
+            
+            // Apply date filter client-side (filter by ArchivedAt)
+            if (filterStartDate.HasValue || filterEndDate.HasValue)
+            {
+                allFilteredArchived = allArchived.Where(e =>
+                {
+                    var archivedDate = e.ArchivedAt.Date;
+                    
+                    if (filterStartDate.HasValue && filterEndDate.HasValue)
+                    {
+                        return archivedDate >= filterStartDate.Value.Date && archivedDate <= filterEndDate.Value.Date;
+                    }
+                    else if (filterStartDate.HasValue)
+                    {
+                        return archivedDate >= filterStartDate.Value.Date;
+                    }
+                    else if (filterEndDate.HasValue)
+                    {
+                        return archivedDate <= filterEndDate.Value.Date;
+                    }
+                    return true;
+                }).ToList();
+            }
+            else
+            {
+                allFilteredArchived = allArchived;
+            }
+            
+            // Update total count based on filtered results
+            totalCount = allFilteredArchived.Count;
+            
+            // Apply pagination to filtered results
+            archivedExpenses = allFilteredArchived
+                .Skip((currentPage - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading archived expenses: {ex.Message}");
+            archivedExpenses = new List<IT13_Final.Services.Data.ArchivedExpenseModel>();
+            allFilteredArchived = new List<IT13_Final.Services.Data.ArchivedExpenseModel>();
+            totalCount = 0;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        currentPage = 1;
+        await LoadArchivedExpensesAsync();
+    }
+
+    // Debounce search to avoid too many queries
+    private void OnSearchInput()
+    {
+        // Filter out special characters
+        var filtered = System.Text.RegularExpressions.Regex.Replace(searchTerm, @"[^a-zA-Z0-9\s\-_]", "");
+        if (filtered != searchTerm)
+        {
+            searchTerm = filtered;
+        }
+        
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            currentPage = 1;
+            await InvokeAsync(async () =>
+            {
+                await LoadArchivedExpensesAsync();
+            });
+        }, null, 400, Timeout.Infinite);
+    }
+
+    private async Task ClearSearch()
+    {
+        searchTerm = string.Empty;
+        currentPage = 1;
+        await LoadArchivedExpensesAsync();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages)
+        {
+            if (page != currentPage)
+            {
+                currentPage = page;
+                await LoadArchivedExpensesAsync();
+            }
+        }
+    }
+
+    private void NavigateToExpenses()
+    {
+        Nav.NavigateTo("/accounting/financial/expenses");
+    }
+
+    private async Task HandleRowClick(int expenseId)
+    {
+        showExpenseDetails = true;
+        StateHasChanged();
+
+        try
+        {
+            expenseDetails = archivedExpenses.FirstOrDefault(e => e.Id == expenseId);
+        }
+        catch
+        {
+            expenseDetails = null;
+        }
+        
+        StateHasChanged();
+    }
+
+    private void CloseExpenseDetails()
+    {
+        showExpenseDetails = false;
+        expenseDetails = null;
+        StateHasChanged();
+    }
+
+    private async Task HandleRestore(int expenseId)
+    {
+        // Get the expense for the confirmation dialog
+        var expense = archivedExpenses.FirstOrDefault(e => e.Id == expenseId);
+        var expenseType = expense?.ExpenseType ?? "this expense";
+        
+        // Show confirmation dialog
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to restore {expenseType}?");
+        
+        if (!confirmed)
+        {
+            return; // User cancelled
+        }
+        
+        isProcessing = true;
+        StateHasChanged();
+        
+        try
+        {
+            var success = await ExpenseService.RestoreExpenseAsync(expenseId, sellerUserId);
+            
+            if (success)
+            {
+                // Refresh the list to remove the restored expense
+                await LoadArchivedExpensesAsync();
+                
+                // Show success message
+                successMessageText = "Expense restored successfully!";
+                showSuccessMessage = true;
+                
+                // Set timer to hide success message after 5 seconds
+                _successBannerTimer?.Dispose();
+                _successBannerTimer = new System.Threading.Timer(async _ =>
+                {
+                    await InvokeAsync(() =>
+                    {
+                        showSuccessMessage = false;
+                        successMessageText = string.Empty;
+                        StateHasChanged();
+                    });
+                }, null, 5000, Timeout.Infinite);
+            }
+        }
+        catch (Exception)
+        {
+            // Handle error - could show an error message here
+        }
+        finally
+        {
+            isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+        _successBannerTimer?.Dispose();
+    }
+
+    // Date filter methods
+    private void HandleStartDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            filterStartDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            filterStartDate = null;
+            selectedDateRange = "";
+        }
+    }
+
+    private void HandleEndDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            filterEndDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            filterEndDate = null;
+            selectedDateRange = "";
+        }
+    }
+
+    private void HandleDateRangeChange()
+    {
+        var now = DateTime.Now;
+        switch (selectedDateRange)
+        {
+            case "":
+                filterStartDate = null;
+                filterEndDate = null;
+                break;
+            case "today":
+                filterStartDate = now.Date;
+                filterEndDate = now.Date;
+                break;
+            case "yesterday":
+                filterStartDate = now.Date.AddDays(-1);
+                filterEndDate = now.Date.AddDays(-1);
+                break;
+            case "last7days":
+                filterStartDate = now.Date.AddDays(-6);
+                filterEndDate = now.Date;
+                break;
+            case "last30days":
+                filterStartDate = now.Date.AddDays(-29);
+                filterEndDate = now.Date;
+                break;
+            case "thismonth":
+                filterStartDate = new DateTime(now.Year, now.Month, 1);
+                filterEndDate = now.Date;
+                break;
+            case "thisyear":
+                filterStartDate = new DateTime(now.Year, 1, 1);
+                filterEndDate = now.Date;
+                break;
+        }
+        _ = LoadArchivedExpensesAsync();
+    }
+
+    private async Task ApplyDateFilter()
+    {
+        currentPage = 1;
+        await LoadArchivedExpensesAsync();
+    }
+
+    private async Task ClearDateFilter()
+    {
+        selectedDateRange = "";
+        filterStartDate = null;
+        filterEndDate = null;
+        currentPage = 1;
+        await LoadArchivedExpensesAsync();
+    }
+
+    private string GetDateRangeText()
+    {
+        if (filterStartDate.HasValue && filterEndDate.HasValue)
+        {
+            return $"{filterStartDate.Value:MM/dd/yyyy} - {filterEndDate.Value:MM/dd/yyyy}";
+        }
+        else if (filterStartDate.HasValue)
+        {
+            return $"From {filterStartDate.Value:MM/dd/yyyy}";
+        }
+        else if (filterEndDate.HasValue)
+        {
+            return $"Until {filterEndDate.Value:MM/dd/yyyy}";
+        }
+        return "All Time";
+    }
+
+    private async Task PrintArchivedExpenses()
+    {
+        var currentUserName = AuthState.CurrentUser?.FullName ?? "Accountant";
+        
+        var reportData = new
+        {
+            title = "Archived Expense Records Report",
+            printedBy = currentUserName,
+            printedAt = DateTime.Now.ToString("MMMM dd, yyyy hh:mm tt"),
+            dateRange = GetDateRangeText(),
+            totalCount = allFilteredArchived.Count,
+            records = allFilteredArchived.Select(e => new
+            {
+                id = e.Id,
+                expenseType = e.ExpenseType,
+                amount = e.Amount.ToString("N2"),
+                expenseDate = e.ExpenseDate.ToString("MMM dd, yyyy"),
+                archivedDate = e.ArchivedAt.ToString("MMM dd, yyyy"),
+                createdBy = e.CreatedByName,
+                description = e.Description ?? "-"
+            }).ToList()
+        };
+
+        await JSRuntime.InvokeVoidAsync("printArchivedExpenses", reportData);
+    }
+}

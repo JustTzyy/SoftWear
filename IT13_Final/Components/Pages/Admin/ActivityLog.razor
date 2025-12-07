@@ -6,62 +6,107 @@
 @implements IDisposable
 @using System.Linq
 
-<h1 class="page-title">My Activity Logs</h1>
-
-<div class="activity-log-container">
-    <div class="search-filters-row">
-        <div class="search-wrapper">
-            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"></circle>
-                <path d="m21 21-4.35-4.35"></path>
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">My Activity Log</h1>
+        <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy") • @totalCount total activities</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintReport" disabled="@isGeneratingPDF" title="Print Report">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                <rect x="6" y="14" width="12" height="8"></rect>
             </svg>
-            <input type="text" class="search-input" placeholder="Search my activity logs" value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
-        </div>
-
-        <button class="print-btn" @onclick="PrintReport" disabled="@isGeneratingPDF">
-            @if (isGeneratingPDF)
-            {
-                <span>Generating PDF...</span>
-            }
-            else
-            {
-                <svg class="print-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="6 9 6 2 18 2 18 9"></polyline>
-                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-                    <rect x="6" y="14" width="12" height="8"></rect>
-                </svg>
-                <span>Print Report</span>
-            }
         </button>
     </div>
+</div>
 
-    <div class="filters-section">
-        <div class="filter-content">
-            <div class="date-filters">
-                <div class="date-range-dropdown">
-                    <label>Quick Range</label>
-                    <select class="date-range-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
-                        <option value="">Custom</option>
-                        <option value="today">Today</option>
-                        <option value="yesterday">Yesterday</option>
-                        <option value="lastweek">Last Week</option>
-                        <option value="thismonth">This Month</option>
-                        <option value="thisyear">This Year</option>
-                    </select>
-                </div>
-                <div class="date-filter">
-                    <label>From</label>
-                    <input type="date" class="date-input" value="@(fromDate?.ToString("yyyy-MM-dd"))" max="@(toDate?.ToString("yyyy-MM-dd"))" @onchange="HandleFromDateChange" />
-                </div>
-                <div class="date-filter">
-                    <label>To</label>
-                    <input type="date" class="date-input" value="@(toDate?.ToString("yyyy-MM-dd"))" min="@(fromDate?.ToString("yyyy-MM-dd"))" @onchange="HandleToDateChange" />
-                </div>
-            </div>
-        </div>
+@* Category Tabs - All vs Authentication *@
+<div class="category-tabs">
+    <button class="category-tab @(!showAuthenticationOnly ? "active" : "")" @onclick="() => ToggleView(false)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+        </svg>
+        <span>All Activities</span>
+        <span class="tab-count">@otherCount</span>
+    </button>
+    <button class="category-tab @(showAuthenticationOnly ? "active" : "")" @onclick="() => ToggleView(true)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+        <span>Authentication</span>
+        <span class="tab-count">@authCount</span>
+    </button>
+</div>
+
+@* Search and Date Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.35-4.35"></path>
+        </svg>
+        <input type="text" class="search-input" placeholder="Search activity logs..." @bind="searchTerm" @bind:event="oninput" @bind:after="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            <button class="clear-search-btn" @onclick="ClearSearch" title="Clear">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        }
     </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="lastweek">Last 7 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date" 
+               class="date-input" 
+               value="@(fromDate?.ToString("yyyy-MM-dd"))" 
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleFromDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date" 
+               class="date-input" 
+               value="@(toDate?.ToString("yyyy-MM-dd"))" 
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleToDateChange" />
+        <button class="filter-btn" @onclick="ApplyFilters">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            Apply
+        </button>
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
+
+<div class="activity-log-container">
 
     <div class="table-container">
+        <h3 class="table-section-title">@(showAuthenticationOnly ? "Authentication Activities" : "Other Activities")</h3>
         <table class="activity-table">
             <thead>
                 <tr>
@@ -81,7 +126,7 @@
                 else if (logs.Count == 0)
                 {
                     <tr>
-                        <td colspan="4" class="empty-cell">No activity logs found</td>
+                        <td colspan="4" class="empty-cell">@(showAuthenticationOnly ? "No authentication activities found" : "No other activities found")</td>
                     </tr>
                 }
                 else
@@ -144,14 +189,29 @@
     private DateTime? fromDate;
     private DateTime? toDate;
     private string selectedDateRange = string.Empty;
+
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || fromDate.HasValue || toDate.HasValue;
+    private bool showAuthenticationOnly = false;
     private bool isLoading = true;
     private int currentPage = 1;
     private int pageSize = 10;
     private int totalCount = 0;
-    private int totalPages => (int)Math.Ceiling((double)totalCount / pageSize);
+    private int totalPages => (int)Math.Ceiling((double)(showAuthenticationOnly ? authCount : otherCount) / pageSize);
+    private bool isGeneratingPDF = false;
+    
+    // Category counts
+    private int authCount = 0;
+    private int otherCount = 0;
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadLogsAsync();
+    }
+    
+    private async Task ToggleView(bool showAuth)
+    {
+        showAuthenticationOnly = showAuth;
+        currentPage = 1;
         await LoadLogsAsync();
     }
 
@@ -164,15 +224,46 @@
         {
             var userId = AuthState.CurrentUser?.Id;
             
-            var count = await HistoryService.GetLogsCountAsync(userId, searchTerm, null, null, fromDate, toDate);
-            totalCount = count;
-
-            logs = await HistoryService.GetLogsAsync(userId, searchTerm, null, null, fromDate, toDate, currentPage, pageSize);
+            // Load all logs to filter client-side
+            var allLogs = await HistoryService.GetLogsAsync(userId, searchTerm, null, null, fromDate, toDate, 1, 10000);
+            
+            // Separate logs by type
+            var authLogsList = allLogs.Where(log => log.Module?.Equals("Authentication", StringComparison.OrdinalIgnoreCase) == true).ToList();
+            var otherLogsList = allLogs.Where(log => log.Module?.Equals("Authentication", StringComparison.OrdinalIgnoreCase) != true).ToList();
+            
+            // Update counts
+            authCount = authLogsList.Count;
+            otherCount = otherLogsList.Count;
+            totalCount = allLogs.Count;
+            
+            // Get the appropriate list based on current view
+            var filteredLogs = showAuthenticationOnly ? authLogsList : otherLogsList;
+            
+            // Calculate total pages for current view
+            var maxPages = (int)Math.Ceiling((double)filteredLogs.Count / pageSize);
+            
+            // Adjust current page if it exceeds available pages
+            if (currentPage > maxPages && maxPages > 0)
+            {
+                currentPage = maxPages;
+            }
+            else if (currentPage < 1)
+            {
+                currentPage = 1;
+            }
+            
+            // Paginate the filtered logs client-side
+            logs = filteredLogs
+                .Skip((currentPage - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
         }
         catch (Exception)
         {
             logs = new List<IT13_Final.Services.Audit.HistoryLog>();
             totalCount = 0;
+            authCount = 0;
+            otherCount = 0;
         }
         finally
         {
@@ -181,20 +272,18 @@
         }
     }
 
-    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter")
-        {
-            currentPage = 1;
-            await LoadLogsAsync();
-        }
-    }
-
-    // Debounce search to avoid too many queries
     private System.Threading.Timer? _searchTimer;
-    private void HandleSearchInput(ChangeEventArgs e)
+
+    private void HandleSearchInput()
     {
-        searchTerm = e.Value?.ToString() ?? string.Empty;
+        // Filter out special characters
+        var filtered = System.Text.RegularExpressions.Regex.Replace(searchTerm, @"[^a-zA-Z0-9\s\-_]", "");
+        if (filtered != searchTerm)
+        {
+            searchTerm = filtered;
+        }
+        
+        // Debounce search to avoid too many queries
         _searchTimer?.Dispose();
         _searchTimer = new System.Threading.Timer(async _ =>
         {
@@ -203,20 +292,36 @@
             {
                 await LoadLogsAsync();
             });
-        }, null, 500, Timeout.Infinite);
+        }, null, 500, System.Threading.Timeout.Infinite);
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _searchTimer?.Dispose();
+            currentPage = 1;
+            await LoadLogsAsync();
+        }
+    }
+
+    private async Task ClearSearch()
+    {
+        _searchTimer?.Dispose();
+        searchTerm = string.Empty;
+        currentPage = 1;
+        await LoadLogsAsync();
     }
 
     private async Task HandleFromDateChange(ChangeEventArgs e)
     {
-        selectedDateRange = string.Empty; // Reset dropdown when manually changing dates
-        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        selectedDateRange = string.Empty;
+        var val = e.Value?.ToString() ?? string.Empty;
+        if (DateTime.TryParse(val, out var date))
         {
             fromDate = date.Date;
-            // If toDate is before fromDate, reset toDate
             if (toDate.HasValue && toDate.Value < fromDate.Value)
-            {
                 toDate = null;
-            }
         }
         else
         {
@@ -227,16 +332,13 @@
 
     private async Task HandleToDateChange(ChangeEventArgs e)
     {
-        selectedDateRange = string.Empty; // Reset dropdown when manually changing dates
-        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        selectedDateRange = string.Empty;
+        var val = e.Value?.ToString() ?? string.Empty;
+        if (DateTime.TryParse(val, out var date))
         {
             var dateValue = date.Date;
-            // Ensure toDate is not before fromDate
             if (fromDate.HasValue && dateValue < fromDate.Value)
-            {
-                // Don't allow toDate to be set before fromDate
                 return;
-            }
             toDate = dateValue;
         }
         else
@@ -273,11 +375,21 @@
                 toDate = today;
                 break;
             default:
-                // Custom - don't change dates
+                fromDate = null;
+                toDate = null;
                 break;
         }
         
         await ApplyFilters();
+    }
+
+    private async Task ClearDateFilter()
+    {
+        selectedDateRange = string.Empty;
+        fromDate = null;
+        toDate = null;
+        currentPage = 1;
+        await LoadLogsAsync();
     }
 
     private async Task GoToPage(int page)
@@ -298,8 +410,16 @@
         await LoadLogsAsync();
     }
 
-    private List<IT13_Final.Services.Audit.HistoryLog> allLogsForPrint = new();
-    private bool isGeneratingPDF = false;
+    private string GetDateRangeText()
+    {
+        if (fromDate.HasValue && toDate.HasValue)
+            return $"{fromDate.Value:MMM dd, yyyy} - {toDate.Value:MMM dd, yyyy}";
+        if (fromDate.HasValue)
+            return $"From {fromDate.Value:MMM dd, yyyy}";
+        if (toDate.HasValue)
+            return $"Until {toDate.Value:MMM dd, yyyy}";
+        return "All Time";
+    }
 
     private async Task PrintReport()
     {
@@ -308,27 +428,30 @@
             isGeneratingPDF = true;
             StateHasChanged();
 
-            // Fetch all logs without pagination (using a large page size)
             var userId = AuthState.CurrentUser?.Id;
-            allLogsForPrint = await HistoryService.GetLogsAsync(userId, searchTerm, null, null, fromDate, toDate, 1, 10000);
+            var allLogs = await HistoryService.GetLogsAsync(userId, searchTerm, null, null, fromDate, toDate, 1, 10000);
             
-            // Generate PDF and print
-            await JSRuntime.InvokeVoidAsync("generateAndPrintPDF", 
-                allLogsForPrint.Select(log => new {
+            var reportData = new
+            {
+                title = "Activity Log Report",
+                printedBy = AuthState.CurrentUser?.FullName ?? "Admin",
+                printedAt = DateTime.Now.ToString("MMMM dd, yyyy hh:mm tt"),
+                dateRange = GetDateRangeText(),
+                totalActivities = allLogs.Count.ToString(),
+                logs = allLogs.Select(log => new
+                {
                     status = log.Status,
                     module = log.Module,
                     description = log.Description,
                     date = log.Timestamp.ToString("MMM dd, yyyy"),
-                    time = log.Timestamp.ToString("HH:mm:ss")
-                }).ToArray(),
-                AuthState.CurrentUser?.FullName ?? "User",
-                fromDate?.ToString("MMM dd, yyyy") ?? "All Time",
-                toDate?.ToString("MMM dd, yyyy") ?? "Today"
-            );
+                    time = log.Timestamp.ToString("hh:mm:ss tt")
+                }).ToList()
+            };
+            
+            await JSRuntime.InvokeVoidAsync("printActivityLog", reportData);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            // Fallback to regular print if PDF generation fails
             await JSRuntime.InvokeVoidAsync("window.print");
         }
         finally

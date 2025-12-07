@@ -3,56 +3,129 @@
 @inject IT13_Final.Services.Data.IUserService UserService
 @inject IT13_Final.Services.Data.IAddressService AddressService
 @inject IT13_Final.Services.Data.IPhilippineAddressService PhilippineAddressService
+@inject IT13_Final.Services.Audit.IHistoryService HistoryService
+@inject IT13_Final.Services.Auth.AuthState AuthState
 @inject IJSRuntime JSRuntime
 @inject NavigationManager Nav
 @using System.Linq
 @implements IDisposable
 
-<h1 class="page-title">Admin Records</h1>
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Admin Records</h1>
+        <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintAdminRecords" title="Print records">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 9V2h12v7"></path>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                <rect x="6" y="14" width="12" height="8"></rect>
+            </svg>
+        </button>
+    </div>
+</div>
+
+@* Search and Date Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.3-4.3"></path>
+        </svg>
+        <input type="text" class="search-input" placeholder="Search by name or email..." @bind="searchTerm" @bind:event="oninput" @bind:after="OnSearchInput" />
+        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            <button class="clear-search-btn" @onclick="ClearSearch" title="Clear search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date" 
+               class="date-input" 
+               value="@(filterStartDate?.ToString("yyyy-MM-dd"))" 
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleStartDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date" 
+               class="date-input" 
+               value="@(filterEndDate?.ToString("yyyy-MM-dd"))" 
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleEndDateChange" />
+        <button class="filter-btn" @onclick="ApplyDateFilter">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            Apply
+        </button>
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
 
 @if (showSuccessMessage && !string.IsNullOrEmpty(successMessageText))
 {
     <div class="success-banner">
-        <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="20 6 9 17 4 12"></polyline>
+        <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
         </svg>
         <span>@successMessageText</span>
     </div>
 }
 
-<div class="admin-records-container">
-    <div class="search-actions-row">
-        <div class="search-wrapper">
-            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"></circle>
-                <path d="m21 21-4.35-4.35"></path>
-            </svg>
-            <input type="text" class="search-input" placeholder="Search admins" value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+@* Admin List Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Admin List</h3>
+            <span class="card-subtitle">@totalCount total administrators</span>
         </div>
-
-        <div class="action-buttons">
-            <button class="archive-btn" @onclick="NavigateToArchive">
-                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-                    <line x1="12" y1="22.08" x2="12" y2="12"></line>
+        <div class="card-actions">
+            <button class="card-action-btn secondary" @onclick="NavigateToArchive">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect width="20" height="5" x="2" y="3" rx="1"></rect>
+                    <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"></path>
+                    <path d="M10 12h4"></path>
                 </svg>
                 <span>Archive</span>
             </button>
-            <button class="add-admin-btn" @onclick="HandleAddAdmin">
-                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <button class="card-action-btn primary" @onclick="HandleAddAdmin">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
                     <circle cx="9" cy="7" r="4"></circle>
-                    <line x1="19" y1="8" x2="19" y2="14"></line>
-                    <line x1="22" y1="11" x2="16" y2="11"></line>
+                    <line x1="19" x2="19" y1="8" y2="14"></line>
+                    <line x1="22" x2="16" y1="11" y2="11"></line>
                 </svg>
                 <span>Add Admin</span>
             </button>
         </div>
     </div>
-
-    <div class="table-container">
-        <div class="table-header">List</div>
+    
+    <div class="card-body">
         <table class="admin-table">
             <thead>
                 <tr>
@@ -86,17 +159,17 @@
                             <td>@user.Email</td>
                             <td>@user.DateCreated.ToString("MMM dd, yyyy")</td>
                             <td class="actions-cell" @onclick:stopPropagation>
-                                <button class="action-btn edit-btn" @onclick="() => HandleEdit(user.Id)" title="Edit">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                <button class="action-btn edit-btn" @onclick="() => HandleEdit(user.Id)" title="Edit admin">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
+                                        <path d="m15 5 4 4"></path>
                                     </svg>
                                 </button>
                                 <button class="action-btn delete-btn" @onclick="() => HandleDelete(user.Id)" title="Archive">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <rect x="3" y="4" width="18" height="4" rx="1"></rect>
-                                        <path d="M5 8h14v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8z"></path>
-                                        <line x1="10" y1="12" x2="14" y2="12"></line>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <rect width="20" height="5" x="2" y="3" rx="1"></rect>
+                                        <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"></path>
+                                        <path d="M10 12h4"></path>
                                     </svg>
                                 </button>
                             </td>
@@ -110,15 +183,15 @@
     @if (totalPages > 1)
     {
         <div class="pagination">
-            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="15 18 9 12 15 6"></polyline>
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)" title="Previous page">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m15 18-6-6 6-6"></path>
                 </svg>
             </button>
 
             @for (int i = 1; i <= totalPages; i++)
             {
-                var pageNum = i; // Capture loop variable for lambda
+                var pageNum = i;
                 @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
                 {
                     <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
@@ -131,9 +204,9 @@
                 }
             }
 
-            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="9 18 15 12 9 6"></polyline>
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)" title="Next page">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m9 18 6-6-6-6"></path>
                 </svg>
             </button>
         </div>
@@ -146,16 +219,16 @@
         <div class="modal-container" @onclick:stopPropagation>
             <div class="modal-header">
                 <div class="modal-title">
-                    <svg class="modal-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                        <circle cx="12" cy="7" r="4"></circle>
+                    <svg class="modal-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="8" r="5"></circle>
+                        <path d="M20 21a8 8 0 0 0-16 0"></path>
                     </svg>
                     <span>User Details</span>
                 </div>
                 <button class="modal-close" @onclick="CloseUserDetails" title="Close">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
                     </svg>
                     <span class="modal-close-text">Close</span>
                 </button>
@@ -243,25 +316,25 @@
         <div class="add-admin-modal" @onclick:stopPropagation>
             <div class="modal-header">
                 <h2 class="modal-title-text">Add Admin</h2>
-                <button class="modal-close-btn" @onclick="CloseAddAdminModal">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                <button class="modal-close-btn" @onclick="CloseAddAdminModal" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
                     </svg>
                 </button>
             </div>
 
             <div class="modal-tabs">
                 <button class="modal-tab @(activeAddAdminTab == "user" ? "active" : "")" @onclick='() => SetActiveAddAdminTab("user")'>
-                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                        <circle cx="12" cy="7" r="4"></circle>
+                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="8" r="5"></circle>
+                        <path d="M20 21a8 8 0 0 0-16 0"></path>
                     </svg>
                     <span>User Information</span>
                 </button>
                 <button class="modal-tab @(activeAddAdminTab == "address" ? "active" : "")" @onclick='() => SetActiveAddAdminTab("address")'>
-                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path>
                         <circle cx="12" cy="10" r="3"></circle>
                     </svg>
                     <span>Address Information</span>
@@ -276,7 +349,7 @@
                     {
                         <div class="form-grid">
                             <div class="form-field">
-                                <label class="field-label">First Name</label>
+                                <label class="field-label">First Name <span class="required-asterisk">*</span></label>
                                 <input id="addAdminFirstName" class="form-input" value="@_addAdminModel.FirstName" @oninput="FilterAddAdminFirstNameInput" placeholder="Enter first name" />
                                 <ValidationMessage For="@(() => _addAdminModel.FirstName)" />
                             </div>
@@ -285,27 +358,27 @@
                                 <input id="addAdminMiddleName" class="form-input" value="@_addAdminModel.MiddleName" @oninput="FilterAddAdminMiddleNameInput" placeholder="Enter middle name (optional)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Last Name</label>
+                                <label class="field-label">Last Name <span class="required-asterisk">*</span></label>
                                 <input id="addAdminLastName" class="form-input" value="@_addAdminModel.LastName" @oninput="FilterAddAdminLastNameInput" placeholder="Enter last name" />
                                 <ValidationMessage For="@(() => _addAdminModel.LastName)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Email</label>
-                                <InputText class="form-input" @bind-Value="_addAdminModel.Email" placeholder="Enter email address" />
+                                <label class="field-label">Email <span class="required-asterisk">*</span></label>
+                                <InputText class="form-input" @bind-Value="_addAdminModel.Email" @oninput="FilterAddAdminEmailInput" placeholder="Enter email address" />
                                 <ValidationMessage For="@(() => _addAdminModel.Email)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Birthday</label>
+                                <label class="field-label">Birthday <span class="required-asterisk">*</span></label>
                                 <input type="date" class="form-input" value="@(_addAdminModel.Birthday?.ToString("yyyy-MM-dd") ?? "")" max="@MaxBirthdayDate.ToString("yyyy-MM-dd")" @onchange="@((ChangeEventArgs e) => { if (DateTime.TryParse(e.Value?.ToString(), out var date)) { AddAdminBirthday = DateOnly.FromDateTime(date); } else { AddAdminBirthday = null; } })" />
                                 <ValidationMessage For="@(() => _addAdminModel.Birthday)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Age</label>
+                                <label class="field-label">Age <span class="required-asterisk">*</span></label>
                                 <InputNumber TValue="int?" class="form-input" @bind-Value="_addAdminModel.Age" disabled />
                                 <ValidationMessage For="@(() => _addAdminModel.Age)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Sex</label>
+                                <label class="field-label">Sex <span class="required-asterisk">*</span></label>
                                 <select class="form-input sex-select" value="@_addAdminModel.Sex" @onchange="@((ChangeEventArgs e) => { 
                                     _addAdminModel.Sex = e.Value?.ToString() ?? string.Empty; 
                                     if (_addAdminEditContext != null)
@@ -321,8 +394,8 @@
                                 <ValidationMessage For="@(() => _addAdminModel.Sex)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Contact Number</label>
-                                <InputText class="form-input" @bind-Value="_addAdminModel.Contact" placeholder="+63 912 345 6789" />
+                                <label class="field-label">Contact Number <span class="required-asterisk">*</span></label>
+                                <InputText class="form-input" @bind-Value="_addAdminModel.Contact" @oninput="FilterAddAdminContactInput" placeholder="09123456789" maxlength="11" />
                                 <ValidationMessage For="@(() => _addAdminModel.Contact)" />
                             </div>
                         </div>
@@ -331,12 +404,12 @@
                     {
                         <div class="form-grid">
                             <div class="form-field full-width">
-                                <label class="field-label">Street Address</label>
+                                <label class="field-label">Street Address <span class="required-asterisk">*</span></label>
                                 <InputText class="form-input" @bind-Value="_addAdminAddressModel.Street" placeholder="123 Main Street, Barangay Name" />
                                 <ValidationMessage For="@(() => _addAdminAddressModel.Street)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Province</label>
+                                <label class="field-label">Province <span class="required-asterisk">*</span></label>
                                 <select class="form-input province-select" value="@_addAdminAddressModel.Province" @onchange="OnProvinceChanged">
                                     <option value="">Select Province</option>
                                     @foreach (var province in _addAdminProvinces)
@@ -347,7 +420,7 @@
                                 <ValidationMessage For="@(() => _addAdminAddressModel.Province)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">City</label>
+                                <label class="field-label">City <span class="required-asterisk">*</span></label>
                                 <select class="form-input city-select" value="@_addAdminAddressModel.City" @onchange="OnCityChanged" disabled="@(string.IsNullOrEmpty(_addAdminAddressModel.Province))">
                                     <option value="">Select City</option>
                                     @foreach (var city in _addAdminCities)
@@ -358,7 +431,7 @@
                                 <ValidationMessage For="@(() => _addAdminAddressModel.City)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Zip Code</label>
+                                <label class="field-label">Zip Code <span class="required-asterisk">*</span></label>
                                 <input class="form-input" value="@_addAdminAddressModel.Zip" disabled placeholder="Auto-filled" />
                                 <ValidationMessage For="@(() => _addAdminAddressModel.Zip)" />
                             </div>
@@ -368,10 +441,10 @@
                     <div class="modal-footer">
                         <button type="button" class="cancel-btn" @onclick="CloseAddAdminModal">Cancel</button>
                         <button type="submit" class="save-admin-btn">
-                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                                <polyline points="7 3 7 8 15 8"></polyline>
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="9" cy="7" r="4"></circle>
+                                <polyline points="16 11 18 13 22 9"></polyline>
                             </svg>
                             <span>Save Admin</span>
                         </button>
@@ -389,25 +462,25 @@
         <div class="add-admin-modal" @onclick:stopPropagation>
             <div class="modal-header">
                 <h2 class="modal-title-text">Update Admin</h2>
-                <button class="modal-close-btn" @onclick="CloseUpdateAdminModal">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                <button class="modal-close-btn" @onclick="CloseUpdateAdminModal" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
                     </svg>
                 </button>
             </div>
 
             <div class="modal-tabs">
                 <button class="modal-tab @(activeUpdateAdminTab == "user" ? "active" : "")" @onclick='() => SetActiveUpdateAdminTab("user")'>
-                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                        <circle cx="12" cy="7" r="4"></circle>
+                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="8" r="5"></circle>
+                        <path d="M20 21a8 8 0 0 0-16 0"></path>
                     </svg>
                     <span>User Information</span>
                 </button>
                 <button class="modal-tab @(activeUpdateAdminTab == "address" ? "active" : "")" @onclick='() => SetActiveUpdateAdminTab("address")'>
-                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path>
                         <circle cx="12" cy="10" r="3"></circle>
                     </svg>
                     <span>Address Information</span>
@@ -422,7 +495,7 @@
                     {
                         <div class="form-grid">
                             <div class="form-field">
-                                <label class="field-label">First Name</label>
+                                <label class="field-label">First Name <span class="required-asterisk">*</span></label>
                                 <input id="updateAdminFirstName" class="form-input" value="@_updateAdminModel.FirstName" @oninput="FilterUpdateAdminFirstNameInput" placeholder="Enter first name" />
                                 <ValidationMessage For="@(() => _updateAdminModel.FirstName)" />
                             </div>
@@ -431,27 +504,27 @@
                                 <input id="updateAdminMiddleName" class="form-input" value="@_updateAdminModel.MiddleName" @oninput="FilterUpdateAdminMiddleNameInput" placeholder="Enter middle name (optional)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Last Name</label>
+                                <label class="field-label">Last Name <span class="required-asterisk">*</span></label>
                                 <input id="updateAdminLastName" class="form-input" value="@_updateAdminModel.LastName" @oninput="FilterUpdateAdminLastNameInput" placeholder="Enter last name" />
                                 <ValidationMessage For="@(() => _updateAdminModel.LastName)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Email</label>
-                                <InputText class="form-input" @bind-Value="_updateAdminModel.Email" placeholder="Enter email address" />
+                                <label class="field-label">Email <span class="required-asterisk">*</span></label>
+                                <InputText class="form-input" @bind-Value="_updateAdminModel.Email" @oninput="FilterUpdateAdminEmailInput" placeholder="Enter email address" />
                                 <ValidationMessage For="@(() => _updateAdminModel.Email)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Birthday</label>
+                                <label class="field-label">Birthday <span class="required-asterisk">*</span></label>
                                 <input type="date" class="form-input" value="@(_updateAdminModel.Birthday?.ToString("yyyy-MM-dd") ?? "")" max="@MaxBirthdayDate.ToString("yyyy-MM-dd")" @onchange="@((ChangeEventArgs e) => { if (DateTime.TryParse(e.Value?.ToString(), out var date)) { UpdateAdminBirthday = DateOnly.FromDateTime(date); } else { UpdateAdminBirthday = null; } })" />
                                 <ValidationMessage For="@(() => _updateAdminModel.Birthday)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Age</label>
+                                <label class="field-label">Age <span class="required-asterisk">*</span></label>
                                 <InputNumber TValue="int?" class="form-input" @bind-Value="_updateAdminModel.Age" disabled />
                                 <ValidationMessage For="@(() => _updateAdminModel.Age)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Sex</label>
+                                <label class="field-label">Sex <span class="required-asterisk">*</span></label>
                                 <select class="form-input sex-select" value="@_updateAdminModel.Sex" @onchange="@((ChangeEventArgs e) => { 
                                     _updateAdminModel.Sex = e.Value?.ToString() ?? string.Empty; 
                                     if (_updateAdminEditContext != null)
@@ -467,8 +540,8 @@
                                 <ValidationMessage For="@(() => _updateAdminModel.Sex)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Contact Number</label>
-                                <InputText class="form-input" @bind-Value="_updateAdminModel.Contact" placeholder="+63 912 345 6789" />
+                                <label class="field-label">Contact Number <span class="required-asterisk">*</span></label>
+                                <InputText class="form-input" @bind-Value="_updateAdminModel.Contact" @oninput="FilterUpdateAdminContactInput" placeholder="09123456789" maxlength="11" />
                                 <ValidationMessage For="@(() => _updateAdminModel.Contact)" />
                             </div>
                         </div>
@@ -477,12 +550,12 @@
                     {
                         <div class="form-grid">
                             <div class="form-field full-width">
-                                <label class="field-label">Street Address</label>
+                                <label class="field-label">Street Address <span class="required-asterisk">*</span></label>
                                 <InputText class="form-input" @bind-Value="_updateAdminAddressModel.Street" placeholder="123 Main Street, Barangay Name" />
                                 <ValidationMessage For="@(() => _updateAdminAddressModel.Street)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Province</label>
+                                <label class="field-label">Province <span class="required-asterisk">*</span></label>
                                 <select class="form-input province-select" value="@_updateAdminAddressModel.Province" @onchange="OnUpdateProvinceChanged">
                                     <option value="">Select Province</option>
                                     @foreach (var province in _updateAdminProvinces)
@@ -493,7 +566,7 @@
                                 <ValidationMessage For="@(() => _updateAdminAddressModel.Province)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">City</label>
+                                <label class="field-label">City <span class="required-asterisk">*</span></label>
                                 <select class="form-input city-select" value="@_updateAdminAddressModel.City" @onchange="OnUpdateCityChanged" disabled="@(string.IsNullOrEmpty(_updateAdminAddressModel.Province))">
                                     <option value="">Select City</option>
                                     @foreach (var city in _updateAdminCities)
@@ -504,7 +577,7 @@
                                 <ValidationMessage For="@(() => _updateAdminAddressModel.City)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Zip Code</label>
+                                <label class="field-label">Zip Code <span class="required-asterisk">*</span></label>
                                 <input class="form-input" value="@_updateAdminAddressModel.Zip" disabled placeholder="Auto-filled" />
                                 <ValidationMessage For="@(() => _updateAdminAddressModel.Zip)" />
                             </div>
@@ -514,10 +587,10 @@
                     <div class="modal-footer">
                         <button type="button" class="cancel-btn" @onclick="CloseUpdateAdminModal">Cancel</button>
                         <button type="submit" class="save-admin-btn">
-                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                                <polyline points="7 3 7 8 15 8"></polyline>
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="9" cy="7" r="4"></circle>
+                                <path d="M17 11l2 2 4-4"></path>
                             </svg>
                             <span>Update Admin</span>
                         </button>
@@ -539,6 +612,13 @@
     private bool showUserDetails = false;
     private IT13_Final.Services.Data.UserDetailsModel? userDetails = null;
     private bool isLoadingDetails = false;
+
+    // Date filter variables
+    private string selectedDateRange = "";
+    private DateTime? filterStartDate;
+    private DateTime? filterEndDate;
+
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || filterStartDate.HasValue || filterEndDate.HasValue;
 
     // Add Admin Modal
     private bool showAddAdminModal = false;
@@ -611,6 +691,9 @@
         }
     }
 
+    // Store all filtered admins for PDF generation
+    private List<IT13_Final.Services.Data.AdminUserModel> allFilteredAdmins = new();
+
     private async Task LoadAdminUsersAsync()
     {
         isLoading = true;
@@ -618,12 +701,49 @@
 
         try
         {
-            totalCount = await UserService.GetAdminUsersCountAsync(searchTerm);
-            adminUsers = await UserService.GetAdminUsersAsync(searchTerm, currentPage, pageSize);
+            // Get all admins matching search term first
+            var allAdmins = await UserService.GetAdminUsersAsync(searchTerm, 1, 10000);
+            
+            // Apply date filter client-side
+            if (filterStartDate.HasValue || filterEndDate.HasValue)
+            {
+                allFilteredAdmins = allAdmins.Where(u =>
+                {
+                    var createdDate = u.DateCreated.Date;
+                    
+                    if (filterStartDate.HasValue && filterEndDate.HasValue)
+                    {
+                        return createdDate >= filterStartDate.Value.Date && createdDate <= filterEndDate.Value.Date;
+                    }
+                    else if (filterStartDate.HasValue)
+                    {
+                        return createdDate >= filterStartDate.Value.Date;
+                    }
+                    else if (filterEndDate.HasValue)
+                    {
+                        return createdDate <= filterEndDate.Value.Date;
+                    }
+                    return true;
+                }).ToList();
+            }
+            else
+            {
+                allFilteredAdmins = allAdmins;
+            }
+            
+            // Update total count based on filtered results
+            totalCount = allFilteredAdmins.Count;
+            
+            // Apply pagination to filtered results
+            adminUsers = allFilteredAdmins
+                .Skip((currentPage - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
         }
         catch (Exception)
         {
             adminUsers = new List<IT13_Final.Services.Data.AdminUserModel>();
+            allFilteredAdmins = new List<IT13_Final.Services.Data.AdminUserModel>();
             totalCount = 0;
         }
         finally
@@ -633,20 +753,17 @@
         }
     }
 
-    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter")
-        {
-            currentPage = 1;
-            await LoadAdminUsersAsync();
-        }
-    }
-
     // Debounce search to avoid too many queries
     private System.Threading.Timer? _searchTimer;
-    private void HandleSearchInput(ChangeEventArgs e)
+    private void OnSearchInput()
     {
-        searchTerm = e.Value?.ToString() ?? string.Empty;
+        // Filter out special characters
+        var filtered = System.Text.RegularExpressions.Regex.Replace(searchTerm, @"[^a-zA-Z0-9\s\-_]", "");
+        if (filtered != searchTerm)
+        {
+            searchTerm = filtered;
+        }
+        
         _searchTimer?.Dispose();
         _searchTimer = new System.Threading.Timer(async _ =>
         {
@@ -655,7 +772,14 @@
             {
                 await LoadAdminUsersAsync();
             });
-        }, null, 500, Timeout.Infinite);
+        }, null, 400, Timeout.Infinite);
+    }
+
+    private async Task ClearSearch()
+    {
+        searchTerm = string.Empty;
+        currentPage = 1;
+        await LoadAdminUsersAsync();
     }
 
     private async Task GoToPage(int page)
@@ -840,6 +964,36 @@
     {
         var val = e.Value?.ToString() ?? string.Empty;
         var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        
+        // Auto-capitalize: first letter uppercase, rest lowercase unless after space
+        if (!string.IsNullOrEmpty(filtered))
+        {
+            var chars = filtered.ToCharArray();
+            bool capitalizeNext = true;
+            
+            for (int i = 0; i < chars.Length; i++)
+            {
+                if (char.IsLetter(chars[i]))
+                {
+                    if (capitalizeNext)
+                    {
+                        chars[i] = char.ToUpper(chars[i]);
+                        capitalizeNext = false;
+                    }
+                    else
+                    {
+                        chars[i] = char.ToLower(chars[i]);
+                    }
+                }
+                else if (chars[i] == ' ')
+                {
+                    capitalizeNext = true;
+                }
+            }
+            
+            filtered = new string(chars);
+        }
+        
         _addAdminModel.FirstName = filtered;
         
         // Notify EditContext of field change
@@ -886,6 +1040,36 @@
     {
         var val = e.Value?.ToString() ?? string.Empty;
         var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        
+        // Auto-capitalize: first letter uppercase, rest lowercase unless after space
+        if (!string.IsNullOrEmpty(filtered))
+        {
+            var chars = filtered.ToCharArray();
+            bool capitalizeNext = true;
+            
+            for (int i = 0; i < chars.Length; i++)
+            {
+                if (char.IsLetter(chars[i]))
+                {
+                    if (capitalizeNext)
+                    {
+                        chars[i] = char.ToUpper(chars[i]);
+                        capitalizeNext = false;
+                    }
+                    else
+                    {
+                        chars[i] = char.ToLower(chars[i]);
+                    }
+                }
+                else if (chars[i] == ' ')
+                {
+                    capitalizeNext = true;
+                }
+            }
+            
+            filtered = new string(chars);
+        }
+        
         _addAdminModel.MiddleName = filtered;
         
         // Notify EditContext of field change
@@ -901,12 +1085,78 @@
     {
         var val = e.Value?.ToString() ?? string.Empty;
         var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        
+        // Auto-capitalize: first letter uppercase, rest lowercase unless after space
+        if (!string.IsNullOrEmpty(filtered))
+        {
+            var chars = filtered.ToCharArray();
+            bool capitalizeNext = true;
+            
+            for (int i = 0; i < chars.Length; i++)
+            {
+                if (char.IsLetter(chars[i]))
+                {
+                    if (capitalizeNext)
+                    {
+                        chars[i] = char.ToUpper(chars[i]);
+                        capitalizeNext = false;
+                    }
+                    else
+                    {
+                        chars[i] = char.ToLower(chars[i]);
+                    }
+                }
+                else if (chars[i] == ' ')
+                {
+                    capitalizeNext = true;
+                }
+            }
+            
+            filtered = new string(chars);
+        }
+        
         _addAdminModel.LastName = filtered;
         
         // Notify EditContext of field change
         if (_addAdminEditContext != null)
         {
             _addAdminEditContext.NotifyFieldChanged(_addAdminEditContext.Field(nameof(_addAdminModel.LastName)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void FilterAddAdminContactInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        // Only allow digits, max 11 characters
+        var filtered = new string(val.Where(char.IsDigit).ToArray());
+        if (filtered.Length > 11)
+        {
+            filtered = filtered.Substring(0, 11);
+        }
+        _addAdminModel.Contact = filtered;
+        
+        // Notify EditContext of field change
+        if (_addAdminEditContext != null)
+        {
+            _addAdminEditContext.NotifyFieldChanged(_addAdminEditContext.Field(nameof(_addAdminModel.Contact)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void FilterAddAdminEmailInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        // Only allow alphanumeric, @, and . characters
+        var filtered = new string(val.Where(c => char.IsLetterOrDigit(c) || c == '@' || c == '.').ToArray());
+        _addAdminModel.Email = filtered;
+        
+        // Notify EditContext of field change
+        if (_addAdminEditContext != null)
+        {
+            _addAdminEditContext.NotifyFieldChanged(_addAdminEditContext.Field(nameof(_addAdminModel.Email)));
         }
         
         StateHasChanged();
@@ -998,18 +1248,37 @@
 
             if (newUserId.HasValue && newUserId.Value > 0)
             {
-                // Save address if provided
-                if (!string.IsNullOrWhiteSpace(_addAdminAddressModel.Street) ||
-                    !string.IsNullOrWhiteSpace(_addAdminAddressModel.City) ||
-                    !string.IsNullOrWhiteSpace(_addAdminAddressModel.Province) ||
-                    !string.IsNullOrWhiteSpace(_addAdminAddressModel.Zip))
+                // Validate address - all fields are required
+                if (string.IsNullOrWhiteSpace(_addAdminAddressModel.Street) ||
+                    string.IsNullOrWhiteSpace(_addAdminAddressModel.City) ||
+                    string.IsNullOrWhiteSpace(_addAdminAddressModel.Province) ||
+                    string.IsNullOrWhiteSpace(_addAdminAddressModel.Zip))
                 {
-                    _addAdminAddressModel.Id = 0; // New address
-                    await AddressService.SaveAddressAsync(newUserId.Value, _addAdminAddressModel);
+                    await JSRuntime.InvokeVoidAsync("alert", "Please fill in all address fields (Street Address, Province, City, and Zip Code) before saving.");
+                    return;
                 }
+
+                // Save address - all fields are required
+                _addAdminAddressModel.Id = 0; // New address
+                await AddressService.SaveAddressAsync(newUserId.Value, _addAdminAddressModel);
 
                 // Refresh list
                 await LoadAdminUsersAsync();
+                
+                // Log history
+                if (AuthState.CurrentUser != null)
+                {
+                    try
+                    {
+                        await HistoryService.LogAsync(
+                            AuthState.CurrentUser.Id,
+                            "create",
+                            "User Management",
+                            $"Created admin: {_addAdminModel.Email}"
+                        );
+                    }
+                    catch { }
+                }
                 
                 // Show success message
                 successMessageText = "Admin created successfully!";
@@ -1072,7 +1341,7 @@
         public string LastName { get; set; } = string.Empty;
 
         [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Email is required")]
-        [System.ComponentModel.DataAnnotations.EmailAddress(ErrorMessage = "Invalid email format")]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^[a-zA-Z0-9._%+-]+@SoftWear\.com$", ErrorMessage = "Email must be a valid SoftWear.com email address")]
         public string Email { get; set; } = string.Empty;
 
         [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Birthday is required")]
@@ -1086,7 +1355,7 @@
         public string Sex { get; set; } = string.Empty;
 
         [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Contact Number is required")]
-        [System.ComponentModel.DataAnnotations.RegularExpression(@"^(\+63\s?)?9\d{2}[\s-]?\d{3}[\s-]?\d{4}$|^09\d{9}$|^\(?0[2-9]\d\)?[\s-]?\d{3}[\s-]?\d{4}$", ErrorMessage = "Contact Number must be a valid Philippine phone number")]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^\d{11}$", ErrorMessage = "Contact Number must be exactly 11 digits")]
         public string Contact { get; set; } = string.Empty;
 
         // Password is auto-generated, so we don't need Required validation here
@@ -1136,6 +1405,21 @@
             {
                 // Refresh the list to remove the archived admin
                 await LoadAdminUsersAsync();
+                
+                // Log history
+                if (AuthState.CurrentUser != null)
+                {
+                    try
+                    {
+                        await HistoryService.LogAsync(
+                            AuthState.CurrentUser.Id,
+                            "archive",
+                            "User Management",
+                            $"Archived admin: {adminName} (ID: {userId})"
+                        );
+                    }
+                    catch { }
+                }
                 
                 // Show success message
                 successMessageText = "Admin archived successfully!";
@@ -1292,6 +1576,36 @@
     {
         var val = e.Value?.ToString() ?? string.Empty;
         var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        
+        // Auto-capitalize: first letter uppercase, rest lowercase unless after space
+        if (!string.IsNullOrEmpty(filtered))
+        {
+            var chars = filtered.ToCharArray();
+            bool capitalizeNext = true;
+            
+            for (int i = 0; i < chars.Length; i++)
+            {
+                if (char.IsLetter(chars[i]))
+                {
+                    if (capitalizeNext)
+                    {
+                        chars[i] = char.ToUpper(chars[i]);
+                        capitalizeNext = false;
+                    }
+                    else
+                    {
+                        chars[i] = char.ToLower(chars[i]);
+                    }
+                }
+                else if (chars[i] == ' ')
+                {
+                    capitalizeNext = true;
+                }
+            }
+            
+            filtered = new string(chars);
+        }
+        
         _updateAdminModel.FirstName = filtered;
         
         // Notify EditContext of field change
@@ -1307,6 +1621,36 @@
     {
         var val = e.Value?.ToString() ?? string.Empty;
         var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        
+        // Auto-capitalize: first letter uppercase, rest lowercase unless after space
+        if (!string.IsNullOrEmpty(filtered))
+        {
+            var chars = filtered.ToCharArray();
+            bool capitalizeNext = true;
+            
+            for (int i = 0; i < chars.Length; i++)
+            {
+                if (char.IsLetter(chars[i]))
+                {
+                    if (capitalizeNext)
+                    {
+                        chars[i] = char.ToUpper(chars[i]);
+                        capitalizeNext = false;
+                    }
+                    else
+                    {
+                        chars[i] = char.ToLower(chars[i]);
+                    }
+                }
+                else if (chars[i] == ' ')
+                {
+                    capitalizeNext = true;
+                }
+            }
+            
+            filtered = new string(chars);
+        }
+        
         _updateAdminModel.MiddleName = filtered;
         
         // Notify EditContext of field change
@@ -1322,12 +1666,78 @@
     {
         var val = e.Value?.ToString() ?? string.Empty;
         var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        
+        // Auto-capitalize: first letter uppercase, rest lowercase unless after space
+        if (!string.IsNullOrEmpty(filtered))
+        {
+            var chars = filtered.ToCharArray();
+            bool capitalizeNext = true;
+            
+            for (int i = 0; i < chars.Length; i++)
+            {
+                if (char.IsLetter(chars[i]))
+                {
+                    if (capitalizeNext)
+                    {
+                        chars[i] = char.ToUpper(chars[i]);
+                        capitalizeNext = false;
+                    }
+                    else
+                    {
+                        chars[i] = char.ToLower(chars[i]);
+                    }
+                }
+                else if (chars[i] == ' ')
+                {
+                    capitalizeNext = true;
+                }
+            }
+            
+            filtered = new string(chars);
+        }
+        
         _updateAdminModel.LastName = filtered;
         
         // Notify EditContext of field change
         if (_updateAdminEditContext != null)
         {
             _updateAdminEditContext.NotifyFieldChanged(_updateAdminEditContext.Field(nameof(_updateAdminModel.LastName)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void FilterUpdateAdminContactInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        // Only allow digits, max 11 characters
+        var filtered = new string(val.Where(char.IsDigit).ToArray());
+        if (filtered.Length > 11)
+        {
+            filtered = filtered.Substring(0, 11);
+        }
+        _updateAdminModel.Contact = filtered;
+        
+        // Notify EditContext of field change
+        if (_updateAdminEditContext != null)
+        {
+            _updateAdminEditContext.NotifyFieldChanged(_updateAdminEditContext.Field(nameof(_updateAdminModel.Contact)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void FilterUpdateAdminEmailInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        // Only allow alphanumeric, @, and . characters
+        var filtered = new string(val.Where(c => char.IsLetterOrDigit(c) || c == '@' || c == '.').ToArray());
+        _updateAdminModel.Email = filtered;
+        
+        // Notify EditContext of field change
+        if (_updateAdminEditContext != null)
+        {
+            _updateAdminEditContext.NotifyFieldChanged(_updateAdminEditContext.Field(nameof(_updateAdminModel.Email)));
         }
         
         StateHasChanged();
@@ -1472,9 +1882,9 @@
             _updateValidationMessageStore?.Add(_updateAdminEditContext.Field(nameof(_updateAdminModel.Email)), "Email is required.");
             hasErrors = true;
         }
-        else if (!System.Text.RegularExpressions.Regex.IsMatch(_updateAdminModel.Email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+        else if (!System.Text.RegularExpressions.Regex.IsMatch(_updateAdminModel.Email, @"^[a-zA-Z0-9._%+-]+@SoftWear\.com$"))
         {
-            _updateValidationMessageStore?.Add(_updateAdminEditContext.Field(nameof(_updateAdminModel.Email)), "Invalid email format.");
+            _updateValidationMessageStore?.Add(_updateAdminEditContext.Field(nameof(_updateAdminModel.Email)), "Email must be a valid SoftWear.com email address.");
             hasErrors = true;
         }
         
@@ -1493,6 +1903,11 @@
         if (string.IsNullOrWhiteSpace(_updateAdminModel.Contact))
         {
             _updateValidationMessageStore?.Add(_updateAdminEditContext.Field(nameof(_updateAdminModel.Contact)), "Contact Number is required.");
+            hasErrors = true;
+        }
+        else if (!System.Text.RegularExpressions.Regex.IsMatch(_updateAdminModel.Contact, @"^\d{11}$"))
+        {
+            _updateValidationMessageStore?.Add(_updateAdminEditContext.Field(nameof(_updateAdminModel.Contact)), "Contact Number must be exactly 11 digits.");
             hasErrors = true;
         }
 
@@ -1544,17 +1959,36 @@
 
             if (success)
             {
-                // Save/update address if provided
-                if (!string.IsNullOrWhiteSpace(_updateAdminAddressModel.Street) ||
-                    !string.IsNullOrWhiteSpace(_updateAdminAddressModel.City) ||
-                    !string.IsNullOrWhiteSpace(_updateAdminAddressModel.Province) ||
-                    !string.IsNullOrWhiteSpace(_updateAdminAddressModel.Zip))
+                // Validate address - all fields are required
+                if (string.IsNullOrWhiteSpace(_updateAdminAddressModel.Street) ||
+                    string.IsNullOrWhiteSpace(_updateAdminAddressModel.City) ||
+                    string.IsNullOrWhiteSpace(_updateAdminAddressModel.Province) ||
+                    string.IsNullOrWhiteSpace(_updateAdminAddressModel.Zip))
                 {
-                    await AddressService.SaveAddressAsync(_updateAdminUserId.Value, _updateAdminAddressModel);
+                    await JSRuntime.InvokeVoidAsync("alert", "Please fill in all address fields (Street Address, Province, City, and Zip Code) before saving.");
+                    return;
                 }
+
+                // Save/update address - all fields are required
+                await AddressService.SaveAddressAsync(_updateAdminUserId.Value, _updateAdminAddressModel);
 
                 // Refresh list
                 await LoadAdminUsersAsync();
+                
+                // Log history
+                if (AuthState.CurrentUser != null)
+                {
+                    try
+                    {
+                        await HistoryService.LogAsync(
+                            AuthState.CurrentUser.Id,
+                            "update",
+                            "User Management",
+                            $"Updated admin: {_updateAdminModel.Email}"
+                        );
+                    }
+                    catch { }
+                }
                 
                 // Show success message
                 successMessageText = "Admin updated successfully!";
@@ -1609,6 +2043,139 @@
         _searchTimer?.Dispose();
         _successMessageTimer?.Dispose();
         _successBannerTimer?.Dispose();
+    }
+
+    // Date filter methods
+    private void HandleStartDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            filterStartDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            filterStartDate = null;
+            selectedDateRange = "";
+        }
+    }
+
+    private void HandleEndDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            filterEndDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            filterEndDate = null;
+            selectedDateRange = "";
+        }
+    }
+
+    private void HandleDateRangeChange()
+    {
+        var now = DateTime.Now;
+        switch (selectedDateRange)
+        {
+            case "":
+                filterStartDate = null;
+                filterEndDate = null;
+                break;
+            case "today":
+                filterStartDate = now.Date;
+                filterEndDate = now.Date;
+                break;
+            case "yesterday":
+                filterStartDate = now.Date.AddDays(-1);
+                filterEndDate = now.Date.AddDays(-1);
+                break;
+            case "last7days":
+                filterStartDate = now.Date.AddDays(-6);
+                filterEndDate = now.Date;
+                break;
+            case "last30days":
+                filterStartDate = now.Date.AddDays(-29);
+                filterEndDate = now.Date;
+                break;
+            case "thismonth":
+                filterStartDate = new DateTime(now.Year, now.Month, 1);
+                filterEndDate = now.Date;
+                break;
+            case "thisyear":
+                filterStartDate = new DateTime(now.Year, 1, 1);
+                filterEndDate = now.Date;
+                break;
+        }
+        _ = LoadAdminUsersAsync();
+    }
+
+    private async Task ApplyDateFilter()
+    {
+        currentPage = 1;
+        await LoadAdminUsersAsync();
+    }
+
+    private async Task ClearDateFilter()
+    {
+        selectedDateRange = "";
+        filterStartDate = null;
+        filterEndDate = null;
+        currentPage = 1;
+        await LoadAdminUsersAsync();
+    }
+
+    private string GetDateRangeText()
+    {
+        if (filterStartDate.HasValue && filterEndDate.HasValue)
+            return $"{filterStartDate.Value:MMM dd, yyyy} - {filterEndDate.Value:MMM dd, yyyy}";
+        if (filterStartDate.HasValue)
+            return $"From {filterStartDate.Value:MMM dd, yyyy}";
+        if (filterEndDate.HasValue)
+            return $"Until {filterEndDate.Value:MMM dd, yyyy}";
+        return "All Time";
+    }
+
+    private async Task PrintAdminRecords()
+    {
+        // Use all filtered admins for the PDF, not just the current page
+        var recordsForPrint = allFilteredAdmins.Any() ? allFilteredAdmins : adminUsers;
+        
+        var reportData = new
+        {
+            title = "Admin Records Report",
+            printedBy = "Administrator",
+            printedAt = DateTime.Now.ToString("MMMM dd, yyyy hh:mm tt"),
+            dateRange = GetDateRangeText(),
+            totalCount = recordsForPrint.Count,
+            records = recordsForPrint.Select(u => new
+            {
+                id = u.Id,
+                name = u.Name,
+                email = u.Email,
+                dateCreated = u.DateCreated.ToString("MMM dd, yyyy")
+            }).ToList()
+        };
+
+        await JSRuntime.InvokeVoidAsync("printAdminRecords", reportData);
+        
+        // Log history
+        if (AuthState.CurrentUser != null)
+        {
+            try
+            {
+                await HistoryService.LogAsync(
+                    AuthState.CurrentUser.Id,
+                    "print",
+                    "User Management",
+                    $"Printed admin records report ({recordsForPrint.Count} records)"
+                );
+            }
+            catch { }
+        }
     }
 }
 

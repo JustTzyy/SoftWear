@@ -3,45 +3,118 @@
 @inject IT13_Final.Services.Data.IUserService UserService
 @inject IT13_Final.Services.Data.IAddressService AddressService
 @inject IT13_Final.Services.Data.IPhilippineAddressService PhilippineAddressService
+@inject IT13_Final.Services.Audit.IHistoryService HistoryService
 @inject IT13_Final.Services.Auth.AuthState AuthState
 @inject IJSRuntime JSRuntime
 @inject NavigationManager Nav
 @using System.Linq
 @implements IDisposable
 
-<h1 class="page-title">Seller Records</h1>
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Seller Records</h1>
+        <p class="welcome-date">Manage seller accounts • @totalCount total sellers</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintSellerRecords" title="Print records">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 9V2h12v7"></path>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                <rect x="6" y="14" width="12" height="8"></rect>
+            </svg>
+        </button>
+    </div>
+</div>
+
+@* Search and Date Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.3-4.3"></path>
+        </svg>
+        <input type="text" class="search-input" placeholder="Search by name or email..." @bind="searchTerm" @bind:event="oninput" @bind:after="OnSearchInput" />
+        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            <button class="clear-search-btn" @onclick="ClearSearch" title="Clear search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date" 
+               class="date-input" 
+               value="@(filterStartDate?.ToString("yyyy-MM-dd"))" 
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleStartDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date" 
+               class="date-input" 
+               value="@(filterEndDate?.ToString("yyyy-MM-dd"))" 
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleEndDateChange" />
+        <button class="filter-btn" @onclick="ApplyDateFilter">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            Apply
+        </button>
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
 
 @if (showSuccessMessage && !string.IsNullOrEmpty(successMessageText))
 {
     <div class="success-banner">
-        <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="20 6 9 17 4 12"></polyline>
+        <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
         </svg>
         <span>@successMessageText</span>
     </div>
 }
 
-<div class="admin-records-container">
-    <div class="search-actions-row">
-        <div class="search-wrapper">
-            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"></circle>
-                <path d="m21 21-4.35-4.35"></path>
-            </svg>
-            <input type="text" class="search-input" placeholder="Search sellers" value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+@* Seller List Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Seller List</h3>
+            <span class="card-subtitle">@totalCount total sellers</span>
         </div>
-
-        <div class="action-buttons">
-            <button class="archive-btn" @onclick="NavigateToArchive">
-                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-                    <line x1="12" y1="22.08" x2="12" y2="12"></line>
+        <div class="card-actions">
+            <button class="card-action-btn secondary" @onclick="NavigateToArchive">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect width="20" height="5" x="2" y="3" rx="1"></rect>
+                    <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"></path>
+                    <path d="M10 12h4"></path>
                 </svg>
                 <span>Archive</span>
             </button>
-            <button class="add-admin-btn" @onclick="HandleAddSeller">
-                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <button class="card-action-btn primary" @onclick="HandleAddSeller">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
                     <circle cx="9" cy="7" r="4"></circle>
                     <line x1="19" y1="8" x2="19" y2="14"></line>
@@ -51,9 +124,8 @@
             </button>
         </div>
     </div>
-
-    <div class="table-container">
-        <div class="table-header">List</div>
+    
+    <div class="card-body">
         <table class="admin-table">
             <thead>
                 <tr>
@@ -94,10 +166,10 @@
                                     </svg>
                                 </button>
                                 <button class="action-btn delete-btn" @onclick="() => HandleDelete(user.Id)" title="Archive">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <rect x="3" y="4" width="18" height="4" rx="1"></rect>
-                                        <path d="M5 8h14v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8z"></path>
-                                        <line x1="10" y1="12" x2="14" y2="12"></line>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <rect width="20" height="5" x="2" y="3" rx="1"></rect>
+                                        <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"></path>
+                                        <path d="M10 12h4"></path>
                                     </svg>
                                 </button>
                             </td>
@@ -277,7 +349,7 @@
                     {
                         <div class="form-grid">
                             <div class="form-field">
-                                <label class="field-label">First Name</label>
+                                <label class="field-label">First Name <span class="required-asterisk">*</span></label>
                                 <input id="AddSellerFirstName" class="form-input" value="@_AddSellerModel.FirstName" @oninput="FilterAddSellerFirstNameInput" placeholder="Enter first name" />
                                 <ValidationMessage For="@(() => _AddSellerModel.FirstName)" />
                             </div>
@@ -286,27 +358,27 @@
                                 <input id="AddSellerMiddleName" class="form-input" value="@_AddSellerModel.MiddleName" @oninput="FilterAddSellerMiddleNameInput" placeholder="Enter middle name (optional)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Last Name</label>
+                                <label class="field-label">Last Name <span class="required-asterisk">*</span></label>
                                 <input id="AddSellerLastName" class="form-input" value="@_AddSellerModel.LastName" @oninput="FilterAddSellerLastNameInput" placeholder="Enter last name" />
                                 <ValidationMessage For="@(() => _AddSellerModel.LastName)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Email</label>
-                                <InputText class="form-input" @bind-Value="_AddSellerModel.Email" placeholder="Enter email address" />
+                                <label class="field-label">Email <span class="required-asterisk">*</span></label>
+                                <InputText class="form-input" @bind-Value="_AddSellerModel.Email" @oninput="FilterAddSellerEmailInput" placeholder="Enter email address" />
                                 <ValidationMessage For="@(() => _AddSellerModel.Email)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Birthday</label>
+                                <label class="field-label">Birthday <span class="required-asterisk">*</span></label>
                                 <input type="date" class="form-input" value="@(_AddSellerModel.Birthday?.ToString("yyyy-MM-dd") ?? "")" max="@MaxBirthdayDate.ToString("yyyy-MM-dd")" @onchange="@((ChangeEventArgs e) => { if (DateTime.TryParse(e.Value?.ToString(), out var date)) { AddSellerBirthday = DateOnly.FromDateTime(date); } else { AddSellerBirthday = null; } })" />
                                 <ValidationMessage For="@(() => _AddSellerModel.Birthday)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Age</label>
+                                <label class="field-label">Age <span class="required-asterisk">*</span></label>
                                 <InputNumber TValue="int?" class="form-input" @bind-Value="_AddSellerModel.Age" disabled />
                                 <ValidationMessage For="@(() => _AddSellerModel.Age)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Sex</label>
+                                <label class="field-label">Sex <span class="required-asterisk">*</span></label>
                                 <select class="form-input sex-select" value="@_AddSellerModel.Sex" @onchange="@((ChangeEventArgs e) => { 
                                     _AddSellerModel.Sex = e.Value?.ToString() ?? string.Empty; 
                                     if (_AddSellerEditContext != null)
@@ -322,8 +394,8 @@
                                 <ValidationMessage For="@(() => _AddSellerModel.Sex)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Contact Number</label>
-                                <InputText class="form-input" @bind-Value="_AddSellerModel.Contact" placeholder="+63 912 345 6789" />
+                                <label class="field-label">Contact Number <span class="required-asterisk">*</span></label>
+                                <InputText class="form-input" @bind-Value="_AddSellerModel.Contact" @oninput="FilterAddSellerContactInput" placeholder="09123456789" maxlength="11" />
                                 <ValidationMessage For="@(() => _AddSellerModel.Contact)" />
                             </div>
                         </div>
@@ -332,12 +404,12 @@
                     {
                         <div class="form-grid">
                             <div class="form-field full-width">
-                                <label class="field-label">Street Address</label>
+                                <label class="field-label">Street Address <span class="required-asterisk">*</span></label>
                                 <InputText class="form-input" @bind-Value="_AddSellerAddressModel.Street" placeholder="123 Main Street, Barangay Name" />
                                 <ValidationMessage For="@(() => _AddSellerAddressModel.Street)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Province</label>
+                                <label class="field-label">Province <span class="required-asterisk">*</span></label>
                                 <select class="form-input province-select" value="@_AddSellerAddressModel.Province" @onchange="OnProvinceChanged">
                                     <option value="">Select Province</option>
                                     @foreach (var province in _AddSellerProvinces)
@@ -348,7 +420,7 @@
                                 <ValidationMessage For="@(() => _AddSellerAddressModel.Province)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">City</label>
+                                <label class="field-label">City <span class="required-asterisk">*</span></label>
                                 <select class="form-input city-select" value="@_AddSellerAddressModel.City" @onchange="OnCityChanged" disabled="@(string.IsNullOrEmpty(_AddSellerAddressModel.Province))">
                                     <option value="">Select City</option>
                                     @foreach (var city in _AddSellerCities)
@@ -359,7 +431,7 @@
                                 <ValidationMessage For="@(() => _AddSellerAddressModel.City)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Zip Code</label>
+                                <label class="field-label">Zip Code <span class="required-asterisk">*</span></label>
                                 <input class="form-input" value="@_AddSellerAddressModel.Zip" disabled placeholder="Auto-filled" />
                                 <ValidationMessage For="@(() => _AddSellerAddressModel.Zip)" />
                             </div>
@@ -423,7 +495,7 @@
                     {
                         <div class="form-grid">
                             <div class="form-field">
-                                <label class="field-label">First Name</label>
+                                <label class="field-label">First Name <span class="required-asterisk">*</span></label>
                                 <input id="UpdateSellerFirstName" class="form-input" value="@_UpdateSellerModel.FirstName" @oninput="FilterUpdateSellerFirstNameInput" placeholder="Enter first name" />
                                 <ValidationMessage For="@(() => _UpdateSellerModel.FirstName)" />
                             </div>
@@ -432,27 +504,27 @@
                                 <input id="UpdateSellerMiddleName" class="form-input" value="@_UpdateSellerModel.MiddleName" @oninput="FilterUpdateSellerMiddleNameInput" placeholder="Enter middle name (optional)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Last Name</label>
+                                <label class="field-label">Last Name <span class="required-asterisk">*</span></label>
                                 <input id="UpdateSellerLastName" class="form-input" value="@_UpdateSellerModel.LastName" @oninput="FilterUpdateSellerLastNameInput" placeholder="Enter last name" />
                                 <ValidationMessage For="@(() => _UpdateSellerModel.LastName)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Email</label>
-                                <InputText class="form-input" @bind-Value="_UpdateSellerModel.Email" placeholder="Enter email address" />
+                                <label class="field-label">Email <span class="required-asterisk">*</span></label>
+                                <InputText class="form-input" @bind-Value="_UpdateSellerModel.Email" @oninput="FilterUpdateSellerEmailInput" placeholder="Enter email address" />
                                 <ValidationMessage For="@(() => _UpdateSellerModel.Email)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Birthday</label>
+                                <label class="field-label">Birthday <span class="required-asterisk">*</span></label>
                                 <input type="date" class="form-input" value="@(_UpdateSellerModel.Birthday?.ToString("yyyy-MM-dd") ?? "")" max="@MaxBirthdayDate.ToString("yyyy-MM-dd")" @onchange="@((ChangeEventArgs e) => { if (DateTime.TryParse(e.Value?.ToString(), out var date)) { UpdateSellerBirthday = DateOnly.FromDateTime(date); } else { UpdateSellerBirthday = null; } })" />
                                 <ValidationMessage For="@(() => _UpdateSellerModel.Birthday)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Age</label>
+                                <label class="field-label">Age <span class="required-asterisk">*</span></label>
                                 <InputNumber TValue="int?" class="form-input" @bind-Value="_UpdateSellerModel.Age" disabled />
                                 <ValidationMessage For="@(() => _UpdateSellerModel.Age)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Sex</label>
+                                <label class="field-label">Sex <span class="required-asterisk">*</span></label>
                                 <select class="form-input sex-select" value="@_UpdateSellerModel.Sex" @onchange="@((ChangeEventArgs e) => { 
                                     _UpdateSellerModel.Sex = e.Value?.ToString() ?? string.Empty; 
                                     if (_UpdateSellerEditContext != null)
@@ -468,8 +540,8 @@
                                 <ValidationMessage For="@(() => _UpdateSellerModel.Sex)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Contact Number</label>
-                                <InputText class="form-input" @bind-Value="_UpdateSellerModel.Contact" placeholder="+63 912 345 6789" />
+                                <label class="field-label">Contact Number <span class="required-asterisk">*</span></label>
+                                <InputText class="form-input" @bind-Value="_UpdateSellerModel.Contact" @oninput="FilterUpdateSellerContactInput" placeholder="09123456789" maxlength="11" />
                                 <ValidationMessage For="@(() => _UpdateSellerModel.Contact)" />
                             </div>
                         </div>
@@ -478,12 +550,12 @@
                     {
                         <div class="form-grid">
                             <div class="form-field full-width">
-                                <label class="field-label">Street Address</label>
+                                <label class="field-label">Street Address <span class="required-asterisk">*</span></label>
                                 <InputText class="form-input" @bind-Value="_UpdateSellerAddressModel.Street" placeholder="123 Main Street, Barangay Name" />
                                 <ValidationMessage For="@(() => _UpdateSellerAddressModel.Street)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Province</label>
+                                <label class="field-label">Province <span class="required-asterisk">*</span></label>
                                 <select class="form-input province-select" value="@_UpdateSellerAddressModel.Province" @onchange="OnUpdateProvinceChanged">
                                     <option value="">Select Province</option>
                                     @foreach (var province in _UpdateSellerProvinces)
@@ -494,7 +566,7 @@
                                 <ValidationMessage For="@(() => _UpdateSellerAddressModel.Province)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">City</label>
+                                <label class="field-label">City <span class="required-asterisk">*</span></label>
                                 <select class="form-input city-select" value="@_UpdateSellerAddressModel.City" @onchange="OnUpdateCityChanged" disabled="@(string.IsNullOrEmpty(_UpdateSellerAddressModel.Province))">
                                     <option value="">Select City</option>
                                     @foreach (var city in _UpdateSellerCities)
@@ -505,7 +577,7 @@
                                 <ValidationMessage For="@(() => _UpdateSellerAddressModel.City)" />
                             </div>
                             <div class="form-field">
-                                <label class="field-label">Zip Code</label>
+                                <label class="field-label">Zip Code <span class="required-asterisk">*</span></label>
                                 <input class="form-input" value="@_UpdateSellerAddressModel.Zip" disabled placeholder="Auto-filled" />
                                 <ValidationMessage For="@(() => _UpdateSellerAddressModel.Zip)" />
                             </div>
@@ -515,10 +587,10 @@
                     <div class="modal-footer">
                         <button type="button" class="cancel-btn" @onclick="CloseUpdateSellerModal">Cancel</button>
                         <button type="submit" class="save-admin-btn">
-                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                                <polyline points="7 3 7 8 15 8"></polyline>
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="9" cy="7" r="4"></circle>
+                                <path d="M17 11l2 2 4-4"></path>
                             </svg>
                             <span>Update Seller</span>
                         </button>
@@ -540,6 +612,16 @@
     private bool showUserDetails = false;
     private IT13_Final.Services.Data.UserDetailsModel? userDetails = null;
     private bool isLoadingDetails = false;
+
+    // Date filter variables
+    private string selectedDateRange = "";
+    private DateTime? filterStartDate;
+    private DateTime? filterEndDate;
+
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || filterStartDate.HasValue || filterEndDate.HasValue;
+
+    // Store all filtered sellers for PDF generation
+    private List<IT13_Final.Services.Data.AdminUserModel> allFilteredSellers = new();
 
     // Add Seller Modal
     private bool showAddSellerModal = false;
@@ -620,12 +702,50 @@
         try
         {
             var adminId = AuthState.CurrentUser?.Id ?? 0;
-            totalCount = await UserService.GetSellerUsersCountAsync(adminId, searchTerm);
-            sellerUsers = await UserService.GetSellerUsersAsync(adminId, searchTerm, currentPage, pageSize);
+            
+            // Get all sellers matching search term first
+            var allSellers = await UserService.GetSellerUsersAsync(adminId, searchTerm, 1, 10000);
+            
+            // Apply date filter client-side
+            if (filterStartDate.HasValue || filterEndDate.HasValue)
+            {
+                allFilteredSellers = allSellers.Where(u =>
+                {
+                    var createdDate = u.DateCreated.Date;
+                    
+                    if (filterStartDate.HasValue && filterEndDate.HasValue)
+                    {
+                        return createdDate >= filterStartDate.Value.Date && createdDate <= filterEndDate.Value.Date;
+                    }
+                    else if (filterStartDate.HasValue)
+                    {
+                        return createdDate >= filterStartDate.Value.Date;
+                    }
+                    else if (filterEndDate.HasValue)
+                    {
+                        return createdDate <= filterEndDate.Value.Date;
+                    }
+                    return true;
+                }).ToList();
+            }
+            else
+            {
+                allFilteredSellers = allSellers;
+            }
+            
+            // Update total count based on filtered results
+            totalCount = allFilteredSellers.Count;
+            
+            // Apply pagination to filtered results
+            sellerUsers = allFilteredSellers
+                .Skip((currentPage - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
         }
         catch (Exception)
         {
             sellerUsers = new List<IT13_Final.Services.Data.AdminUserModel>();
+            allFilteredSellers = new List<IT13_Final.Services.Data.AdminUserModel>();
             totalCount = 0;
         }
         finally
@@ -635,20 +755,17 @@
         }
     }
 
-    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter")
-        {
-            currentPage = 1;
-            await LoadsellerUsersAsync();
-        }
-    }
-
     // Debounce search to avoid too many queries
     private System.Threading.Timer? _searchTimer;
-    private void HandleSearchInput(ChangeEventArgs e)
+    private void OnSearchInput()
     {
-        searchTerm = e.Value?.ToString() ?? string.Empty;
+        // Filter out special characters
+        var filtered = System.Text.RegularExpressions.Regex.Replace(searchTerm, @"[^a-zA-Z0-9\s\-_]", "");
+        if (filtered != searchTerm)
+        {
+            searchTerm = filtered;
+        }
+        
         _searchTimer?.Dispose();
         _searchTimer = new System.Threading.Timer(async _ =>
         {
@@ -657,7 +774,14 @@
             {
                 await LoadsellerUsersAsync();
             });
-        }, null, 500, Timeout.Infinite);
+        }, null, 400, Timeout.Infinite);
+    }
+
+    private async Task ClearSearch()
+    {
+        searchTerm = string.Empty;
+        currentPage = 1;
+        await LoadsellerUsersAsync();
     }
 
     private async Task GoToPage(int page)
@@ -842,6 +966,36 @@
     {
         var val = e.Value?.ToString() ?? string.Empty;
         var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        
+        // Auto-capitalize: first letter uppercase, rest lowercase unless after space
+        if (!string.IsNullOrEmpty(filtered))
+        {
+            var chars = filtered.ToCharArray();
+            bool capitalizeNext = true;
+            
+            for (int i = 0; i < chars.Length; i++)
+            {
+                if (char.IsLetter(chars[i]))
+                {
+                    if (capitalizeNext)
+                    {
+                        chars[i] = char.ToUpper(chars[i]);
+                        capitalizeNext = false;
+                    }
+                    else
+                    {
+                        chars[i] = char.ToLower(chars[i]);
+                    }
+                }
+                else if (chars[i] == ' ')
+                {
+                    capitalizeNext = true;
+                }
+            }
+            
+            filtered = new string(chars);
+        }
+        
         _AddSellerModel.FirstName = filtered;
         
         // Notify EditContext of field change
@@ -888,6 +1042,36 @@
     {
         var val = e.Value?.ToString() ?? string.Empty;
         var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        
+        // Auto-capitalize: first letter uppercase, rest lowercase unless after space
+        if (!string.IsNullOrEmpty(filtered))
+        {
+            var chars = filtered.ToCharArray();
+            bool capitalizeNext = true;
+            
+            for (int i = 0; i < chars.Length; i++)
+            {
+                if (char.IsLetter(chars[i]))
+                {
+                    if (capitalizeNext)
+                    {
+                        chars[i] = char.ToUpper(chars[i]);
+                        capitalizeNext = false;
+                    }
+                    else
+                    {
+                        chars[i] = char.ToLower(chars[i]);
+                    }
+                }
+                else if (chars[i] == ' ')
+                {
+                    capitalizeNext = true;
+                }
+            }
+            
+            filtered = new string(chars);
+        }
+        
         _AddSellerModel.MiddleName = filtered;
         
         // Notify EditContext of field change
@@ -903,12 +1087,78 @@
     {
         var val = e.Value?.ToString() ?? string.Empty;
         var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        
+        // Auto-capitalize: first letter uppercase, rest lowercase unless after space
+        if (!string.IsNullOrEmpty(filtered))
+        {
+            var chars = filtered.ToCharArray();
+            bool capitalizeNext = true;
+            
+            for (int i = 0; i < chars.Length; i++)
+            {
+                if (char.IsLetter(chars[i]))
+                {
+                    if (capitalizeNext)
+                    {
+                        chars[i] = char.ToUpper(chars[i]);
+                        capitalizeNext = false;
+                    }
+                    else
+                    {
+                        chars[i] = char.ToLower(chars[i]);
+                    }
+                }
+                else if (chars[i] == ' ')
+                {
+                    capitalizeNext = true;
+                }
+            }
+            
+            filtered = new string(chars);
+        }
+        
         _AddSellerModel.LastName = filtered;
         
         // Notify EditContext of field change
         if (_AddSellerEditContext != null)
         {
             _AddSellerEditContext.NotifyFieldChanged(_AddSellerEditContext.Field(nameof(_AddSellerModel.LastName)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void FilterAddSellerContactInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        // Only allow digits, max 11 characters
+        var filtered = new string(val.Where(char.IsDigit).ToArray());
+        if (filtered.Length > 11)
+        {
+            filtered = filtered.Substring(0, 11);
+        }
+        _AddSellerModel.Contact = filtered;
+        
+        // Notify EditContext of field change
+        if (_AddSellerEditContext != null)
+        {
+            _AddSellerEditContext.NotifyFieldChanged(_AddSellerEditContext.Field(nameof(_AddSellerModel.Contact)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void FilterAddSellerEmailInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        // Only allow alphanumeric, @, and . characters
+        var filtered = new string(val.Where(c => char.IsLetterOrDigit(c) || c == '@' || c == '.').ToArray());
+        _AddSellerModel.Email = filtered;
+        
+        // Notify EditContext of field change
+        if (_AddSellerEditContext != null)
+        {
+            _AddSellerEditContext.NotifyFieldChanged(_AddSellerEditContext.Field(nameof(_AddSellerModel.Email)));
         }
         
         StateHasChanged();
@@ -1002,18 +1252,37 @@
 
             if (newUserId.HasValue && newUserId.Value > 0)
             {
-                // Save address if provided
-                if (!string.IsNullOrWhiteSpace(_AddSellerAddressModel.Street) ||
-                    !string.IsNullOrWhiteSpace(_AddSellerAddressModel.City) ||
-                    !string.IsNullOrWhiteSpace(_AddSellerAddressModel.Province) ||
-                    !string.IsNullOrWhiteSpace(_AddSellerAddressModel.Zip))
+                // Validate address - all fields are required
+                if (string.IsNullOrWhiteSpace(_AddSellerAddressModel.Street) ||
+                    string.IsNullOrWhiteSpace(_AddSellerAddressModel.City) ||
+                    string.IsNullOrWhiteSpace(_AddSellerAddressModel.Province) ||
+                    string.IsNullOrWhiteSpace(_AddSellerAddressModel.Zip))
                 {
-                    _AddSellerAddressModel.Id = 0; // New address
-                    await AddressService.SaveAddressAsync(newUserId.Value, _AddSellerAddressModel);
+                    await JSRuntime.InvokeVoidAsync("alert", "Please fill in all address fields (Street Address, Province, City, and Zip Code) before saving.");
+                    return;
                 }
+
+                // Save address - all fields are required
+                _AddSellerAddressModel.Id = 0; // New address
+                await AddressService.SaveAddressAsync(newUserId.Value, _AddSellerAddressModel);
 
                 // Refresh list
                 await LoadsellerUsersAsync();
+                
+                // Log history
+                if (AuthState.CurrentUser != null)
+                {
+                    try
+                    {
+                        await HistoryService.LogAsync(
+                            AuthState.CurrentUser.Id,
+                            "create",
+                            "User Management",
+                            $"Created seller: {_AddSellerModel.Email}"
+                        );
+                    }
+                    catch { }
+                }
                 
                 // Show success message
                 successMessageText = "Seller created successfully!";
@@ -1076,7 +1345,7 @@
         public string LastName { get; set; } = string.Empty;
 
         [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Email is required")]
-        [System.ComponentModel.DataAnnotations.EmailAddress(ErrorMessage = "Invalid email format")]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^[a-zA-Z0-9._%+-]+@SoftWear\.com$", ErrorMessage = "Email must be a valid SoftWear.com email address")]
         public string Email { get; set; } = string.Empty;
 
         [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Birthday is required")]
@@ -1090,7 +1359,7 @@
         public string Sex { get; set; } = string.Empty;
 
         [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Contact Number is required")]
-        [System.ComponentModel.DataAnnotations.RegularExpression(@"^(\+63\s?)?9\d{2}[\s-]?\d{3}[\s-]?\d{4}$|^09\d{9}$|^\(?0[2-9]\d\)?[\s-]?\d{3}[\s-]?\d{4}$", ErrorMessage = "Contact Number must be a valid Philippine phone number")]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^\d{11}$", ErrorMessage = "Contact Number must be exactly 11 digits")]
         public string Contact { get; set; } = string.Empty;
 
         // Password is auto-generated, so we don't need Required validation here
@@ -1140,6 +1409,21 @@
             {
                 // Refresh the list to remove the archived admin
                 await LoadsellerUsersAsync();
+                
+                // Log history
+                if (AuthState.CurrentUser != null)
+                {
+                    try
+                    {
+                        await HistoryService.LogAsync(
+                            AuthState.CurrentUser.Id,
+                            "archive",
+                            "User Management",
+                            $"Archived seller: {adminName} (ID: {userId})"
+                        );
+                    }
+                    catch { }
+                }
                 
                 // Show success message
                 successMessageText = "Seller archived successfully!";
@@ -1296,6 +1580,36 @@
     {
         var val = e.Value?.ToString() ?? string.Empty;
         var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        
+        // Auto-capitalize: first letter uppercase, rest lowercase unless after space
+        if (!string.IsNullOrEmpty(filtered))
+        {
+            var chars = filtered.ToCharArray();
+            bool capitalizeNext = true;
+            
+            for (int i = 0; i < chars.Length; i++)
+            {
+                if (char.IsLetter(chars[i]))
+                {
+                    if (capitalizeNext)
+                    {
+                        chars[i] = char.ToUpper(chars[i]);
+                        capitalizeNext = false;
+                    }
+                    else
+                    {
+                        chars[i] = char.ToLower(chars[i]);
+                    }
+                }
+                else if (chars[i] == ' ')
+                {
+                    capitalizeNext = true;
+                }
+            }
+            
+            filtered = new string(chars);
+        }
+        
         _UpdateSellerModel.FirstName = filtered;
         
         // Notify EditContext of field change
@@ -1311,6 +1625,36 @@
     {
         var val = e.Value?.ToString() ?? string.Empty;
         var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        
+        // Auto-capitalize: first letter uppercase, rest lowercase unless after space
+        if (!string.IsNullOrEmpty(filtered))
+        {
+            var chars = filtered.ToCharArray();
+            bool capitalizeNext = true;
+            
+            for (int i = 0; i < chars.Length; i++)
+            {
+                if (char.IsLetter(chars[i]))
+                {
+                    if (capitalizeNext)
+                    {
+                        chars[i] = char.ToUpper(chars[i]);
+                        capitalizeNext = false;
+                    }
+                    else
+                    {
+                        chars[i] = char.ToLower(chars[i]);
+                    }
+                }
+                else if (chars[i] == ' ')
+                {
+                    capitalizeNext = true;
+                }
+            }
+            
+            filtered = new string(chars);
+        }
+        
         _UpdateSellerModel.MiddleName = filtered;
         
         // Notify EditContext of field change
@@ -1326,12 +1670,78 @@
     {
         var val = e.Value?.ToString() ?? string.Empty;
         var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        
+        // Auto-capitalize: first letter uppercase, rest lowercase unless after space
+        if (!string.IsNullOrEmpty(filtered))
+        {
+            var chars = filtered.ToCharArray();
+            bool capitalizeNext = true;
+            
+            for (int i = 0; i < chars.Length; i++)
+            {
+                if (char.IsLetter(chars[i]))
+                {
+                    if (capitalizeNext)
+                    {
+                        chars[i] = char.ToUpper(chars[i]);
+                        capitalizeNext = false;
+                    }
+                    else
+                    {
+                        chars[i] = char.ToLower(chars[i]);
+                    }
+                }
+                else if (chars[i] == ' ')
+                {
+                    capitalizeNext = true;
+                }
+            }
+            
+            filtered = new string(chars);
+        }
+        
         _UpdateSellerModel.LastName = filtered;
         
         // Notify EditContext of field change
         if (_UpdateSellerEditContext != null)
         {
             _UpdateSellerEditContext.NotifyFieldChanged(_UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.LastName)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void FilterUpdateSellerContactInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        // Only allow digits, max 11 characters
+        var filtered = new string(val.Where(char.IsDigit).ToArray());
+        if (filtered.Length > 11)
+        {
+            filtered = filtered.Substring(0, 11);
+        }
+        _UpdateSellerModel.Contact = filtered;
+        
+        // Notify EditContext of field change
+        if (_UpdateSellerEditContext != null)
+        {
+            _UpdateSellerEditContext.NotifyFieldChanged(_UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.Contact)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void FilterUpdateSellerEmailInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        // Only allow alphanumeric, @, and . characters
+        var filtered = new string(val.Where(c => char.IsLetterOrDigit(c) || c == '@' || c == '.').ToArray());
+        _UpdateSellerModel.Email = filtered;
+        
+        // Notify EditContext of field change
+        if (_UpdateSellerEditContext != null)
+        {
+            _UpdateSellerEditContext.NotifyFieldChanged(_UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.Email)));
         }
         
         StateHasChanged();
@@ -1476,9 +1886,9 @@
             _updateValidationMessageStore?.Add(_UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.Email)), "Email is required.");
             hasErrors = true;
         }
-        else if (!System.Text.RegularExpressions.Regex.IsMatch(_UpdateSellerModel.Email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+        else if (!System.Text.RegularExpressions.Regex.IsMatch(_UpdateSellerModel.Email, @"^[a-zA-Z0-9._%+-]+@SoftWear\.com$"))
         {
-            _updateValidationMessageStore?.Add(_UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.Email)), "Invalid email format.");
+            _updateValidationMessageStore?.Add(_UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.Email)), "Email must be a valid SoftWear.com email address.");
             hasErrors = true;
         }
         
@@ -1504,6 +1914,11 @@
         if (string.IsNullOrWhiteSpace(_UpdateSellerModel.Contact))
         {
             _updateValidationMessageStore?.Add(_UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.Contact)), "Contact Number is required.");
+            hasErrors = true;
+        }
+        else if (!System.Text.RegularExpressions.Regex.IsMatch(_UpdateSellerModel.Contact, @"^\d{11}$"))
+        {
+            _updateValidationMessageStore?.Add(_UpdateSellerEditContext.Field(nameof(_UpdateSellerModel.Contact)), "Contact Number must be exactly 11 digits.");
             hasErrors = true;
         }
 
@@ -1550,17 +1965,36 @@
 
             if (success)
             {
-                // Save/update address if provided
-                if (!string.IsNullOrWhiteSpace(_UpdateSellerAddressModel.Street) ||
-                    !string.IsNullOrWhiteSpace(_UpdateSellerAddressModel.City) ||
-                    !string.IsNullOrWhiteSpace(_UpdateSellerAddressModel.Province) ||
-                    !string.IsNullOrWhiteSpace(_UpdateSellerAddressModel.Zip))
+                // Validate address - all fields are required
+                if (string.IsNullOrWhiteSpace(_UpdateSellerAddressModel.Street) ||
+                    string.IsNullOrWhiteSpace(_UpdateSellerAddressModel.City) ||
+                    string.IsNullOrWhiteSpace(_UpdateSellerAddressModel.Province) ||
+                    string.IsNullOrWhiteSpace(_UpdateSellerAddressModel.Zip))
                 {
-                    await AddressService.SaveAddressAsync(_UpdateSellerUserId.Value, _UpdateSellerAddressModel);
+                    await JSRuntime.InvokeVoidAsync("alert", "Please fill in all address fields (Street Address, Province, City, and Zip Code) before saving.");
+                    return;
                 }
+
+                // Save/update address - all fields are required
+                await AddressService.SaveAddressAsync(_UpdateSellerUserId.Value, _UpdateSellerAddressModel);
 
                 // Refresh list
                 await LoadsellerUsersAsync();
+                
+                // Log history
+                if (AuthState.CurrentUser != null)
+                {
+                    try
+                    {
+                        await HistoryService.LogAsync(
+                            AuthState.CurrentUser.Id,
+                            "update",
+                            "User Management",
+                            $"Updated seller: {_UpdateSellerModel.Email}"
+                        );
+                    }
+                    catch { }
+                }
                 
                 // Show success message
                 successMessageText = "Seller updated successfully!";
@@ -1615,6 +2049,145 @@
         _searchTimer?.Dispose();
         _successMessageTimer?.Dispose();
         _successBannerTimer?.Dispose();
+    }
+
+    // Date filter methods
+    private void HandleStartDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            filterStartDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            filterStartDate = null;
+            selectedDateRange = "";
+        }
+    }
+
+    private void HandleEndDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            filterEndDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            filterEndDate = null;
+            selectedDateRange = "";
+        }
+    }
+
+    private void HandleDateRangeChange()
+    {
+        var now = DateTime.Now;
+        switch (selectedDateRange)
+        {
+            case "":
+                filterStartDate = null;
+                filterEndDate = null;
+                break;
+            case "today":
+                filterStartDate = now.Date;
+                filterEndDate = now.Date;
+                break;
+            case "yesterday":
+                filterStartDate = now.Date.AddDays(-1);
+                filterEndDate = now.Date.AddDays(-1);
+                break;
+            case "last7days":
+                filterStartDate = now.Date.AddDays(-6);
+                filterEndDate = now.Date;
+                break;
+            case "last30days":
+                filterStartDate = now.Date.AddDays(-29);
+                filterEndDate = now.Date;
+                break;
+            case "thismonth":
+                filterStartDate = new DateTime(now.Year, now.Month, 1);
+                filterEndDate = now.Date;
+                break;
+            case "thisyear":
+                filterStartDate = new DateTime(now.Year, 1, 1);
+                filterEndDate = now.Date;
+                break;
+        }
+        _ = LoadsellerUsersAsync();
+    }
+
+    private async Task ApplyDateFilter()
+    {
+        currentPage = 1;
+        await LoadsellerUsersAsync();
+    }
+
+    private async Task ClearDateFilter()
+    {
+        selectedDateRange = "";
+        filterStartDate = null;
+        filterEndDate = null;
+        currentPage = 1;
+        await LoadsellerUsersAsync();
+    }
+
+    private string GetDateRangeText()
+    {
+        if (filterStartDate.HasValue && filterEndDate.HasValue)
+        {
+            return $"{filterStartDate.Value:MMM dd, yyyy} - {filterEndDate.Value:MMM dd, yyyy}";
+        }
+        else if (filterStartDate.HasValue)
+        {
+            return $"From {filterStartDate.Value:MMM dd, yyyy}";
+        }
+        else if (filterEndDate.HasValue)
+        {
+            return $"Until {filterEndDate.Value:MMM dd, yyyy}";
+        }
+        return "All Time";
+    }
+
+    private async Task PrintSellerRecords()
+    {
+        // Use all filtered sellers for the PDF, not just the current page
+        var recordsForPrint = allFilteredSellers.Any() ? allFilteredSellers : sellerUsers;
+        
+        var reportData = new
+        {
+            title = "Seller Records Report",
+            printedBy = AuthState.CurrentUser?.FullName ?? "Administrator",
+            printedAt = DateTime.Now.ToString("MMMM dd, yyyy hh:mm tt"),
+            dateRange = GetDateRangeText(),
+            totalCount = recordsForPrint.Count,
+            records = recordsForPrint.Select(u => new
+            {
+                id = u.Id,
+                name = u.Name,
+                email = u.Email,
+                dateCreated = u.DateCreated.ToString("MMM dd, yyyy")
+            }).ToList()
+        };
+
+        await JSRuntime.InvokeVoidAsync("printSellerRecords", reportData);
+        
+        // Log history
+        if (AuthState.CurrentUser != null)
+        {
+            try
+            {
+                await HistoryService.LogAsync(
+                    AuthState.CurrentUser.Id,
+                    "print",
+                    "User Management",
+                    $"Printed seller records report ({recordsForPrint.Count} records)"
+                );
+            }
+            catch { }
+        }
     }
 }
 

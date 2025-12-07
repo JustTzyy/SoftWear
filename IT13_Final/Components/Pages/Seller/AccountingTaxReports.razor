@@ -1,0 +1,538 @@
+@page "/seller/AccountingTaxReports"
+@layout IT13_Final.Components.Layout.Seller.Seller
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IT13_Final.Services.Data.IIncomeBreakdownService IncomeBreakdownService
+@inject IT13_Final.Services.Audit.IHistoryService HistoryService
+@inject IJSRuntime JSRuntime
+@using Microsoft.Data.SqlClient
+@using System.Linq
+
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Tax Reports</h1>
+        <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintReport" disabled="@isGeneratingPDF" title="Print Report">
+            @if (isGeneratingPDF)
+            {
+                <span>Generating...</span>
+            }
+            else
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 9V2h12v7"></path>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+            }
+        </button>
+    </div>
+</div>
+
+@* Date Filters *@
+<div class="dashboard-filters">
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date"
+               class="date-input"
+               value="@(startDate?.ToString("yyyy-MM-dd"))"
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@(endDate?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd"))"
+               @onchange="HandleFromDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date"
+               class="date-input"
+               value="@(endDate?.ToString("yyyy-MM-dd"))"
+               min="@(startDate?.ToString("yyyy-MM-dd"))"
+               max="@DateTime.Today.ToString("yyyy-MM-dd")"
+               @onchange="HandleToDateChange" />
+        <button class="filter-btn" @onclick="LoadData">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            Apply
+        </button>
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearFilters" title="Clear">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="content-card">
+        <div class="card-body">
+            <div class="loading-cell">Loading tax data...</div>
+        </div>
+    </div>
+}
+else
+{
+    @* Summary Card *@
+    <div class="content-card">
+        <div class="card-header">
+            <div class="card-title-section">
+                <h3 class="card-title">Tax Summary</h3>
+                <span class="card-subtitle">@GetDateRangeText()</span>
+            </div>
+        </div>
+        
+        <div class="card-body">
+            <div class="summary-grid">
+                <div class="summary-box">
+                    <div class="summary-label">Total Sales (Before Tax)</div>
+                    <div class="summary-value">₱@totalSalesBeforeTax.ToString("N2")</div>
+                </div>
+                <div class="summary-box">
+                    <div class="summary-label">VAT (12%)</div>
+                    <div class="summary-value">₱@vatAmount.ToString("N2")</div>
+                </div>
+                <div class="summary-box">
+                    <div class="summary-label">Admin Fee (2%)</div>
+                    <div class="summary-value">₱@adminFeeAmount.ToString("N2")</div>
+                </div>
+                <div class="summary-box">
+                    <div class="summary-label">Total Tax & Fees</div>
+                    <div class="summary-value">₱@totalTaxAndFees.ToString("N2")</div>
+                </div>
+                <div class="summary-box">
+                    <div class="summary-label">Total Products Sold</div>
+                    <div class="summary-value">@totalProductsSold</div>
+                </div>
+                <div class="summary-box">
+                    <div class="summary-label">Total Product Revenue</div>
+                    <div class="summary-value">₱@totalProductRevenue.ToString("N2")</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* Tax Breakdown Card *@
+    <div class="content-card">
+        <div class="card-header">
+            <div class="card-title-section">
+                <h3 class="card-title">Tax Breakdown</h3>
+                <span class="card-subtitle">@GetDateRangeText()</span>
+            </div>
+        </div>
+        
+        <div class="card-body">
+            <div class="tax-columns">
+                <div class="tax-column">
+                    <h3 class="section-header">VAT Breakdown (12% on Sales)</h3>
+                    <ul class="simple-list">
+                        <li>
+                            <span>Total Sales (Before Tax)</span>
+                            <span>₱@totalSalesBeforeTax.ToString("N2")</span>
+                        </li>
+                        <li>
+                            <span>VAT Rate</span>
+                            <span>12%</span>
+                        </li>
+                        <li class="total-row">
+                            <span>VAT Amount</span>
+                            <span>₱@vatAmount.ToString("N2")</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="tax-column">
+                    <h3 class="section-header">Admin Fee Breakdown (2% per Product)</h3>
+                    <ul class="simple-list">
+                        <li>
+                            <span>Total Products Sold</span>
+                            <span>@totalProductsSold</span>
+                        </li>
+                        <li>
+                            <span>Total Product Revenue</span>
+                            <span>₱@totalProductRevenue.ToString("N2")</span>
+                        </li>
+                        <li>
+                            <span>Admin Fee Rate</span>
+                            <span>2%</span>
+                        </li>
+                        <li class="total-row">
+                            <span>Admin Fee Amount</span>
+                            <span>₱@adminFeeAmount.ToString("N2")</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* Product-Level Admin Fee Details Card *@
+    <div class="content-card">
+        <div class="card-header">
+            <div class="card-title-section">
+                <h3 class="card-title">Product-Level Admin Fee Details</h3>
+                <span class="card-subtitle">@productAdminFeeBreakdown.Count products</span>
+            </div>
+        </div>
+        
+        <div class="card-body">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th>Variant</th>
+                        <th>Quantity Sold</th>
+                        <th>Total Revenue</th>
+                        <th>Admin Fee (2%)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (productAdminFeeBreakdown.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="5" class="empty-cell">No product sales for this range.</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in productAdminFeeBreakdown)
+                        {
+                            <tr>
+                                <td>@item.ProductName</td>
+                                <td>@item.VariantName</td>
+                                <td style="text-align: right;">@item.QuantitySold</td>
+                                <td style="text-align: right; font-weight: 600;">₱@item.TotalRevenue.ToString("N2")</td>
+                                <td style="text-align: right; font-weight: 600;">₱@item.AdminFee.ToString("N2")</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = false;
+    private DateTime? startDate;
+    private DateTime? endDate;
+    private string selectedDateRange = string.Empty;
+    private bool onlyApprovedDays = true; // Default to only show approved daily sales verification
+
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue || onlyApprovedDays;
+    private bool isGeneratingPDF = false;
+
+    private int sellerUserId = 0;
+
+    private decimal totalSalesBeforeTax = 0;
+    private decimal vatAmount = 0;
+    private decimal adminFeeAmount = 0;
+    private decimal totalTaxAndFees = 0;
+    private int totalProductsSold = 0;
+    private decimal totalProductRevenue = 0;
+
+    private class ProductAdminFeeRow
+    {
+        public string ProductName { get; set; } = string.Empty;
+        public string VariantName { get; set; } = string.Empty;
+        public int QuantitySold { get; set; }
+        public decimal TotalRevenue { get; set; }
+        public decimal AdminFee { get; set; }
+    }
+
+    private List<ProductAdminFeeRow> productAdminFeeBreakdown = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // For seller tax reports, use the seller's own tbl_users.id
+        sellerUserId = AuthState.CurrentUser?.Id ?? 0;
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            // Get income data (for total sales)
+            var income = await IncomeBreakdownService.GetIncomeBreakdownAsync(
+                sellerUserId,
+                startDate,
+                endDate,
+                onlyApprovedDays
+            );
+
+            totalSalesBeforeTax = income.TotalGrossSales;
+
+            // Calculate VAT (12% on total sales)
+            vatAmount = totalSalesBeforeTax * 0.12m;
+
+            // Get product-level data for admin fee calculation (2% per product)
+            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+            using var conn = new SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            var dateFilter = "";
+            if (startDate.HasValue)
+            {
+                dateFilter += " AND CAST(s.timestamps AS DATE) >= @StartDate";
+            }
+            if (endDate.HasValue)
+            {
+                dateFilter += " AND CAST(s.timestamps AS DATE) <= @EndDate";
+            }
+
+            var sellerFilter = sellerUserId > 0 ? "AND u.user_id = @SellerUserId" : "";
+
+            var approvedDaysFilter = "";
+            if (onlyApprovedDays && sellerUserId > 0)
+            {
+                approvedDaysFilter = @"
+                    AND EXISTS (
+                        SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
+                        WHERE dsv.cashier_user_id = s.user_id
+                        AND CAST(dsv.sale_date AS DATE) = CAST(s.timestamps AS DATE)
+                        AND dsv.status = 'Approved'
+                        AND dsv.archived_at IS NULL
+                        AND dsv.seller_user_id = @SellerUserId
+                    )";
+            }
+
+            var productSql = $@"
+                SELECT 
+                    p.name as product_name,
+                    v.name as variant_name,
+                    SUM(si.quantity) as quantity_sold,
+                    SUM(si.subtotal) as total_revenue
+                FROM dbo.tbl_sales_items si
+                INNER JOIN dbo.tbl_sales s ON si.sale_id = s.id
+                INNER JOIN dbo.tbl_variants v ON si.variant_id = v.id
+                INNER JOIN dbo.tbl_products p ON v.product_id = p.id
+                INNER JOIN dbo.tbl_users u ON s.user_id = u.id
+                WHERE si.archives IS NULL
+                AND s.archives IS NULL
+                AND s.status = 'Completed'
+                {sellerFilter}
+                AND u.archived_at IS NULL
+                {dateFilter}
+                {approvedDaysFilter}
+                GROUP BY p.name, v.name
+                ORDER BY total_revenue DESC";
+
+            using var cmd = new SqlCommand(productSql, conn);
+            if (sellerUserId > 0)
+            {
+                cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+            }
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+            }
+
+            productAdminFeeBreakdown.Clear();
+            totalProductsSold = 0;
+            totalProductRevenue = 0;
+            adminFeeAmount = 0;
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var productName = reader.GetString(0);
+                var variantName = reader.GetString(1);
+                var quantity = reader.GetInt32(2);
+                var revenue = reader.GetDecimal(3);
+                var adminFee = revenue * 0.02m; // 2% admin fee per product
+
+                productAdminFeeBreakdown.Add(new ProductAdminFeeRow
+                {
+                    ProductName = productName,
+                    VariantName = variantName,
+                    QuantitySold = quantity,
+                    TotalRevenue = revenue,
+                    AdminFee = adminFee
+                });
+
+                totalProductsSold += quantity;
+                totalProductRevenue += revenue;
+                adminFeeAmount += adminFee;
+            }
+
+            totalTaxAndFees = vatAmount + adminFeeAmount;
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading tax data: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading tax data: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleDateRangeChange()
+    {
+        var today = DateTime.Today;
+        switch (selectedDateRange)
+        {
+            case "today":
+                startDate = today;
+                endDate = today;
+                break;
+            case "yesterday":
+                startDate = today.AddDays(-1);
+                endDate = today.AddDays(-1);
+                break;
+            case "last7days":
+                startDate = today.AddDays(-7);
+                endDate = today;
+                break;
+            case "last30days":
+                startDate = today.AddDays(-30);
+                endDate = today;
+                break;
+            case "thismonth":
+                startDate = new DateTime(today.Year, today.Month, 1);
+                endDate = today;
+                break;
+            case "thisyear":
+                startDate = new DateTime(today.Year, 1, 1);
+                endDate = today;
+                break;
+            default:
+                break;
+        }
+        await LoadData();
+    }
+
+    private async Task HandleFromDateChange(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        {
+            startDate = date;
+            await LoadData();
+        }
+    }
+
+    private async Task HandleToDateChange(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        {
+            endDate = date;
+            await LoadData();
+        }
+    }
+
+    private string GetDateRangeText()
+    {
+        if (!startDate.HasValue && !endDate.HasValue)
+            return "All Time";
+        if (startDate.HasValue && endDate.HasValue)
+            return $"{startDate.Value:MMM d} - {endDate.Value:MMM d, yyyy}";
+        return "Custom Range";
+    }
+
+    private async Task ClearFilters()
+    {
+        startDate = null;
+        endDate = null;
+        selectedDateRange = string.Empty;
+        onlyApprovedDays = true; // Keep default to only show approved daily sales verification
+        await LoadData();
+    }
+
+    private async Task PrintReport()
+    {
+        try
+        {
+            isGeneratingPDF = true;
+            StateHasChanged();
+
+            var reportData = new
+            {
+                title = "Tax Report",
+                printedBy = AuthState.CurrentUser?.FullName ?? "Seller",
+                printedAt = DateTime.Now.ToString("MMMM dd, yyyy hh:mm tt"),
+                dateRange = GetDateRangeText(),
+                
+                summary = new
+                {
+                    totalSalesBeforeTax = totalSalesBeforeTax.ToString("N2"),
+                    vatAmount = vatAmount.ToString("N2"),
+                    adminFeeAmount = adminFeeAmount.ToString("N2"),
+                    totalTaxAndFees = totalTaxAndFees.ToString("N2"),
+                    totalProductsSold = totalProductsSold.ToString(),
+                    totalProductRevenue = totalProductRevenue.ToString("N2")
+                },
+                
+                vatBreakdown = new
+                {
+                    totalSales = totalSalesBeforeTax.ToString("N2"),
+                    rate = "12%",
+                    amount = vatAmount.ToString("N2")
+                },
+                
+                adminFeeBreakdown = new
+                {
+                    totalProductsSold = totalProductsSold.ToString(),
+                    totalRevenue = totalProductRevenue.ToString("N2"),
+                    rate = "2%",
+                    amount = adminFeeAmount.ToString("N2")
+                },
+                
+                products = productAdminFeeBreakdown.Select(p => new
+                {
+                    productName = p.ProductName,
+                    variantName = p.VariantName,
+                    quantitySold = p.QuantitySold.ToString(),
+                    totalRevenue = p.TotalRevenue.ToString("N2"),
+                    adminFee = p.AdminFee.ToString("N2")
+                }).ToList()
+            };
+
+            await JSRuntime.InvokeVoidAsync("printTaxReports", reportData);
+
+            try
+            {
+                if (AuthState.CurrentUser != null)
+                {
+                    await HistoryService.LogAsync(
+                        AuthState.CurrentUser.Id,
+                        "print",
+                        "Tax_Reports",
+                        $"Printed Tax Report from {GetDateRangeText()}"
+                    );
+                }
+            }
+            catch { }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error printing Tax Report: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to generate PDF. Please try again.");
+        }
+        finally
+        {
+            isGeneratingPDF = false;
+            StateHasChanged();
+        }
+    }
+}

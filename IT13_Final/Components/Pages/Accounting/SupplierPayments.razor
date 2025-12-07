@@ -1,0 +1,971 @@
+@page "/accounting/financial/supplier-payments"
+@layout IT13_Final.Components.Layout.Accounting.Accounting
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IT13_Final.Services.Data.ISupplierInvoiceService SupplierInvoiceService
+@inject IT13_Final.Services.Data.ISupplierService SupplierService
+@inject IT13_Final.Services.Audit.IHistoryService HistoryService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Nav
+@using Microsoft.Data.SqlClient
+@using Microsoft.AspNetCore.Components.Forms
+@using System.Linq
+@implements IDisposable
+
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Supplier Payments</h1>
+        <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintReport" disabled="@isGeneratingPDF" title="Print Report">
+            @if (isGeneratingPDF)
+            {
+                <span>Generating...</span>
+            }
+            else
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 9V2h12v7"></path>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+            }
+        </button>
+    </div>
+</div>
+
+@* Search and Date Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.35-4.35"></path>
+        </svg>
+        <input type="text" id="supplier-payments-search-input" class="search-input" placeholder="Search by PO number or supplier name..." @bind="searchTerm" @bind:event="oninput" @bind:after="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            <button class="clear-search-btn" @onclick="HandleClearSearch" title="Clear">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        }
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date" 
+               class="date-input" 
+               value="@(startDate?.ToString("yyyy-MM-dd"))" 
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@(endDate?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd"))" 
+               @onchange="HandleFromDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date" 
+               class="date-input" 
+               value="@(endDate?.ToString("yyyy-MM-dd"))" 
+               min="@(startDate?.ToString("yyyy-MM-dd"))" 
+               max="@DateTime.Today.ToString("yyyy-MM-dd")" 
+               @onchange="HandleToDateChange" />
+        <select class="date-select" @bind="selectedSupplierId" @bind:after="HandleSupplierChange" style="min-width: 150px;">
+            <option value="">All Suppliers</option>
+            @foreach (var supplier in suppliers)
+            {
+                <option value="@supplier.Id">@supplier.CompanyName</option>
+            }
+        </select>
+        <select class="date-select" @bind="selectedPaymentStatus" @bind:after="HandlePaymentStatusChange" style="min-width: 150px;">
+            <option value="">All Status</option>
+            <option value="Paid">Paid</option>
+            <option value="Partially Paid">Partially Paid</option>
+            <option value="Unpaid">Unpaid</option>
+        </select>
+        <button class="filter-btn" @onclick="LoadInvoices">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            Apply
+        </button>
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
+
+@* Summary Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Supplier Payments Summary</h3>
+            <span class="card-subtitle">@totalCount total invoices</span>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <div class="summary-grid">
+            <div class="summary-box">
+                <div class="summary-label">Total Amount</div>
+                <div class="summary-value">₱@totalAmount.ToString("N2")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Total Paid</div>
+                <div class="summary-value">₱@totalPaid.ToString("N2")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Remaining Balance</div>
+                <div class="summary-value" style="color: #dc3545;">₱@remainingBalance.ToString("N2")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Total Invoices</div>
+                <div class="summary-value">@totalCount</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Supplier Invoices List Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Supplier Invoices</h3>
+            <span class="card-subtitle">@totalCount invoices found</span>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <div style="margin-bottom: 16px; padding: 12px; background: #f8f9fa; border-radius: 8px; font-size: 12px; color: #6b7280;">
+            Note: <strong>Stock-In</strong> entries are grouped by <strong>Date + Supplier</strong>, while <strong>Purchase Orders</strong> are shown individually by PO number.
+        </div>
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>PO / Stock-In</th>
+                    <th>Supplier</th>
+                    <th>Date</th>
+                    <th>Total Amount</th>
+                    <th>Paid</th>
+                    <th>Balance</th>
+                    <th>Status</th>
+                    <th>Source</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+                <tbody>
+                    @if (isLoading)
+                    {
+                        <tr>
+                            <td colspan="9" class="loading-cell">Loading supplier invoices...</td>
+                        </tr>
+                    }
+                    else if (invoices.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="9" class="empty-cell">No purchase orders or stock-in records to pay for this filter.</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var invoice in invoices)
+                        {
+                            <tr>
+                                <td title="@invoice.InvoiceNumber">
+                                    @if (invoice.SourceType == "StockIn")
+                                    {
+                                        <span>Stock-In Group - @invoice.SupplierName (@invoice.InvoiceDate.ToString("MMM dd, yyyy"))</span>
+                                    }
+                                    else
+                                    {
+                                        <span>@invoice.InvoiceNumber</span>
+                                    }
+                                </td>
+                                <td>@invoice.SupplierName</td>
+                                <td>
+                                    <div class="timestamp-info">
+                                        <div class="timestamp-date">@invoice.InvoiceDate.ToString("MMM dd, yyyy")</div>
+                                    </div>
+                                </td>
+                                <td style="font-weight: 600;">₱@invoice.TotalAmount.ToString("N2")</td>
+                                <td style="color: #10B981;">₱@invoice.TotalPaid.ToString("N2")</td>
+                                <td style="font-weight: 600; color: @(invoice.RemainingBalance > 0 ? "#dc3545" : "#10B981");">₱@invoice.RemainingBalance.ToString("N2")</td>
+                                <td>
+                                    <span class="status-text @(invoice.PaymentStatus == "Paid" ? "status-text-approved" : invoice.PaymentStatus == "Unpaid" ? "status-text-pending" : "status-text-pending")">@invoice.PaymentStatus</span>
+                                </td>
+                                <td>@invoice.SourceType</td>
+                                <td class="actions-cell" @onclick:stopPropagation="true">
+                                    <button class="action-btn approve-btn" @onclick='() => RecordPaymentForItem(invoice)' title="Record Payment" disabled="@isProcessing">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                            <circle cx="9" cy="7" r="4"></circle>
+                                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                                        </svg>
+                                    </button>
+                                    <button class="action-btn approve-btn" @onclick='() => ViewInvoiceDetailsForItem(invoice)' title="View Details" disabled="@isProcessing">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                            <circle cx="12" cy="12" r="3"></circle>
+                                        </svg>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                var pageNum = i;
+                @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
+                {
+                    <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 2 || i == currentPage + 2)
+                {
+                    <span class="page-ellipsis">...</span>
+                }
+            }
+
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+<!-- Record Payment Modal -->
+@if (showPaymentModal && selectedInvoice != null)
+{
+    <div class="modal-overlay" @onclick="ClosePaymentModal">
+        <div class="add-admin-modal" @onclick:stopPropagation style="max-width: 700px;">
+            <div class="modal-header">
+                <h2 class="modal-title-text">Record Payment</h2>
+                <button class="modal-close-btn" @onclick="ClosePaymentModal" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                @if (selectedInvoice != null)
+                {
+                    <div class="po-info">
+                        <div class="info-row">
+                            <span class="info-label">@(selectedInvoice.SourceType == "PurchaseOrder" ? "PO Number:" : "Stock-In Number:")</span>
+                            <span class="info-value">@selectedInvoice.InvoiceNumber</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Supplier:</span>
+                            <span class="info-value">@selectedInvoice.SupplierName</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Total Amount:</span>
+                            <span class="info-value">₱@selectedInvoice.TotalAmount.ToString("N2")</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Remaining Balance:</span>
+                            <span class="info-value" style="color: #dc3545;">₱@selectedInvoice.RemainingBalance.ToString("N2")</span>
+                        </div>
+                    </div>
+                }
+
+                <div class="form-grid">
+                    <div class="form-field">
+                        <label class="field-label">Amount Paid *</label>
+                        <input type="number" class="form-input" @bind="paymentForm.AmountPaid" step="0.01" min="0" placeholder="0.00" />
+                    </div>
+
+                    <div class="form-field">
+                        <label class="field-label">Payment Method *</label>
+                        <select class="form-input" @bind="paymentForm.PaymentMethod">
+                            <option value="">Select Payment Method</option>
+                            <option value="Cash">Cash</option>
+                            <option value="GCash">GCash</option>
+                            <option value="Bank">Bank</option>
+                        </select>
+                    </div>
+
+                    <div class="form-field">
+                        <label class="field-label">Payment Date *</label>
+                        <input type="date" class="form-input" @bind="paymentForm.PaymentDate" max="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                    </div>
+
+                    <div class="form-field">
+                        <label class="field-label">Reference Number</label>
+                        <input type="text" class="form-input" @bind="paymentForm.ReferenceNumber" placeholder="Enter reference number..." />
+                    </div>
+
+                    <div class="form-field full-width">
+                        <label class="field-label">Notes</label>
+                        <textarea class="form-input" @bind="paymentForm.Notes" rows="3" placeholder="Enter payment notes..." style="resize: vertical;"></textarea>
+                    </div>
+
+                    <div class="form-field full-width">
+                        <label class="field-label">Receipt (Optional)</label>
+                        <InputFile OnChange="HandleFileChange" accept="image/*" class="form-input" />
+                        @if (!string.IsNullOrEmpty(paymentForm.ReceiptImage))
+                        {
+                            <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px;">
+                                <img src="@($"data:{paymentForm.ReceiptContentType};base64,{paymentForm.ReceiptImage}")" alt="Receipt preview" style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 1px solid #ddd;" />
+                                <button type="button" class="btn-secondary" @onclick="ClearReceipt" style="padding: 6px 16px; font-size: 13px;">Remove</button>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+            </div>
+            <div class="modal-footer">
+                <button class="cancel-btn" @onclick="ClosePaymentModal" disabled="@isProcessing">Cancel</button>
+                <button class="save-admin-btn" @onclick="SavePayment" disabled="@isProcessing">
+                    @(isProcessing ? "Saving..." : "Record Payment")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Invoice Details Modal -->
+@if (showInvoiceDetailsModal && selectedInvoice != null)
+{
+    <div class="modal-overlay" @onclick="CloseInvoiceDetailsModal">
+        <div class="add-admin-modal" @onclick:stopPropagation style="max-width: 900px;">
+            <div class="modal-header">
+                <h2 class="modal-title-text">@(selectedInvoice.SourceType == "PurchaseOrder" ? "Purchase Order Details" : "Stock-In Details") - @selectedInvoice.InvoiceNumber</h2>
+                <button class="modal-close-btn" @onclick="CloseInvoiceDetailsModal" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="po-info">
+                    <div class="info-row">
+                        <span class="info-label">@(selectedInvoice.SourceType == "PurchaseOrder" ? "PO Number:" : "Stock-In Number:")</span>
+                        <span class="info-value">@selectedInvoice.InvoiceNumber</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Supplier:</span>
+                        <span class="info-value">@selectedInvoice.SupplierName</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">@(selectedInvoice.SourceType == "PurchaseOrder" ? "PO Date:" : "Stock-In Date:")</span>
+                        <span class="info-value">@selectedInvoice.InvoiceDate.ToString("MMM dd, yyyy")</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Total Amount:</span>
+                        <span class="info-value">₱@selectedInvoice.TotalAmount.ToString("N2")</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Total Paid:</span>
+                        <span class="info-value" style="color: #10B981;">₱@selectedInvoice.TotalPaid.ToString("N2")</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Remaining Balance:</span>
+                        <span class="info-value" style="color: #dc3545; font-weight: 600;">₱@selectedInvoice.RemainingBalance.ToString("N2")</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Status:</span>
+                        <span class="info-value">
+                            <span class="status-text @(selectedInvoice.PaymentStatus == "Paid" ? "status-text-approved" : selectedInvoice.PaymentStatus == "Unpaid" ? "status-text-pending" : "status-text-pending")">@selectedInvoice.PaymentStatus</span>
+                        </span>
+                    </div>
+                    @if (!string.IsNullOrEmpty(selectedInvoice.Description))
+                    {
+                        <div class="info-row">
+                            <span class="info-label">Description:</span>
+                            <span class="info-value">@selectedInvoice.Description</span>
+                        </div>
+                    }
+
+                    @if (invoicePayments.Count > 0)
+                    {
+                        <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid #e5e7eb;">
+                            <h4 style="margin-bottom: 16px; font-size: 16px; font-weight: 700; color: #1f2937;">Payment History</h4>
+                            <table class="po-items-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Amount</th>
+                                        <th>Method</th>
+                                        <th>Reference</th>
+                                        <th>Created By</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var payment in invoicePayments)
+                                    {
+                                        <tr>
+                                            <td>@payment.PaymentDate.ToString("MMM dd, yyyy")</td>
+                                            <td style="text-align: right;">₱@payment.AmountPaid.ToString("N2")</td>
+                                            <td>@payment.PaymentMethod</td>
+                                            <td>@(payment.ReferenceNumber ?? "-")</td>
+                                            <td>@payment.CreatedByName</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="cancel-btn" @onclick="CloseInvoiceDetailsModal">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<IT13_Final.Services.Data.SupplierInvoiceModel> invoices = new();
+    private List<IT13_Final.Services.Data.SupplierModel> suppliers = new();
+    private List<IT13_Final.Services.Data.SupplierPaymentModel> invoicePayments = new();
+    private string searchTerm = string.Empty;
+    private DateTime? startDate;
+    private DateTime? endDate;
+    private string selectedDateRange = string.Empty;
+    private int? selectedSupplierId = null;
+
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue || selectedSupplierId.HasValue || !string.IsNullOrEmpty(selectedPaymentStatus);
+    private string selectedPaymentStatus = string.Empty;
+    private bool isLoading = false;
+    private bool isProcessing = false;
+    private bool isGeneratingPDF = false;
+    private int sellerUserId = 0;
+    private System.Threading.Timer? _searchTimer;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling(totalCount / (double)pageSize);
+
+    // KPI values
+    private decimal totalAmount = 0;
+    private decimal totalPaid = 0;
+    private decimal remainingBalance = 0;
+
+    // Modal states
+    private bool showPaymentModal = false;
+    private bool showInvoiceDetailsModal = false;
+    private int selectedInvoiceId = 0;
+    private IT13_Final.Services.Data.SupplierInvoiceModel? selectedInvoice = null;
+    private IT13_Final.Services.Data.CreateSupplierPaymentModel paymentForm = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSellerUserId();
+        if (sellerUserId > 0)
+        {
+            await LoadSuppliers();
+            await LoadInvoices();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JSRuntime.InvokeVoidAsync("setupSearchInputFilter", "supplier-payments-search-input");
+        }
+    }
+
+    private async Task LoadSellerUserId()
+    {
+        if (AuthState.CurrentUser != null)
+        {
+            try
+            {
+                const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+                using var conn = new SqlConnection(connectionString);
+                await conn.OpenAsync();
+
+                var sql = "SELECT user_id FROM dbo.tbl_users WHERE id = @UserId AND archived_at IS NULL";
+                using var cmd = new SqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@UserId", AuthState.CurrentUser.Id);
+
+                var result = await cmd.ExecuteScalarAsync();
+                if (result != null && result != DBNull.Value)
+                {
+                    sellerUserId = Convert.ToInt32(result);
+                }
+            }
+            catch
+            {
+                sellerUserId = 0;
+            }
+        }
+    }
+
+    private async Task LoadSuppliers()
+    {
+        try
+        {
+            suppliers = await SupplierService.GetSuppliersAsync(sellerUserId, null, null, null, 1, 1000);
+        }
+        catch
+        {
+            suppliers = new List<IT13_Final.Services.Data.SupplierModel>();
+        }
+    }
+
+    private async Task LoadInvoices()
+    {
+        if (sellerUserId <= 0)
+        {
+            await LoadSellerUserId();
+            if (sellerUserId <= 0)
+            {
+                await JSRuntime.InvokeVoidAsync("console.error", "Seller User ID not found.");
+                isLoading = false;
+                StateHasChanged();
+                return;
+            }
+        }
+
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            totalCount = await SupplierInvoiceService.GetPayableItemsCountAsync(
+                sellerUserId,
+                string.IsNullOrWhiteSpace(searchTerm) ? null : searchTerm,
+                selectedSupplierId,
+                string.IsNullOrWhiteSpace(selectedPaymentStatus) ? null : selectedPaymentStatus,
+                startDate,
+                endDate
+            );
+            invoices = await SupplierInvoiceService.GetPayableItemsAsync(
+                sellerUserId,
+                string.IsNullOrWhiteSpace(searchTerm) ? null : searchTerm,
+                selectedSupplierId,
+                string.IsNullOrWhiteSpace(selectedPaymentStatus) ? null : selectedPaymentStatus,
+                startDate,
+                endDate,
+                currentPage,
+                pageSize
+            );
+
+            // Calculate KPIs
+            totalAmount = invoices.Sum(i => i.TotalAmount);
+            totalPaid = invoices.Sum(i => i.TotalPaid);
+            remainingBalance = invoices.Sum(i => i.RemainingBalance);
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading invoices: {ex.Message}");
+            invoices = new List<IT13_Final.Services.Data.SupplierInvoiceModel>();
+            totalCount = 0;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            currentPage = 1;
+            await LoadInvoices();
+        }
+    }
+
+    private void HandleSearchInput()
+    {
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            currentPage = 1;
+            await InvokeAsync(async () =>
+            {
+                await LoadInvoices();
+            });
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private void HandleClearSearch()
+    {
+        searchTerm = string.Empty;
+        currentPage = 1;
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadInvoices();
+            });
+        }, null, 100, Timeout.Infinite);
+    }
+
+    private async Task HandleDateRangeChange()
+    {
+        var today = DateTime.Today;
+        switch (selectedDateRange)
+        {
+            case "today":
+                startDate = today;
+                endDate = today;
+                break;
+            case "yesterday":
+                startDate = today.AddDays(-1);
+                endDate = today.AddDays(-1);
+                break;
+            case "last7days":
+                startDate = today.AddDays(-7);
+                endDate = today;
+                break;
+            case "last30days":
+                startDate = today.AddDays(-30);
+                endDate = today;
+                break;
+            case "thismonth":
+                startDate = new DateTime(today.Year, today.Month, 1);
+                endDate = today;
+                break;
+            case "thisyear":
+                startDate = new DateTime(today.Year, 1, 1);
+                endDate = today;
+                break;
+            default:
+                break;
+        }
+        currentPage = 1;
+        await LoadInvoices();
+    }
+
+    private async Task HandleFromDateChange(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        {
+            startDate = date;
+            selectedDateRange = string.Empty;
+            currentPage = 1;
+            await LoadInvoices();
+        }
+    }
+
+    private async Task HandleToDateChange(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        {
+            endDate = date;
+            selectedDateRange = string.Empty;
+            currentPage = 1;
+            await LoadInvoices();
+        }
+    }
+
+    private async Task HandleSupplierChange()
+    {
+        currentPage = 1;
+        await LoadInvoices();
+    }
+
+    private async Task HandlePaymentStatusChange()
+    {
+        currentPage = 1;
+        await LoadInvoices();
+    }
+
+    private void ClearDateFilter()
+    {
+        startDate = null;
+        endDate = null;
+        selectedDateRange = string.Empty;
+        selectedSupplierId = null;
+        selectedPaymentStatus = string.Empty;
+        currentPage = 1;
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadInvoices();
+            });
+        }, null, 100, Timeout.Infinite);
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages)
+        {
+            currentPage = page;
+            await LoadInvoices();
+        }
+    }
+
+
+    private async Task RecordPaymentForItem(IT13_Final.Services.Data.SupplierInvoiceModel invoice)
+    {
+        selectedInvoice = invoice;
+
+        paymentForm = new IT13_Final.Services.Data.CreateSupplierPaymentModel
+        {
+            PaymentDate = DateTime.Today,
+            AmountPaid = selectedInvoice.RemainingBalance > 0 ? selectedInvoice.RemainingBalance : selectedInvoice.TotalAmount
+        };
+
+        if (invoice.SourceType == "PurchaseOrder" && invoice.POId.HasValue)
+        {
+            paymentForm.POId = invoice.POId;
+            selectedInvoiceId = invoice.POId.Value;
+        }
+        else if (invoice.SourceType == "StockIn")
+        {
+            paymentForm.StockInGroupKey = invoice.InvoiceNumber; // This is the stock-in group key (format: STOCK-{date}-{supplier_id})
+            selectedInvoiceId = 0;
+        }
+
+        showPaymentModal = true;
+        StateHasChanged();
+    }
+
+    private void ClosePaymentModal()
+    {
+        showPaymentModal = false;
+        selectedInvoiceId = 0;
+        selectedInvoice = null;
+        paymentForm = new IT13_Final.Services.Data.CreateSupplierPaymentModel();
+        StateHasChanged();
+    }
+
+    private async Task SavePayment()
+    {
+        if (AuthState.CurrentUser == null) return;
+
+        if (paymentForm.AmountPaid <= 0)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Please enter a valid payment amount.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(paymentForm.PaymentMethod))
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Please select a payment method.");
+            return;
+        }
+
+        if (selectedInvoice != null && paymentForm.AmountPaid > selectedInvoice.RemainingBalance)
+        {
+            var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Payment amount (₱{paymentForm.AmountPaid:N2}) exceeds remaining balance (₱{selectedInvoice.RemainingBalance:N2}). Continue anyway?");
+            if (!confirmed)
+            {
+                return;
+            }
+        }
+
+        isProcessing = true;
+        StateHasChanged();
+
+        try
+        {
+            var paymentId = await SupplierInvoiceService.CreatePaymentAsync(sellerUserId, AuthState.CurrentUser.Id, paymentForm);
+            if (paymentId.HasValue)
+            {
+                await HistoryService.LogAsync(
+                    AuthState.CurrentUser.Id,
+                    "create",
+                    "Supplier Payments",
+                    $"Recorded payment: {selectedInvoice?.InvoiceNumber ?? "Unknown"} (PO) - ₱{paymentForm.AmountPaid:N2} via {paymentForm.PaymentMethod}"
+                );
+                await JSRuntime.InvokeVoidAsync("alert", "Payment recorded successfully!");
+                ClosePaymentModal();
+                await LoadInvoices();
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Failed to record payment. Please try again.");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error recording payment: {ex.Message}");
+        }
+        finally
+        {
+            isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ViewInvoiceDetailsForItem(IT13_Final.Services.Data.SupplierInvoiceModel invoice)
+    {
+        selectedInvoice = invoice;
+
+        if (invoice.SourceType == "PurchaseOrder" && invoice.POId.HasValue)
+        {
+            invoicePayments = await SupplierInvoiceService.GetPaymentsByPOIdAsync(invoice.POId.Value, sellerUserId);
+        }
+        else if (invoice.SourceType == "StockIn")
+        {
+            invoicePayments = await SupplierInvoiceService.GetPaymentsByStockInGroupAsync(invoice.InvoiceNumber, sellerUserId);
+        }
+        else
+        {
+            invoicePayments = new List<IT13_Final.Services.Data.SupplierPaymentModel>();
+        }
+
+        showInvoiceDetailsModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseInvoiceDetailsModal()
+    {
+        showInvoiceDetailsModal = false;
+        selectedInvoice = null;
+        invoicePayments = new List<IT13_Final.Services.Data.SupplierPaymentModel>();
+        StateHasChanged();
+    }
+
+    private async Task HandleFileChange(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.File;
+            if (file != null && file.Size > 0)
+            {
+                using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024); // 10MB max
+                using var memoryStream = new MemoryStream();
+                await stream.CopyToAsync(memoryStream);
+                var bytes = memoryStream.ToArray();
+                paymentForm.ReceiptImage = Convert.ToBase64String(bytes);
+                paymentForm.ReceiptContentType = file.ContentType;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error uploading file: {ex.Message}");
+        }
+    }
+
+    private void ClearReceipt()
+    {
+        paymentForm.ReceiptImage = null;
+        paymentForm.ReceiptContentType = null;
+        StateHasChanged();
+    }
+
+    private string GetDateRangeText()
+    {
+        if (!startDate.HasValue && !endDate.HasValue)
+            return "All Time";
+        if (startDate.HasValue && endDate.HasValue)
+            return $"{startDate.Value:MMM d} - {endDate.Value:MMM d, yyyy}";
+        return "Custom Range";
+    }
+
+    private async Task PrintReport()
+    {
+        try
+        {
+            isGeneratingPDF = true;
+            StateHasChanged();
+
+            if (AuthState.CurrentUser != null)
+            {
+                await HistoryService.LogAsync(
+                    AuthState.CurrentUser.Id,
+                    "print",
+                    "SupplierPayments",
+                    "Printed supplier payments report"
+                );
+            }
+
+            // Get all invoices for print (no pagination)
+            var allInvoicesForPrint = await SupplierInvoiceService.GetPayableItemsAsync(
+                sellerUserId,
+                string.IsNullOrWhiteSpace(searchTerm) ? null : searchTerm,
+                selectedSupplierId,
+                string.IsNullOrWhiteSpace(selectedPaymentStatus) ? null : selectedPaymentStatus,
+                startDate,
+                endDate,
+                1,
+                10000
+            );
+
+            // Calculate KPIs for all invoices
+            var printTotalAmount = allInvoicesForPrint.Sum(i => i.TotalAmount);
+            var printTotalPaid = allInvoicesForPrint.Sum(i => i.TotalPaid);
+            var printRemainingBalance = allInvoicesForPrint.Sum(i => i.RemainingBalance);
+
+            var reportData = new
+            {
+                title = "Supplier Payments Report",
+                printedBy = AuthState.CurrentUser?.FullName ?? "Accounting",
+                printedAt = DateTime.Now.ToString("MMMM dd, yyyy hh:mm tt"),
+                dateRange = GetDateRangeText(),
+                
+                kpi = new
+                {
+                    totalAmount = printTotalAmount.ToString("N2"),
+                    totalPaid = printTotalPaid.ToString("N2"),
+                    remainingBalance = printRemainingBalance.ToString("N2"),
+                    totalInvoices = allInvoicesForPrint.Count.ToString()
+                },
+                
+                invoices = allInvoicesForPrint.Select(i => new
+                {
+                    invoiceNumber = i.InvoiceNumber,
+                    supplierName = i.SupplierName,
+                    date = i.InvoiceDate.ToString("MMM dd, yyyy"),
+                    totalAmount = i.TotalAmount.ToString("N2"),
+                    totalPaid = i.TotalPaid.ToString("N2"),
+                    remainingBalance = i.RemainingBalance.ToString("N2"),
+                    status = i.PaymentStatus,
+                    sourceType = i.SourceType
+                }).ToList()
+            };
+
+            await JSRuntime.InvokeVoidAsync("printSupplierPayments", reportData);
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error printing report: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to generate PDF. Please try again.");
+        }
+        finally
+        {
+            isGeneratingPDF = false;
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+    }
+}
+

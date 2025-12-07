@@ -9,7 +9,13 @@
 @inject IJSRuntime JSRuntime
 @implements IDisposable
 
-<h1 class="settings-title">Settings</h1>
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Account Settings</h1>
+        <p class="welcome-date">Manage your profile, security, and preferences</p>
+    </div>
+</div>
 
 <div class="settings-grid">
     <aside class="settings-menu">
@@ -73,7 +79,7 @@
                 <DataAnnotationsValidator />
                 <div class="form-grid">
                     <div class="field">
-                        <label class="field-label">First Name</label>
+                        <label class="field-label">First Name <span class="required-asterisk">*</span></label>
                         <input id="firstNameInput" class="input" value="@_personalModel.FirstName" @oninput="FilterFirstNameInput" @ref="firstNameRef" />
                         <ValidationMessage For="@(() => _personalModel.FirstName)" />
                     </div>
@@ -82,27 +88,27 @@
                         <input id="middleNameInput" class="input" value="@_personalModel.MiddleName" @oninput="FilterMiddleNameInput" @ref="middleNameRef" />
                     </div>
                     <div class="field">
-                        <label class="field-label">Last Name</label>
+                        <label class="field-label">Last Name <span class="required-asterisk">*</span></label>
                         <input id="lastNameInput" class="input" value="@_personalModel.LastName" @oninput="FilterLastNameInput" @ref="lastNameRef" />
                         <ValidationMessage For="@(() => _personalModel.LastName)" />
                     </div>
                     <div class="field">
-                        <label class="field-label">Contact Number</label>
-                        <InputText class="input" @bind-Value="_personalModel.Contact" />
+                        <label class="field-label">Contact Number <span class="required-asterisk">*</span></label>
+                        <InputText class="input" @bind-Value="_personalModel.Contact" @oninput="FilterContactInput" maxlength="11" />
                         <ValidationMessage For="@(() => _personalModel.Contact)" />
                     </div>
                     <div class="field">
-                        <label class="field-label">Birthday</label>
+                        <label class="field-label">Birthday <span class="required-asterisk">*</span></label>
                         <InputDate TValue="DateOnly?" class="input" @bind-Value="PersonalBirthday" />
                         <ValidationMessage For="@(() => _personalModel.Birthday)" />
                     </div>
                     <div class="field">
-                        <label class="field-label">Age</label>
+                        <label class="field-label">Age <span class="required-asterisk">*</span></label>
                         <InputNumber TValue="int?" class="input" @bind-Value="_personalModel.Age" disabled />
                         <ValidationMessage For="@(() => _personalModel.Age)" />
                     </div>
                     <div class="field">
-                        <label class="field-label">Sex</label>
+                        <label class="field-label">Sex <span class="required-asterisk">*</span></label>
                         <select class="input" value="@_personalModel.Sex" @onchange="@((ChangeEventArgs e) => { _personalModel.Sex = e.Value?.ToString() ?? string.Empty; StateHasChanged(); })">
                             <option value="">Select</option>
                             <option value="Male">Male</option>
@@ -148,12 +154,12 @@
                 <DataAnnotationsValidator />
                 <div class="form-grid">
                     <div class="field" style="grid-column: 1 / -1;">
-                        <label class="field-label">Street Address</label>
+                        <label class="field-label">Street Address <span class="required-asterisk">*</span></label>
                         <InputText class="input" @bind-Value="_addressModel.Street" placeholder="e.g., 123 Main St" />
                         <ValidationMessage For="@(() => _addressModel.Street)" />
                     </div>
                     <div class="field">
-                        <label class="field-label">Province</label>
+                        <label class="field-label">Province <span class="required-asterisk">*</span></label>
                         <select class="input" value="@_addressModel.Province" @onchange="OnProvinceChanged">
                             <option value="">Select Province</option>
                             @foreach (var province in _provinces)
@@ -164,7 +170,7 @@
                         <ValidationMessage For="@(() => _addressModel.Province)" />
                     </div>
                     <div class="field">
-                        <label class="field-label">City</label>
+                        <label class="field-label">City <span class="required-asterisk">*</span></label>
                         <select class="input" value="@_addressModel.City" @onchange="OnCityChanged" disabled="@(string.IsNullOrEmpty(_addressModel.Province))">
                             <option value="">Select City</option>
                             @foreach (var city in _cities)
@@ -175,7 +181,7 @@
                         <ValidationMessage For="@(() => _addressModel.City)" />
                     </div>
                     <div class="field">
-                        <label class="field-label">Zip Code</label>
+                        <label class="field-label">Zip Code <span class="required-asterisk">*</span></label>
                         <input class="input" value="@_addressModel.Zip" disabled />
                         <ValidationMessage For="@(() => _addressModel.Zip)" />
                     </div>
@@ -220,13 +226,13 @@
                         <input class="input" value="@(AuthState.CurrentUser?.Email ?? "")" disabled />
                     </div>
                     <div class="field" style="grid-column: 1 / -1;">
-                        <label class="field-label">New Email</label>
-                        <InputText class="input" @bind-Value="_emailModel.NewEmail" placeholder="Enter new email address" />
+                        <label class="field-label">New Email <span class="required-asterisk">*</span></label>
+                        <InputText class="input" @bind-Value="_emailModel.NewEmail" @oninput="FilterNewEmailInput" placeholder="Enter new email address" />
                         <ValidationMessage For="@(() => _emailModel.NewEmail)" />
                     </div>
                     <div class="field" style="grid-column: 1 / -1;">
-                        <label class="field-label">Confirm New Email</label>
-                        <InputText class="input" @bind-Value="_emailModel.ConfirmEmail" placeholder="Confirm new email address" />
+                        <label class="field-label">Confirm New Email <span class="required-asterisk">*</span></label>
+                        <InputText class="input" @bind-Value="_emailModel.ConfirmEmail" @oninput="FilterConfirmEmailInput" placeholder="Confirm new email address" />
                         <ValidationMessage For="@(() => _emailModel.ConfirmEmail)" />
                     </div>
                 </div>
@@ -639,6 +645,36 @@
     {
         var val = e.Value?.ToString() ?? string.Empty;
         var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        
+        // Auto-capitalize: first letter uppercase, rest lowercase unless after space
+        if (!string.IsNullOrEmpty(filtered))
+        {
+            var chars = filtered.ToCharArray();
+            bool capitalizeNext = true;
+            
+            for (int i = 0; i < chars.Length; i++)
+            {
+                if (char.IsLetter(chars[i]))
+                {
+                    if (capitalizeNext)
+                    {
+                        chars[i] = char.ToUpper(chars[i]);
+                        capitalizeNext = false;
+                    }
+                    else
+                    {
+                        chars[i] = char.ToLower(chars[i]);
+                    }
+                }
+                else if (chars[i] == ' ')
+                {
+                    capitalizeNext = true;
+                }
+            }
+            
+            filtered = new string(chars);
+        }
+        
         _personalModel.FirstName = filtered;
         StateHasChanged();
     }
@@ -647,6 +683,36 @@
     {
         var val = e.Value?.ToString() ?? string.Empty;
         var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        
+        // Auto-capitalize: first letter uppercase, rest lowercase unless after space
+        if (!string.IsNullOrEmpty(filtered))
+        {
+            var chars = filtered.ToCharArray();
+            bool capitalizeNext = true;
+            
+            for (int i = 0; i < chars.Length; i++)
+            {
+                if (char.IsLetter(chars[i]))
+                {
+                    if (capitalizeNext)
+                    {
+                        chars[i] = char.ToUpper(chars[i]);
+                        capitalizeNext = false;
+                    }
+                    else
+                    {
+                        chars[i] = char.ToLower(chars[i]);
+                    }
+                }
+                else if (chars[i] == ' ')
+                {
+                    capitalizeNext = true;
+                }
+            }
+            
+            filtered = new string(chars);
+        }
+        
         _personalModel.MiddleName = filtered;
         StateHasChanged();
     }
@@ -655,7 +721,68 @@
     {
         var val = e.Value?.ToString() ?? string.Empty;
         var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        
+        // Auto-capitalize: first letter uppercase, rest lowercase unless after space
+        if (!string.IsNullOrEmpty(filtered))
+        {
+            var chars = filtered.ToCharArray();
+            bool capitalizeNext = true;
+            
+            for (int i = 0; i < chars.Length; i++)
+            {
+                if (char.IsLetter(chars[i]))
+                {
+                    if (capitalizeNext)
+                    {
+                        chars[i] = char.ToUpper(chars[i]);
+                        capitalizeNext = false;
+                    }
+                    else
+                    {
+                        chars[i] = char.ToLower(chars[i]);
+                    }
+                }
+                else if (chars[i] == ' ')
+                {
+                    capitalizeNext = true;
+                }
+            }
+            
+            filtered = new string(chars);
+        }
+        
         _personalModel.LastName = filtered;
+        StateHasChanged();
+    }
+
+    private void FilterContactInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        // Only allow digits, max 11 characters
+        var filtered = new string(val.Where(char.IsDigit).ToArray());
+        if (filtered.Length > 11)
+        {
+            filtered = filtered.Substring(0, 11);
+        }
+        _personalModel.Contact = filtered;
+        StateHasChanged();
+    }
+
+    private void FilterNewEmailInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        // Only allow alphanumeric, @, and . characters
+        var filtered = new string(val.Where(c => char.IsLetterOrDigit(c) || c == '@' || c == '.').ToArray());
+        _emailModel.NewEmail = filtered;
+        StateHasChanged();
+    }
+
+    private void FilterConfirmEmailInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        // Only allow alphanumeric, @, and . characters
+        var filtered = new string(val.Where(c => char.IsLetterOrDigit(c) || c == '@' || c == '.').ToArray());
+        _emailModel.ConfirmEmail = filtered;
         StateHasChanged();
     }
 
@@ -733,11 +860,11 @@
             return;
         }
 
-        // Validate Philippine phone number format
-        var phonePattern = new System.Text.RegularExpressions.Regex(@"^(\+63\s?)?9\d{2}[\s-]?\d{3}[\s-]?\d{4}$|^09\d{9}$|^\(?0[2-9]\d\)?[\s-]?\d{3}[\s-]?\d{4}$");
-        if (!phonePattern.IsMatch(_personalModel.Contact))
+        // Validate contact number (exactly 11 digits)
+        var contactPattern = new System.Text.RegularExpressions.Regex(@"^\d{11}$");
+        if (!contactPattern.IsMatch(_personalModel.Contact))
         {
-            _personalMessage = "Contact Number must be a valid Philippine phone number format (e.g., 09123456789, +639123456789, (02) 123-4567).";
+            _personalMessage = "Contact Number must be exactly 11 digits.";
             StateHasChanged();
             ClearMessageAfterDelay("personal");
             return;
@@ -813,7 +940,16 @@
             }
             
             // Log history
-            try { await HistoryService.LogAsync(AuthState.CurrentUser!.Id, "update", "Settings", "Updated personal information"); } catch {}
+            try
+            {
+                await HistoryService.LogAsync(
+                    AuthState.CurrentUser!.Id,
+                    "update",
+                    "Settings",
+                    "Updated personal information"
+                );
+            }
+            catch { }
             
             _personalMessage = "Information updated successfully!";
             StateHasChanged();
@@ -852,7 +988,16 @@
             await AddressService.SaveAddressAsync(AuthState.CurrentUser.Id, _addressModel);
             
             // Log history
-            try { await HistoryService.LogAsync(AuthState.CurrentUser.Id, "update", "Settings", "Updated address information"); } catch {}
+            try
+            {
+                await HistoryService.LogAsync(
+                    AuthState.CurrentUser.Id,
+                    "update",
+                    "Settings",
+                    "Updated address information"
+                );
+            }
+            catch { }
             
             _addressMessage = "Information updated successfully!";
             _addressSuccess = true;
@@ -889,6 +1034,17 @@
             return;
         }
         
+        // Validate email format (SoftWear.com only)
+        var emailPattern = new System.Text.RegularExpressions.Regex(@"^[a-zA-Z0-9._%+-]+@SoftWear\.com$");
+        if (!emailPattern.IsMatch(_emailModel.NewEmail))
+        {
+            _emailMessage = "Email must be a valid SoftWear.com email address.";
+            _emailSuccess = false;
+            StateHasChanged();
+            ClearMessageAfterDelay("email");
+            return;
+        }
+
         // Validate that emails match
         if (_emailModel.NewEmail != _emailModel.ConfirmEmail)
         {
@@ -937,7 +1093,16 @@
             }
 
             // Log history
-            try { await HistoryService.LogAsync(AuthState.CurrentUser!.Id, "update", "Settings", "Updated email address"); } catch {}
+            try
+            {
+                await HistoryService.LogAsync(
+                    AuthState.CurrentUser!.Id,
+                    "update",
+                    "Settings",
+                    "Updated email address"
+                );
+            }
+            catch { }
 
             // Clear form fields
             _emailModel.NewEmail = string.Empty;
@@ -1073,7 +1238,16 @@
             }
 
             // Log history
-            try { await HistoryService.LogAsync(AuthState.CurrentUser.Id, "update", "Settings", "Updated password"); } catch {}
+            try
+            {
+                await HistoryService.LogAsync(
+                    AuthState.CurrentUser.Id,
+                    "update",
+                    "Settings",
+                    "Updated password"
+                );
+            }
+            catch { }
 
             // Clear form fields
             _passwordModel.CurrentPassword = string.Empty;
@@ -1155,7 +1329,16 @@
         // TODO: Validate password and deactivate account in database
         
         // Log history
-        try { await HistoryService.LogAsync(AuthState.CurrentUser.Id, "deactivate", "Settings", "Account deactivated"); } catch {}
+        try
+        {
+            await HistoryService.LogAsync(
+                AuthState.CurrentUser.Id,
+                "deactivate",
+                "Settings",
+                "Account deactivated"
+            );
+        }
+        catch { }
         
         AuthState.Logout();
         Nav.NavigateTo("/");
@@ -1175,7 +1358,7 @@
         public string LastName { get; set; } = string.Empty;
         
         [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Contact Number is required")]
-        [System.ComponentModel.DataAnnotations.RegularExpression(@"^(\+63\s?)?9\d{2}[\s-]?\d{3}[\s-]?\d{4}$|^09\d{9}$|^\(?0[2-9]\d\)?[\s-]?\d{3}[\s-]?\d{4}$", ErrorMessage = "Contact Number must be a valid Philippine phone number (e.g., 09123456789, +639123456789, (02) 123-4567)")]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^\d{11}$", ErrorMessage = "Contact Number must be exactly 11 digits")]
         public string Contact { get; set; } = string.Empty;
         
         [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Birthday is required")]
@@ -1192,11 +1375,11 @@
     private sealed class EmailModel
     {
         [System.ComponentModel.DataAnnotations.Required]
-        [System.ComponentModel.DataAnnotations.EmailAddress]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^[a-zA-Z0-9._%+-]+@SoftWear\.com$", ErrorMessage = "Email must be a valid SoftWear.com email address")]
         public string NewEmail { get; set; } = string.Empty;
 
         [System.ComponentModel.DataAnnotations.Required]
-        [System.ComponentModel.DataAnnotations.EmailAddress]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^[a-zA-Z0-9._%+-]+@SoftWear\.com$", ErrorMessage = "Email must be a valid SoftWear.com email address")]
         public string ConfirmEmail { get; set; } = string.Empty;
     }
 

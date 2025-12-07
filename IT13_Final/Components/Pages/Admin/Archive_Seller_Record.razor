@@ -6,40 +6,111 @@
 @using System.Linq
 @implements IDisposable
 
-<h1 class="page-title">Archived Seller Records</h1>
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Archived Seller Records</h1>
+        <p class="welcome-date">Manage archived sellers • @totalCount total archived</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintArchivedSellerRecords" title="Print records">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 9V2h12v7"></path>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                <rect x="6" y="14" width="12" height="8"></rect>
+            </svg>
+        </button>
+    </div>
+</div>
+
+@* Search and Date Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.3-4.3"></path>
+        </svg>
+        <input type="text" class="search-input" placeholder="Search by name or email..." @bind="searchTerm" @bind:event="oninput" @bind:after="OnSearchInput" />
+        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            <button class="clear-search-btn" @onclick="ClearSearch" title="Clear search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date" 
+               class="date-input" 
+               value="@(filterStartDate?.ToString("yyyy-MM-dd"))" 
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleStartDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date" 
+               class="date-input" 
+               value="@(filterEndDate?.ToString("yyyy-MM-dd"))" 
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleEndDateChange" />
+        <button class="filter-btn" @onclick="ApplyDateFilter" title="Apply filter">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            Apply
+        </button>
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
 
 @if (showSuccessMessage && !string.IsNullOrEmpty(successMessageText))
 {
     <div class="success-banner">
-        <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="20 6 9 17 4 12"></polyline>
+        <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
         </svg>
         <span>@successMessageText</span>
     </div>
 }
 
-<div class="admin-records-container">
-    <div class="search-actions-row">
-        <div class="search-wrapper">
-            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"></circle>
-                <path d="m21 21-4.35-4.35"></path>
-            </svg>
-            <input type="text" class="search-input" placeholder="Search archived sellers" value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+@* Archived List Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Archived Seller List</h3>
+            <span class="card-subtitle">@totalCount archived sellers</span>
         </div>
-
-        <div class="action-buttons">
-            <button class="back-btn" @onclick="NavigateToRecords">
-                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <div class="card-actions">
+            <button class="card-action-btn primary" @onclick="NavigateToRecords">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="15 18 9 12 15 6"></polyline>
                 </svg>
-                <span>Back to Records</span>
+                <span>Back to Active</span>
             </button>
         </div>
     </div>
-
-    <div class="table-container">
-        <div class="table-header">List</div>
+    
+    <div class="card-body">
         <table class="admin-table">
             <thead>
                 <tr>
@@ -73,8 +144,8 @@
                             <td>@user.Email</td>
                             <td>@user.ArchivedDate.ToString("MMM dd, yyyy")</td>
                             <td class="actions-cell" @onclick:stopPropagation>
-                                <button class="action-btn restore-btn" @onclick="() => HandleRestore(user.Id)" title="Restore">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <button class="action-btn restore-btn" @onclick="() => HandleRestore(user.Id)" title="Restore seller">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
                                         <path d="M21 3v5h-5"></path>
                                         <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
@@ -92,27 +163,28 @@
     @if (totalPages > 1)
     {
         <div class="pagination">
-            <button class="pagination-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="15 18 9 12 15 6"></polyline>
                 </svg>
             </button>
-            
+
             @for (int i = 1; i <= totalPages; i++)
             {
-                @if (i == 1 || i == totalPages || (i >= currentPage - 2 && i <= currentPage + 2))
+                var pageNum = i;
+                @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
                 {
-                    <button class="pagination-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(i)">
+                    <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
                         @i
                     </button>
                 }
-                else if (i == currentPage - 3 || i == currentPage + 3)
+                else if (i == currentPage - 2 || i == currentPage + 2)
                 {
-                    <span class="pagination-ellipsis">...</span>
+                    <span class="page-ellipsis">...</span>
                 }
             }
-            
-            <button class="pagination-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
+
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="9 18 15 12 9 6"></polyline>
                 </svg>
@@ -127,17 +199,18 @@
         <div class="modal-container" @onclick:stopPropagation>
             <div class="modal-header">
                 <div class="modal-title">
-                    <svg class="modal-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg class="modal-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                         <circle cx="12" cy="7" r="4"></circle>
                     </svg>
-                    <span>User Details</span>
+                    <span>Archived User Details</span>
                 </div>
                 <button class="modal-close" @onclick="CloseUserDetails">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
                     </svg>
+                    <span class="modal-close-text">Close</span>
                 </button>
             </div>
 
@@ -145,44 +218,44 @@
                 <div class="details-column">
                     <div class="details-section">
                         <div class="details-section-header">
-                            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                                 <circle cx="12" cy="7" r="4"></circle>
                             </svg>
-                            <span>Personal Information</span>
+                            <span class="section-title">Personal Information</span>
                         </div>
                         <div class="details-list">
                             <div class="detail-item">
-                                <span class="detail-label">FULL NAME:</span>
+                                <span class="detail-label">Full Name</span>
                                 <span class="detail-value">@userDetails.FullName</span>
                             </div>
                             <div class="detail-item">
-                                <span class="detail-label">EMAIL:</span>
+                                <span class="detail-label">Email</span>
                                 <span class="detail-value">@userDetails.Email</span>
                             </div>
                             <div class="detail-item">
-                                <span class="detail-label">BIRTHDAY:</span>
-                                <span class="detail-value">@(userDetails.Birthday?.ToString("M/d/yyyy") ?? "N/A")</span>
+                                <span class="detail-label">Birthday</span>
+                                <span class="detail-value">@(userDetails.Birthday?.ToString("MMM dd, yyyy") ?? "N/A")</span>
                             </div>
                             <div class="detail-item">
-                                <span class="detail-label">AGE:</span>
+                                <span class="detail-label">Age</span>
                                 <span class="detail-value">@(userDetails.Age?.ToString() ?? "N/A")</span>
                             </div>
                             <div class="detail-item">
-                                <span class="detail-label">SEX:</span>
+                                <span class="detail-label">Sex</span>
                                 <span class="detail-value">@(string.IsNullOrEmpty(userDetails.Sex) ? "N/A" : userDetails.Sex)</span>
                             </div>
                             <div class="detail-item">
-                                <span class="detail-label">CONTACT NUMBER:</span>
+                                <span class="detail-label">Contact</span>
                                 <span class="detail-value">@(string.IsNullOrEmpty(userDetails.Contact) ? "N/A" : userDetails.Contact)</span>
                             </div>
                             <div class="detail-item">
-                                <span class="detail-label">STATUS:</span>
+                                <span class="detail-label">Status</span>
                                 <span class="detail-value status-badge @(userDetails.Status.ToUpper() == "ACTIVE" ? "active" : "inactive")">@userDetails.Status</span>
                             </div>
                             <div class="detail-item">
-                                <span class="detail-label">DATE CREATED:</span>
-                                <span class="detail-value">@userDetails.DateCreated.ToString("M/d/yyyy")</span>
+                                <span class="detail-label">Date Created</span>
+                                <span class="detail-value">@userDetails.DateCreated.ToString("MMM dd, yyyy")</span>
                             </div>
                         </div>
                     </div>
@@ -191,27 +264,27 @@
                 <div class="details-column">
                     <div class="details-section">
                         <div class="details-section-header">
-                            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
                                 <circle cx="12" cy="10" r="3"></circle>
                             </svg>
-                            <span>Address Information</span>
+                            <span class="section-title">Address Information</span>
                         </div>
                         <div class="details-list">
                             <div class="detail-item">
-                                <span class="detail-label">STREET ADDRESS:</span>
+                                <span class="detail-label">Street Address</span>
                                 <span class="detail-value">@(string.IsNullOrEmpty(userDetails.Street) ? "N/A" : userDetails.Street)</span>
                             </div>
                             <div class="detail-item">
-                                <span class="detail-label">CITY:</span>
+                                <span class="detail-label">City</span>
                                 <span class="detail-value">@(string.IsNullOrEmpty(userDetails.City) ? "N/A" : userDetails.City)</span>
                             </div>
                             <div class="detail-item">
-                                <span class="detail-label">PROVINCE:</span>
+                                <span class="detail-label">Province</span>
                                 <span class="detail-value">@(string.IsNullOrEmpty(userDetails.Province) ? "N/A" : userDetails.Province)</span>
                             </div>
                             <div class="detail-item">
-                                <span class="detail-label">ZIP CODE:</span>
+                                <span class="detail-label">Zip Code</span>
                                 <span class="detail-value">@(string.IsNullOrEmpty(userDetails.Zip) ? "N/A" : userDetails.Zip)</span>
                             </div>
                         </div>
@@ -221,11 +294,11 @@
 
             <div class="modal-footer">
                 <button class="close-btn" @onclick="CloseUserDetails">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
                     </svg>
-                    <span>CLOSE</span>
+                    <span>Close</span>
                 </button>
             </div>
         </div>
@@ -234,6 +307,7 @@
 
 @code {
     private List<IT13_Final.Services.Data.ArchivedAdminUserModel> archivedUsers = new();
+    private List<IT13_Final.Services.Data.ArchivedAdminUserModel> allFilteredArchived = new();
     private string searchTerm = string.Empty;
     private bool isLoading = true;
     private int currentPage = 1;
@@ -247,6 +321,13 @@
     private bool showUserDetails = false;
     private IT13_Final.Services.Data.UserDetailsModel? userDetails = null;
     private bool isLoadingDetails = false;
+
+    // Date filter variables
+    private string selectedDateRange = "";
+    private DateTime? filterStartDate;
+    private DateTime? filterEndDate;
+
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || filterStartDate.HasValue || filterEndDate.HasValue;
 
     [Inject] private NavigationManager Nav { get; set; } = null!;
 
@@ -263,12 +344,50 @@
         try
         {
             var adminId = AuthState.CurrentUser?.Id ?? 0;
-            totalCount = await UserService.GetArchivedSellerUsersCountAsync(adminId, searchTerm);
-            archivedUsers = await UserService.GetArchivedSellerUsersAsync(adminId, searchTerm, currentPage, pageSize);
+            
+            // Get all archived users matching search term first
+            var allArchived = await UserService.GetArchivedSellerUsersAsync(adminId, searchTerm, 1, 10000);
+            
+            // Apply date filter client-side (filter by ArchivedDate)
+            if (filterStartDate.HasValue || filterEndDate.HasValue)
+            {
+                allFilteredArchived = allArchived.Where(u =>
+                {
+                    var archivedDate = u.ArchivedDate.Date;
+                    
+                    if (filterStartDate.HasValue && filterEndDate.HasValue)
+                    {
+                        return archivedDate >= filterStartDate.Value.Date && archivedDate <= filterEndDate.Value.Date;
+                    }
+                    else if (filterStartDate.HasValue)
+                    {
+                        return archivedDate >= filterStartDate.Value.Date;
+                    }
+                    else if (filterEndDate.HasValue)
+                    {
+                        return archivedDate <= filterEndDate.Value.Date;
+                    }
+                    return true;
+                }).ToList();
+            }
+            else
+            {
+                allFilteredArchived = allArchived;
+            }
+            
+            // Update total count based on filtered results
+            totalCount = allFilteredArchived.Count;
+            
+            // Apply pagination to filtered results
+            archivedUsers = allFilteredArchived
+                .Skip((currentPage - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
         }
         catch (Exception)
         {
             archivedUsers = new List<IT13_Final.Services.Data.ArchivedAdminUserModel>();
+            allFilteredArchived = new List<IT13_Final.Services.Data.ArchivedAdminUserModel>();
             totalCount = 0;
         }
         finally
@@ -278,18 +397,22 @@
         }
     }
 
-    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    private async Task RefreshData()
     {
-        if (e.Key == "Enter")
-        {
-            currentPage = 1;
-            await LoadArchivedUsersAsync();
-        }
+        currentPage = 1;
+        await LoadArchivedUsersAsync();
     }
 
-    private void HandleSearchInput(ChangeEventArgs e)
+    // Debounce search to avoid too many queries
+    private void OnSearchInput()
     {
-        searchTerm = e.Value?.ToString() ?? string.Empty;
+        // Filter out special characters
+        var filtered = System.Text.RegularExpressions.Regex.Replace(searchTerm, @"[^a-zA-Z0-9\s\-_]", "");
+        if (filtered != searchTerm)
+        {
+            searchTerm = filtered;
+        }
+        
         _searchTimer?.Dispose();
         _searchTimer = new System.Threading.Timer(async _ =>
         {
@@ -298,7 +421,14 @@
             {
                 await LoadArchivedUsersAsync();
             });
-        }, null, 500, Timeout.Infinite);
+        }, null, 400, Timeout.Infinite);
+    }
+
+    private async Task ClearSearch()
+    {
+        searchTerm = string.Empty;
+        currentPage = 1;
+        await LoadArchivedUsersAsync();
     }
 
     private async Task GoToPage(int page)
@@ -399,20 +529,127 @@
         _searchTimer?.Dispose();
         _successBannerTimer?.Dispose();
     }
+
+    // Date filter methods
+    private void HandleStartDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            filterStartDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            filterStartDate = null;
+            selectedDateRange = "";
+        }
+    }
+
+    private void HandleEndDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            filterEndDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            filterEndDate = null;
+            selectedDateRange = "";
+        }
+    }
+
+    private void HandleDateRangeChange()
+    {
+        var now = DateTime.Now;
+        switch (selectedDateRange)
+        {
+            case "":
+                filterStartDate = null;
+                filterEndDate = null;
+                break;
+            case "today":
+                filterStartDate = now.Date;
+                filterEndDate = now.Date;
+                break;
+            case "yesterday":
+                filterStartDate = now.Date.AddDays(-1);
+                filterEndDate = now.Date.AddDays(-1);
+                break;
+            case "last7days":
+                filterStartDate = now.Date.AddDays(-6);
+                filterEndDate = now.Date;
+                break;
+            case "last30days":
+                filterStartDate = now.Date.AddDays(-29);
+                filterEndDate = now.Date;
+                break;
+            case "thismonth":
+                filterStartDate = new DateTime(now.Year, now.Month, 1);
+                filterEndDate = now.Date;
+                break;
+            case "thisyear":
+                filterStartDate = new DateTime(now.Year, 1, 1);
+                filterEndDate = now.Date;
+                break;
+        }
+        _ = LoadArchivedUsersAsync();
+    }
+
+    private async Task ApplyDateFilter()
+    {
+        currentPage = 1;
+        await LoadArchivedUsersAsync();
+    }
+
+    private async Task ClearDateFilter()
+    {
+        selectedDateRange = "";
+        filterStartDate = null;
+        filterEndDate = null;
+        currentPage = 1;
+        await LoadArchivedUsersAsync();
+    }
+
+    private string GetDateRangeText()
+    {
+        if (filterStartDate.HasValue && filterEndDate.HasValue)
+        {
+            return $"{filterStartDate.Value:MM/dd/yyyy} - {filterEndDate.Value:MM/dd/yyyy}";
+        }
+        else if (filterStartDate.HasValue)
+        {
+            return $"From {filterStartDate.Value:MM/dd/yyyy}";
+        }
+        else if (filterEndDate.HasValue)
+        {
+            return $"Until {filterEndDate.Value:MM/dd/yyyy}";
+        }
+        return "All Time";
+    }
+
+    private async Task PrintArchivedSellerRecords()
+    {
+        var currentUserName = AuthState.CurrentUser?.FullName ?? "Administrator";
+        
+        var reportData = new
+        {
+            title = "Archived Seller Records Report",
+            printedBy = currentUserName,
+            printedAt = DateTime.Now.ToString("MMMM dd, yyyy hh:mm tt"),
+            dateRange = GetDateRangeText(),
+            totalCount = allFilteredArchived.Count,
+            records = allFilteredArchived.Select(u => new
+            {
+                id = u.Id,
+                name = u.Name,
+                email = u.Email,
+                archivedDate = u.ArchivedDate.ToString("MMM dd, yyyy")
+            }).ToList()
+        };
+
+        await JSRuntime.InvokeVoidAsync("printArchivedSellerRecords", reportData);
+    }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

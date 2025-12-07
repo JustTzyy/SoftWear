@@ -1,0 +1,621 @@
+@page "/seller/AccountingDailySalesVerificationReports"
+@layout IT13_Final.Components.Layout.Seller.Seller
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IT13_Final.Services.Data.IDailySalesVerificationService DailySalesVerificationService
+@inject IT13_Final.Services.Audit.IHistoryService HistoryService
+@inject IJSRuntime JSRuntime
+@implements IDisposable
+@using System.Linq
+@using Microsoft.Data.SqlClient
+
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Daily Sales Verification Report</h1>
+        <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintReport" disabled="@isGeneratingPDF" title="Print Report">
+            @if (isGeneratingPDF)
+            {
+                <span>Generating...</span>
+            }
+            else
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 9V2h12v7"></path>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+            }
+        </button>
+    </div>
+</div>
+
+@* Search and Date Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.35-4.35"></path>
+        </svg>
+        <input type="text" id="verification-report-search-input" class="search-input" placeholder="Search by cashier name..." @bind="searchTerm" @bind:event="oninput" @bind:after="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            <button class="clear-search-btn" @onclick="HandleClearSearch" title="Clear">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        }
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date" 
+               class="date-input" 
+               value="@(startDate?.ToString("yyyy-MM-dd"))" 
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@(endDate?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd"))" 
+               @onchange="HandleFromDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date" 
+               class="date-input" 
+               value="@(endDate?.ToString("yyyy-MM-dd"))" 
+               min="@(startDate?.ToString("yyyy-MM-dd"))" 
+               max="@DateTime.Today.ToString("yyyy-MM-dd")" 
+               @onchange="HandleToDateChange" />
+        <select class="date-select" @bind="selectedStatus" @bind:after="HandleStatusChange" style="min-width: 150px;">
+            <option value="">All Status</option>
+            <option value="Pending">Pending</option>
+            <option value="Approved">Approved</option>
+            <option value="Rejected">Rejected</option>
+        </select>
+        <button class="filter-btn" @onclick="LoadVerifications">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            Apply
+        </button>
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearFilters" title="Clear">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
+
+@* Summary Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Verification Summary</h3>
+            <span class="card-subtitle">@GetDateRangeText()</span>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <div class="summary-grid">
+            <div class="summary-box">
+                <div class="summary-label">Total Reports</div>
+                <div class="summary-value">@verifications.Count</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Total Sales</div>
+                <div class="summary-value">₱@verifications.Sum(v => v.TotalSales).ToString("N2")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Total Cash</div>
+                <div class="summary-value">₱@verifications.Sum(v => v.CashAmount).ToString("N2")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Total GCash</div>
+                <div class="summary-value">₱@verifications.Sum(v => v.GCashAmount).ToString("N2")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Total Returns</div>
+                <div class="summary-value" style="color: #dc3545;">₱@verifications.Sum(v => v.TotalReturns).ToString("N2")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Approved</div>
+                <div class="summary-value" style="color: #10B981;">@verifications.Count(v => v.Status == "Approved")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Rejected</div>
+                <div class="summary-value" style="color: #6B7280;">@verifications.Count(v => v.Status == "Rejected")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Pending</div>
+                <div class="summary-value" style="color: #F59E0B;">@verifications.Count(v => v.Status == "Pending")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">VAT (12%)</div>
+                <div class="summary-value">₱@vatAmount.ToString("N2")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Admin Fee (2%)</div>
+                <div class="summary-value">₱@adminFeeAmount.ToString("N2")</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Verifications List Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Daily Sales Verifications</h3>
+            <span class="card-subtitle">@verifications.Count verifications found</span>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Cashier</th>
+                    <th>Date</th>
+                    <th>Total Sales</th>
+                    <th>Transactions</th>
+                    <th>Cash</th>
+                    <th>GCash</th>
+                    <th>Returns</th>
+                    <th>Status</th>
+                    <th>Verified By</th>
+                    <th>Verified At</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="10" class="loading-cell">Loading daily sales verifications...</td>
+                    </tr>
+                }
+                else if (verifications.Count == 0)
+                {
+                    <tr>
+                        <td colspan="10" class="empty-cell">No daily sales verifications found for this filter.</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var verification in verifications)
+                    {
+                        <tr>
+                            <td>@verification.CashierName</td>
+                            <td>
+                                <div class="timestamp-info">
+                                    <div class="timestamp-date">@verification.SaleDate.ToString("MMM dd, yyyy")</div>
+                                </div>
+                            </td>
+                            <td style="text-align: right; font-weight: 600;">₱@verification.TotalSales.ToString("N2")</td>
+                            <td style="text-align: right;">@verification.TotalTransactions</td>
+                            <td style="text-align: right;">₱@verification.CashAmount.ToString("N2")</td>
+                            <td style="text-align: right;">₱@verification.GCashAmount.ToString("N2")</td>
+                            <td style="text-align: right;">
+                                @if (verification.ReturnCount > 0)
+                                {
+                                    <span style="color: #dc3545;">@verification.ReturnCount (₱@verification.TotalReturns.ToString("N2"))</span>
+                                }
+                                else
+                                {
+                                    <span>0</span>
+                                }
+                            </td>
+                            <td>
+                                <span class="status-text @(verification.Status == "Approved" ? "status-text-approved" : verification.Status == "Rejected" ? "status-text-cancelled" : "status-text-pending")">@verification.Status</span>
+                            </td>
+                            <td>@(verification.VerifiedByName ?? "-")</td>
+                            <td>
+                                @if (verification.VerifiedAt.HasValue)
+                                {
+                                    <div class="timestamp-info">
+                                        <div class="timestamp-date">@verification.VerifiedAt.Value.ToString("MMM dd, yyyy")</div>
+                                        <div class="timestamp-time">@verification.VerifiedAt.Value.ToString("HH:mm")</div>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span>-</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    private List<IT13_Final.Services.Data.DailySalesVerificationModel> verifications = new();
+    private string searchTerm = string.Empty;
+    private DateTime? startDate;
+    private DateTime? endDate;
+    private string selectedDateRange = string.Empty;
+    private string selectedStatus = string.Empty;
+
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue || !string.IsNullOrEmpty(selectedStatus);
+    private bool isLoading = false;
+    private bool isGeneratingPDF = false;
+    private int sellerUserId = 0;
+    private System.Threading.Timer? _searchTimer;
+    private decimal vatAmount = 0m;
+    private decimal adminFeeAmount = 0m;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // For seller reports, use the seller's own tbl_users.id
+        sellerUserId = AuthState.CurrentUser?.Id ?? 0;
+        await LoadVerifications();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JSRuntime.InvokeVoidAsync("setupSearchInputFilter", "verification-report-search-input");
+        }
+    }
+
+    private async Task LoadVerifications()
+    {
+        if (sellerUserId <= 0)
+        {
+            sellerUserId = AuthState.CurrentUser?.Id ?? 0;
+            if (sellerUserId <= 0)
+            {
+                await JSRuntime.InvokeVoidAsync("console.error", "Seller User ID not found.");
+                isLoading = false;
+                StateHasChanged();
+                return;
+            }
+        }
+
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            verifications = await DailySalesVerificationService.GetAllDailySalesVerificationsForReportAsync(
+                sellerUserId,
+                string.IsNullOrWhiteSpace(searchTerm) ? null : searchTerm,
+                startDate,
+                endDate,
+                string.IsNullOrWhiteSpace(selectedStatus) ? null : selectedStatus
+            );
+
+            // Calculate VAT (12% on total sales)
+            var totalSales = verifications.Sum(v => v.TotalSales);
+            vatAmount = totalSales * 0.12m;
+
+            // Calculate Admin Fee (2% per product)
+            await CalculateAdminFee();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading verifications: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading verifications: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CalculateAdminFee()
+    {
+        try
+        {
+            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+            using var conn = new SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            var sql = @"
+                SELECT SUM(si.subtotal) as total_revenue
+                FROM dbo.tbl_sales_items si
+                INNER JOIN dbo.tbl_sales s ON si.sale_id = s.id
+                INNER JOIN dbo.tbl_users u ON s.user_id = u.id
+                WHERE s.archives IS NULL
+                AND si.archives IS NULL
+                AND s.status = 'Completed'
+                AND u.archived_at IS NULL";
+
+            if (sellerUserId > 0)
+            {
+                sql += " AND u.user_id = @SellerUserId";
+            }
+
+            if (startDate.HasValue)
+            {
+                sql += " AND CAST(s.timestamps AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                sql += " AND CAST(s.timestamps AS DATE) <= @EndDate";
+            }
+
+            // Only include sales from verified cashiers/dates if status filter is applied
+            if (!string.IsNullOrWhiteSpace(selectedStatus))
+            {
+                if (selectedStatus == "Approved")
+                {
+                    sql += @"
+                        AND EXISTS (
+                            SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
+                            WHERE dsv.cashier_user_id = s.user_id
+                            AND dsv.sale_date = CAST(s.timestamps AS DATE)
+                            AND dsv.status = 'Approved'
+                            AND dsv.archived_at IS NULL";
+                    if (sellerUserId > 0)
+                    {
+                        sql += " AND dsv.seller_user_id = @SellerUserId";
+                    }
+                    sql += ")";
+                }
+                else if (selectedStatus == "Rejected")
+                {
+                    sql += @"
+                        AND EXISTS (
+                            SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
+                            WHERE dsv.cashier_user_id = s.user_id
+                            AND dsv.sale_date = CAST(s.timestamps AS DATE)
+                            AND dsv.status = 'Rejected'
+                            AND dsv.archived_at IS NULL";
+                    if (sellerUserId > 0)
+                    {
+                        sql += " AND dsv.seller_user_id = @SellerUserId";
+                    }
+                    sql += ")";
+                }
+                else if (selectedStatus == "Pending")
+                {
+                    sql += @"
+                        AND (
+                            NOT EXISTS (
+                                SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
+                                WHERE dsv.cashier_user_id = s.user_id
+                                AND dsv.sale_date = CAST(s.timestamps AS DATE)
+                                AND dsv.archived_at IS NULL";
+                    if (sellerUserId > 0)
+                    {
+                        sql += " AND dsv.seller_user_id = @SellerUserId";
+                    }
+                    sql += @"
+                            )
+                            OR EXISTS (
+                                SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
+                                WHERE dsv.cashier_user_id = s.user_id
+                                AND dsv.sale_date = CAST(s.timestamps AS DATE)
+                                AND dsv.status = 'Pending'
+                                AND dsv.archived_at IS NULL";
+                    if (sellerUserId > 0)
+                    {
+                        sql += " AND dsv.seller_user_id = @SellerUserId";
+                    }
+                    sql += ")";
+                }
+            }
+
+            using var cmd = new SqlCommand(sql, conn);
+            if (sellerUserId > 0)
+            {
+                cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+            }
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+            }
+
+            var result = await cmd.ExecuteScalarAsync();
+            var totalRevenue = result != null && result != DBNull.Value ? Convert.ToDecimal(result) : 0m;
+            adminFeeAmount = totalRevenue * 0.02m;
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error calculating admin fee: {ex.Message}");
+            adminFeeAmount = 0m;
+        }
+    }
+
+    private async Task HandleSearchInput()
+    {
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadVerifications();
+            });
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _searchTimer?.Dispose();
+            await LoadVerifications();
+        }
+    }
+
+    private async Task HandleClearSearch()
+    {
+        searchTerm = string.Empty;
+        await LoadVerifications();
+    }
+
+    private async Task HandleDateRangeChange()
+    {
+        var today = DateTime.Today;
+        switch (selectedDateRange)
+        {
+            case "today":
+                startDate = today;
+                endDate = today;
+                break;
+            case "yesterday":
+                startDate = today.AddDays(-1);
+                endDate = today.AddDays(-1);
+                break;
+            case "last7days":
+                startDate = today.AddDays(-7);
+                endDate = today;
+                break;
+            case "last30days":
+                startDate = today.AddDays(-30);
+                endDate = today;
+                break;
+            case "thismonth":
+                startDate = new DateTime(today.Year, today.Month, 1);
+                endDate = today;
+                break;
+            case "thisyear":
+                startDate = new DateTime(today.Year, 1, 1);
+                endDate = today;
+                break;
+            default:
+                break;
+        }
+        await LoadVerifications();
+    }
+
+    private async Task HandleFromDateChange(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        {
+            startDate = date;
+            await LoadVerifications();
+        }
+    }
+
+    private async Task HandleToDateChange(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        {
+            endDate = date;
+            await LoadVerifications();
+        }
+    }
+
+    private async Task HandleStatusChange()
+    {
+        await LoadVerifications();
+    }
+
+    private string GetDateRangeText()
+    {
+        if (!startDate.HasValue && !endDate.HasValue)
+            return "All Time";
+        if (startDate.HasValue && endDate.HasValue)
+            return $"{startDate.Value:MMM d} - {endDate.Value:MMM d, yyyy}";
+        return "Custom Range";
+    }
+
+    private async Task ClearFilters()
+    {
+        searchTerm = string.Empty;
+        startDate = null;
+        endDate = null;
+        selectedDateRange = string.Empty;
+        selectedStatus = string.Empty;
+        await LoadVerifications();
+    }
+
+    private async Task PrintReport()
+    {
+        try
+        {
+            isGeneratingPDF = true;
+            StateHasChanged();
+
+            var reportData = new
+            {
+                title = "Daily Sales Verification Report",
+                printedBy = AuthState.CurrentUser?.FullName ?? "Seller",
+                printedAt = DateTime.Now.ToString("MMMM dd, yyyy hh:mm tt"),
+                dateRange = GetDateRangeText(),
+                
+                kpi = new
+                {
+                    totalReports = verifications.Count.ToString(),
+                    totalSales = verifications.Sum(v => v.TotalSales).ToString("N2"),
+                    totalTransactions = verifications.Sum(v => v.TotalTransactions).ToString(),
+                    totalCash = verifications.Sum(v => v.CashAmount).ToString("N2"),
+                    totalGCash = verifications.Sum(v => v.GCashAmount).ToString("N2"),
+                    totalReturns = verifications.Sum(v => v.TotalReturns).ToString("N2"),
+                    approvedCount = verifications.Count(v => v.Status == "Approved").ToString(),
+                    rejectedCount = verifications.Count(v => v.Status == "Rejected").ToString(),
+                    pendingCount = verifications.Count(v => v.Status == "Pending").ToString(),
+                    vat = vatAmount.ToString("N2"),
+                    adminFee = adminFeeAmount.ToString("N2")
+                },
+                
+                reports = verifications.Select(v => new
+                {
+                    cashierName = v.CashierName,
+                    date = v.SaleDate.ToString("MMM dd, yyyy"),
+                    totalSales = v.TotalSales.ToString("N2"),
+                    transactions = v.TotalTransactions.ToString(),
+                    cash = v.CashAmount.ToString("N2"),
+                    gcash = v.GCashAmount.ToString("N2"),
+                    returns = v.ReturnCount.ToString(),
+                    totalReturns = v.TotalReturns.ToString("N2"),
+                    status = v.Status,
+                    verifiedBy = v.VerifiedByName ?? "-",
+                    verifiedAt = v.VerifiedAt?.ToString("MMM dd, yyyy HH:mm") ?? "-"
+                }).ToList()
+            };
+
+            await JSRuntime.InvokeVoidAsync("printDailySalesVerification", reportData);
+
+            try
+            {
+                if (AuthState.CurrentUser != null)
+                {
+                    await HistoryService.LogAsync(
+                        AuthState.CurrentUser.Id,
+                        "print",
+                        "Daily_Sales_Verification_Report",
+                        $"Printed Daily Sales Verification Report from {GetDateRangeText()}"
+                    );
+                }
+            }
+            catch { }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error printing report: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to generate PDF. Please try again.");
+        }
+        finally
+        {
+            isGeneratingPDF = false;
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+    }
+}

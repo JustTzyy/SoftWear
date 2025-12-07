@@ -1,0 +1,652 @@
+@page "/stockclerk/Supplier_Report"
+@layout IT13_Final.Components.Layout.StockClerk.StockClerk
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IT13_Final.Services.Data.ISupplierService SupplierService
+@inject IJSRuntime JSRuntime
+@implements IDisposable
+@using System.Linq
+
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Supplier Reports</h1>
+        <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintReport" disabled="@isGeneratingPDF" title="Print Report">
+            @if (isGeneratingPDF)
+            {
+                <span>Generating...</span>
+            }
+            else
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 9V2h12v7"></path>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+            }
+        </button>
+    </div>
+</div>
+
+@* Search and Date Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.3-4.3"></path>
+        </svg>
+        <input type="text" 
+               id="supplier-report-search-input"
+               class="search-input" 
+               placeholder="Search by company name, contact person, email, or contact number..." 
+               @bind="searchTerm" 
+               @bind:event="oninput" 
+               @bind:after="HandleSearchInput"
+               @onkeypress="HandleSearchKeyPress" />
+        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            <button class="clear-search-btn" @onclick="HandleClearSearch" title="Clear search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date"
+               class="date-input"
+               value="@(startDate?.ToString("yyyy-MM-dd"))"
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleStartDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date"
+               class="date-input"
+               value="@(endDate?.ToString("yyyy-MM-dd"))"
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleEndDateChange" />
+        <button class="filter-btn" @onclick="ApplyFilters">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            Apply
+        </button>
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
+
+@* Summary Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Supplier Summary</h3>
+            <span class="card-subtitle">@totalCount total suppliers</span>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <div class="summary-grid">
+            <div class="summary-box">
+                <div class="summary-label">Total Suppliers</div>
+                <div class="summary-value">@totalCount</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Active</div>
+                <div class="summary-value">@activeCount</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Inactive</div>
+                <div class="summary-value">@inactiveCount</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Supplier List Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Supplier List</h3>
+            <span class="card-subtitle">@totalCount suppliers found</span>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Company Name</th>
+                    <th>Contact Person</th>
+                    <th>Email</th>
+                    <th>Contact Number</th>
+                    <th>Status</th>
+                    <th>Date Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="7" class="loading-cell">Loading suppliers...</td>
+                    </tr>
+                }
+                else if (suppliers.Count == 0)
+                {
+                    <tr>
+                        <td colspan="7" class="empty-cell">No suppliers found for this filter.</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var supplier in suppliers)
+                    {
+                        <tr class="clickable-row" @onclick="() => HandleSupplierClick(supplier.Id)">
+                            <td class="sale-number">@supplier.CompanyName</td>
+                            <td>@(supplier.ContactPerson ?? "N/A")</td>
+                            <td>@(supplier.Email ?? "N/A")</td>
+                            <td>@(supplier.ContactNumber ?? "N/A")</td>
+                            <td>
+                                <span class="status-badge @(supplier.Status.ToLower() == "active" ? "status-approved" : "status-cancelled")">@supplier.Status</span>
+                            </td>
+                            <td>
+                                <div class="timestamp-info">
+                                    <div class="timestamp-date">@supplier.DateCreated.ToString("MMM dd, yyyy")</div>
+                                    <div class="timestamp-time">@supplier.DateCreated.ToString("HH:mm:ss")</div>
+                                </div>
+                            </td>
+                            <td class="actions-cell" @onclick:stopPropagation="true">
+                                <button class="action-btn print-row-btn" @onclick="() => HandlePrintSupplier(supplier.Id)" title="Print Details">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M6 9V2h12v7"></path>
+                                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                                        <rect x="6" y="14" width="12" height="8"></rect>
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)" title="Previous page">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m15 18-6-6 6-6"></path>
+                </svg>
+            </button>
+
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                var pageNum = i;
+                @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
+                {
+                    <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 2 || i == currentPage + 2)
+                {
+                    <span class="page-ellipsis">...</span>
+                }
+            }
+
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)" title="Next page">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m9 18 6-6-6-6"></path>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+@if (showSupplierDetailsModal && selectedSupplier != null)
+{
+    <div class="modal-overlay" @onclick="CloseSupplierDetailsModal">
+        <div class="add-admin-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Supplier Details - @selectedSupplier.CompanyName</h2>
+                <button class="modal-close-btn" @onclick="CloseSupplierDetailsModal" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="supplier-info">
+                    <div class="info-row">
+                        <span class="info-label">Company Name:</span>
+                        <span class="info-value">@selectedSupplier.CompanyName</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Contact Person:</span>
+                        <span class="info-value">@(selectedSupplier.ContactPerson ?? "N/A")</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Email:</span>
+                        <span class="info-value">@(selectedSupplier.Email ?? "N/A")</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Contact Number:</span>
+                        <span class="info-value">@(selectedSupplier.ContactNumber ?? "N/A")</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Status:</span>
+                        <span class="info-value">
+                            <span class="status-badge @(selectedSupplier.Status.ToLower() == "active" ? "status-approved" : "status-cancelled")">@selectedSupplier.Status</span>
+                        </span>
+                    </div>
+                    @if (!string.IsNullOrEmpty(selectedSupplier.Street))
+                    {
+                        <div class="info-row">
+                            <span class="info-label">Street:</span>
+                            <span class="info-value">@selectedSupplier.Street</span>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(selectedSupplier.City))
+                    {
+                        <div class="info-row">
+                            <span class="info-label">City:</span>
+                            <span class="info-value">@selectedSupplier.City</span>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(selectedSupplier.Province))
+                    {
+                        <div class="info-row">
+                            <span class="info-label">Province:</span>
+                            <span class="info-value">@selectedSupplier.Province</span>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(selectedSupplier.Zip))
+                    {
+                        <div class="info-row">
+                            <span class="info-label">Zip Code:</span>
+                            <span class="info-value">@selectedSupplier.Zip</span>
+                        </div>
+                    }
+                    <div class="info-row">
+                        <span class="info-label">Date Created:</span>
+                        <span class="info-value">@selectedSupplier.DateCreated.ToString("MMM dd, yyyy HH:mm:ss")</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="save-admin-btn" @onclick="() => HandlePrintSupplier(selectedSupplier.Id)">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M6 9V2h12v7"></path>
+                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                        <rect x="6" y="14" width="12" height="8"></rect>
+                    </svg>
+                    <span>Print Details</span>
+                </button>
+                <button class="cancel-btn" @onclick="CloseSupplierDetailsModal">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<IT13_Final.Services.Data.SupplierModel> suppliers = new();
+    private List<IT13_Final.Services.Data.SupplierModel> allSuppliersForPrint = new();
+    private string searchTerm = string.Empty;
+    private DateTime? startDate;
+    private DateTime? endDate;
+    private string selectedDateRange = string.Empty;
+
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue;
+
+    private bool isLoading = false;
+    private bool isGeneratingPDF = false;
+
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling(totalCount / (double)pageSize);
+
+    private int activeCount = 0;
+    private int inactiveCount = 0;
+
+    private System.Threading.Timer? _searchTimer;
+    private bool showSupplierDetailsModal = false;
+    private IT13_Final.Services.Data.SupplierDetailsModel? selectedSupplier = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSuppliers();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("setupSearchInputFilter", "supplier-report-search-input");
+            }
+            catch (Exception)
+            {
+                // JavaScript function might not be available yet, ignore
+            }
+        }
+    }
+
+    private async Task LoadSuppliers()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var stockClerkUserId = AuthState.CurrentUser?.Id ?? 0;
+            if (stockClerkUserId > 0)
+            {
+                totalCount = await SupplierService.GetSuppliersCountAsync(stockClerkUserId, searchTerm, startDate, endDate);
+                suppliers = await SupplierService.GetSuppliersAsync(stockClerkUserId, searchTerm, startDate, endDate, currentPage, pageSize);
+
+                if (currentPage > totalPages && totalPages > 0)
+                {
+                    currentPage = totalPages;
+                    await LoadSuppliers();
+                    return;
+                }
+
+                // Calculate summary statistics
+                activeCount = suppliers.Count(s => s.Status.ToLower() == "active");
+                inactiveCount = suppliers.Count(s => s.Status.ToLower() == "inactive");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading suppliers: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to load suppliers. Please try again.");
+            suppliers = new List<IT13_Final.Services.Data.SupplierModel>();
+            totalCount = 0;
+            activeCount = 0;
+            inactiveCount = 0;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async void HandleStartDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            startDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            startDate = null;
+            selectedDateRange = "";
+        }
+        await ApplyFilters();
+    }
+
+    private async void HandleEndDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            endDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            endDate = null;
+            selectedDateRange = "";
+        }
+        await ApplyFilters();
+    }
+
+    private async Task HandleDateRangeChange()
+    {
+        var now = DateTime.Now;
+        switch (selectedDateRange)
+        {
+            case "":
+                startDate = null;
+                endDate = null;
+                break;
+            case "today":
+                startDate = now.Date;
+                endDate = now.Date;
+                break;
+            case "yesterday":
+                startDate = now.Date.AddDays(-1);
+                endDate = now.Date.AddDays(-1);
+                break;
+            case "last7days":
+                startDate = now.Date.AddDays(-6);
+                endDate = now.Date;
+                break;
+            case "last30days":
+                startDate = now.Date.AddDays(-29);
+                endDate = now.Date;
+                break;
+            case "thismonth":
+                startDate = new DateTime(now.Year, now.Month, 1);
+                endDate = now.Date;
+                break;
+            case "thisyear":
+                startDate = new DateTime(now.Year, 1, 1);
+                endDate = now.Date;
+                break;
+        }
+        await ApplyFilters();
+    }
+
+    private async Task ClearDateFilter()
+    {
+        selectedDateRange = "";
+        startDate = null;
+        endDate = null;
+        currentPage = 1;
+        await LoadSuppliers();
+    }
+
+    private async Task ApplyFilters()
+    {
+        currentPage = 1;
+        await LoadSuppliers();
+    }
+
+    private void HandleSearchInput()
+    {
+        var filtered = System.Text.RegularExpressions.Regex.Replace(searchTerm, @"[^a-zA-Z0-9\s\-_]", "");
+        if (filtered != searchTerm)
+        {
+            searchTerm = filtered;
+        }
+        
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            currentPage = 1;
+            await InvokeAsync(async () => await LoadSuppliers());
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task HandleClearSearch()
+    {
+        searchTerm = string.Empty;
+        currentPage = 1;
+        await LoadSuppliers();
+        StateHasChanged();
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            currentPage = 1;
+            await LoadSuppliers();
+        }
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages)
+        {
+            if (page != currentPage)
+            {
+                currentPage = page;
+                await LoadSuppliers();
+            }
+        }
+    }
+
+    private async Task HandleSupplierClick(int supplierId)
+    {
+        try
+        {
+            var stockClerkUserId = AuthState.CurrentUser?.Id ?? 0;
+            if (stockClerkUserId == 0)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "User not authenticated. Please log in again.");
+                return;
+            }
+
+            selectedSupplier = await SupplierService.GetSupplierDetailsAsync(supplierId, stockClerkUserId);
+            if (selectedSupplier == null)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Supplier not found or you don't have permission to access it.");
+                return;
+            }
+
+            showSupplierDetailsModal = true;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading supplier details: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to load supplier details. Please try again.");
+        }
+    }
+
+    private void CloseSupplierDetailsModal()
+    {
+        showSupplierDetailsModal = false;
+        selectedSupplier = null;
+        StateHasChanged();
+    }
+
+    private async Task HandlePrintSupplier(int supplierId)
+    {
+        try
+        {
+            var stockClerkUserId = AuthState.CurrentUser?.Id ?? 0;
+            if (stockClerkUserId == 0)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "User not authenticated. Please log in again.");
+                return;
+            }
+
+            var supplier = await SupplierService.GetSupplierDetailsAsync(supplierId, stockClerkUserId);
+            if (supplier == null)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Supplier not found or you don't have permission to access it.");
+                return;
+            }
+
+            var receiptData = new
+            {
+                id = supplier.Id,
+                companyName = supplier.CompanyName,
+                contactPerson = supplier.ContactPerson ?? "",
+                email = supplier.Email ?? "",
+                contactNumber = supplier.ContactNumber ?? "",
+                status = supplier.Status,
+                street = supplier.Street,
+                city = supplier.City,
+                province = supplier.Province,
+                zip = supplier.Zip,
+                dateCreated = supplier.DateCreated.ToString("MMM dd, yyyy HH:mm:ss")
+            };
+
+            await JSRuntime.InvokeVoidAsync("printSupplierReceipt", receiptData);
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error printing supplier: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to print supplier details. Please try again.");
+        }
+    }
+
+    private async Task PrintReport()
+    {
+        try
+        {
+            isGeneratingPDF = true;
+            StateHasChanged();
+
+            var stockClerkUserId = AuthState.CurrentUser?.Id ?? 0;
+            if (stockClerkUserId > 0)
+            {
+                allSuppliersForPrint = await SupplierService.GetSuppliersAsync(stockClerkUserId, searchTerm, startDate, endDate, 1, 10000);
+                
+                await JSRuntime.InvokeVoidAsync("generateAndPrintSupplierReport", 
+                    allSuppliersForPrint.Select(s => new {
+                        companyName = s.CompanyName,
+                        contactPerson = s.ContactPerson ?? "N/A",
+                        email = s.Email ?? "N/A",
+                        contactNumber = s.ContactNumber ?? "N/A",
+                        status = s.Status,
+                        stockClerkName = AuthState.CurrentUser?.FullName ?? "N/A",
+                        dateCreated = s.DateCreated.ToString("MMM dd, yyyy"),
+                        timeCreated = s.DateCreated.ToString("HH:mm:ss")
+                    }).ToArray(),
+                    AuthState.CurrentUser?.FullName ?? "Stock Clerk",
+                    startDate?.ToString("MMM dd, yyyy") ?? "All Time",
+                    endDate?.ToString("MMM dd, yyyy") ?? "Today"
+                );
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error generating report: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to generate PDF. Please try again.");
+        }
+        finally
+        {
+            isGeneratingPDF = false;
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+    }
+}
+

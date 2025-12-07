@@ -85,14 +85,14 @@
 }
 
 .suppliers-table thead {
-    background: #A2B9CD;
+    background: linear-gradient(135deg, #1a2332 0%, #304D6D 100%);
 }
 
 .suppliers-table th {
     padding: 14px 20px;
     text-align: left;
-    font-weight: 700;
-    color: #2d2d2d;
+    font-weight: 600;
+    color: white;
     font-size: 13px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -215,6 +215,9 @@
 }
 
 /* Modal Styles */
+/* ========================================
+   Modal Styles - Match Admin Record Design
+======================================== */
 .modal-overlay {
     position: fixed;
     top: 0;
@@ -222,112 +225,150 @@
     right: 0;
     bottom: 0;
     background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 1000;
     padding: 20px;
+    animation: fadeIn 0.2s ease;
 }
 
-.modal-container {
-    background: #FFFFFF;
-    border-radius: 12px;
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.add-admin-modal {
+    background: white;
+    border-radius: 16px;
     width: 100%;
-    max-width: 600px;
+    max-width: 800px;
     max-height: 90vh;
-    overflow-y: auto;
-    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15);
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    animation: slideUp 0.3s ease-out;
 }
 
-.modal-header {
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.add-admin-modal .modal-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 24px 28px;
-    background: #A2B9CD;
+    background: linear-gradient(135deg, #1a2332 0%, #304D6D 50%, #5C7CFA 100%);
+    color: white;
+    border-bottom: none;
 }
 
-.modal-title {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+.modal-title-text {
     font-size: 22px;
     font-weight: 700;
-    color: #304D6D;
+    color: white;
+    margin: 0;
 }
 
-.modal-title-icon {
-    width: 24px;
-    height: 24px;
-    color: #304D6D;
-    stroke: currentColor;
-}
-
-.modal-close {
+.modal-close-btn {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: none;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 8px 12px;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    border-radius: 8px;
+    justify-content: center;
+    color: white;
     transition: all 0.2s ease;
-    color: #4a4a4a;
-    font-size: 14px;
-    font-weight: 500;
 }
 
-.modal-close:hover {
-    background: rgba(48, 77, 109, 0.1);
-    color: #304D6D;
+.modal-close-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+    transform: rotate(90deg);
 }
 
-.modal-close svg {
+.modal-close-btn svg {
     width: 18px;
     height: 18px;
-    stroke: currentColor;
 }
 
-.modal-content {
-    padding: 32px 28px;
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
+.modal-body {
+    padding: 28px;
+    padding-bottom: 0;
     overflow-y: auto;
     flex: 1;
-    background: #FAFAFA;
+    background: #f9fafb;
 }
 
-.details-list {
+.po-info {
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    background: #FFFFFF;
-    border-radius: 12px;
-    padding: 24px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    gap: 0;
 }
 
-.detail-item {
+.info-row {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    gap: 16px;
+    align-items: flex-start;
+    padding: 16px 0;
+    border-bottom: 1px solid #f3f4f6;
 }
 
-.detail-label {
+.info-row:last-child {
+    border-bottom: none;
+}
+
+.info-label {
+    font-weight: 600;
+    color: #6b7280;
     font-size: 14px;
-    font-weight: 500;
-    color: #6B7280;
     min-width: 140px;
 }
 
-.detail-value {
+.info-value {
+    color: #1a1a1a;
     font-size: 14px;
-    font-weight: 400;
-    color: #1F2937;
     text-align: right;
     flex: 1;
+}
+
+.add-admin-modal .modal-footer {
+    padding: 20px 28px;
+    border-top: 1px solid #e5e7eb;
+    margin-top: 20px;
+    background: white;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.cancel-btn {
+    padding: 10px 20px;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    background: white;
+    color: #6b7280;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.cancel-btn:hover {
+    background: #f9fafb;
+    border-color: #d1d5db;
 }
 

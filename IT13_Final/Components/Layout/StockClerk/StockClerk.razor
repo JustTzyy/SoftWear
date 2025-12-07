@@ -1,13 +1,14 @@
 @inject IT13_Final.Services.Auth.AuthState AuthState
 @inject IT13_Final.Services.Audit.IHistoryService HistoryService
 @inject NavigationManager Nav
+@inject IJSRuntime JSRuntime
 @inherits LayoutComponentBase
 @implements IDisposable
 
-<div class="grid min-h-screen transition-all duration-300 ease-in-out" style="grid-template-columns: @(sidebarCollapsed ? "80px" : "260px") 1fr; background-color: #E0E0E0;">
+<div class="grid min-h-screen transition-all duration-300 ease-in-out" style="grid-template-columns: @(sidebarCollapsed ? "80px" : "260px") 1fr; background: #F5F5F5;">
     <aside class="bg-white transition-all duration-300 ease-in-out overflow-hidden" style="border-right: 1px solid #E0E0E0;">
-        <div class="flex items-start gap-3 py-4 px-4" style="min-height: 64px;">
-            <a href="/stockclerk/dashboard" class="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style="border: 2px solid #5C7CFA; padding: 6px; background-color: #1a2332;">
+        <div class="flex items-start gap-3 py-4 px-4 cursor-pointer hover:bg-gray-50 transition-colors duration-200" style="min-height: 64px;" @onclick="ToggleSidebar" title="Toggle sidebar">
+            <a href="/stockclerk/dashboard" class="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style="border: 2px solid #5C7CFA; padding: 6px; background-color: #1a2332;" @onclick:stopPropagation>
                 <img src="/images/logo.png" alt="Logo" class="w-full h-full object-contain" style="display: block; margin: auto;" />
             </a>
             <div class="transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">
@@ -29,11 +30,11 @@
             </a>
 
             <button class="@GetInventoryMgmtButtonClass()" @onclick="() => inventoryMgmtOpen = !inventoryMgmtOpen" aria-expanded="@inventoryMgmtOpen" title="Inventory Management">
-                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/stockclerk/Inventory", "/stockclerk/Stock_In", "/stockclerk/Stock_Out", "/stockclerk/Stock_Adjustment", "/stockclerk/Supplier", "/stockclerk/Purchase_Orders", "/stockclerk/Cancelled_Purchase_Orders", "/stockclerk/Completed_Purchase_Orders")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/stockclerk/Inventory", "/stockclerk/Purchase_Orders", "/stockclerk/Cancelled_Purchase_Orders", "/stockclerk/Completed_Purchase_Orders")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                 </svg>
                 <span class="flex-1 transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">Inventory Management</span>
-                <span class="@GetIconClass("/stockclerk/Inventory", "/stockclerk/Stock_In", "/stockclerk/Stock_Out", "/stockclerk/Stock_Adjustment", "/stockclerk/Supplier", "/stockclerk/Purchase_Orders", "/stockclerk/Cancelled_Purchase_Orders", "/stockclerk/Completed_Purchase_Orders") transition-all duration-300 ease-in-out" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">@(inventoryMgmtOpen ? "▾" : "▸")</span>
+                <span class="@GetIconClass("/stockclerk/Inventory", "/stockclerk/Purchase_Orders", "/stockclerk/Cancelled_Purchase_Orders", "/stockclerk/Completed_Purchase_Orders") transition-all duration-300 ease-in-out" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">@(inventoryMgmtOpen ? "▾" : "▸")</span>
                 @if (IsInventoryMgmtActive())
                 {
                     <div class="absolute left-0 top-0 bottom-0 w-1 bg-yinmn-blue rounded-r"></div>
@@ -50,21 +51,46 @@
                         <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/stockclerk/Inventory")"></span>
                         <span>Inventory</span>
                     </a>
-                    <a class="@GetSubNavItemClass("/stockclerk/Stock_In")" href="/stockclerk/Stock_In">
-                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/stockclerk/Stock_In")"></span>
+                </div>
+            }
+
+            <button class="@GetReportsButtonClass()" @onclick="() => reportsOpen = !reportsOpen" aria-expanded="@reportsOpen" title="Reports">
+                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/stockclerk/Stock_In_Report", "/stockclerk/Stock_Out_Report", "/stockclerk/Stock_Adjustment_Report", "/stockclerk/Supplier_Report", "/stockclerk/Purchase_Order_Completed_Report", "/stockclerk/Purchase_Order_Cancelled_Report")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span class="flex-1 transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">Reports</span>
+                <span class="@GetIconClass("/stockclerk/Stock_In_Report", "/stockclerk/Stock_Out_Report", "/stockclerk/Stock_Adjustment_Report", "/stockclerk/Supplier_Report", "/stockclerk/Purchase_Order_Completed_Report", "/stockclerk/Purchase_Order_Cancelled_Report") transition-all duration-300 ease-in-out" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">@(reportsOpen ? "▾" : "▸")</span>
+                @if (IsReportsActive())
+                {
+                    <div class="absolute left-0 top-0 bottom-0 w-1 bg-yinmn-blue rounded-r"></div>
+                }
+            </button>
+            @if (reportsOpen && !sidebarCollapsed)
+            {
+                <div class="grid gap-1 py-1 pl-4">
+                    <a class="@GetSubNavItemClass("/stockclerk/Stock_In_Report")" href="/stockclerk/Stock_In_Report">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/stockclerk/Stock_In_Report")"></span>
                         <span>Stock In</span>
                     </a>
-                    <a class="@GetSubNavItemClass("/stockclerk/Stock_Out")" href="/stockclerk/Stock_Out">
-                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/stockclerk/Stock_Out")"></span>
+                    <a class="@GetSubNavItemClass("/stockclerk/Stock_Out_Report")" href="/stockclerk/Stock_Out_Report">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/stockclerk/Stock_Out_Report")"></span>
                         <span>Stock Out</span>
                     </a>
-                    <a class="@GetSubNavItemClass("/stockclerk/Stock_Adjustment")" href="/stockclerk/Stock_Adjustment">
-                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/stockclerk/Stock_Adjustment")"></span>
-                        <span>Stock Adjustment</span>
+                    <a class="@GetSubNavItemClass("/stockclerk/Stock_Adjustment_Report")" href="/stockclerk/Stock_Adjustment_Report">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/stockclerk/Stock_Adjustment_Report")"></span>
+                        <span>Adjustment</span>
                     </a>
-                    <a class="@GetSubNavItemClass("/stockclerk/Supplier")" href="/stockclerk/Supplier">
-                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/stockclerk/Supplier")"></span>
+                    <a class="@GetSubNavItemClass("/stockclerk/Supplier_Report")" href="/stockclerk/Supplier_Report">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/stockclerk/Supplier_Report")"></span>
                         <span>Supplier</span>
+                    </a>
+                    <a class="@GetSubNavItemClass("/stockclerk/Purchase_Order_Completed_Report")" href="/stockclerk/Purchase_Order_Completed_Report">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/stockclerk/Purchase_Order_Completed_Report")"></span>
+                        <span>PO Completed</span>
+                    </a>
+                    <a class="@GetSubNavItemClass("/stockclerk/Purchase_Order_Cancelled_Report")" href="/stockclerk/Purchase_Order_Cancelled_Report">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/stockclerk/Purchase_Order_Cancelled_Report")"></span>
+                        <span>PO Cancelled</span>
                     </a>
                 </div>
             }
@@ -72,10 +98,9 @@
     </aside>
 
     <div class="grid grid-rows-[64px_1fr]">
-        <header class="flex items-center gap-3 px-5 bg-white" style="border-bottom: 1px solid #E0E0E0;">
-            <button class="bg-transparent border-none text-xl cursor-pointer text-yinmn-blue transition-all duration-200 ease-in-out hover:opacity-70" @onclick="ToggleSidebar" aria-label="Toggle menu">≡</button>
+        <header class="flex items-center gap-3 px-5 bg-white" style="border-bottom: 1px solid #E0E0E0; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 100;">
             <div class="flex-1"></div>
-            <div class="relative flex items-center gap-2.5" @onclick="ToggleProfileMenu">
+            <div class="relative flex items-center gap-2.5" id="profile-menu-container" @onclick="ToggleProfileMenu" @onclick:stopPropagation>
                 <div class="w-9 h-9 rounded-full bg-gradient-to-br from-uranian-blue to-white text-yinmn-blue flex items-center justify-center font-extrabold">@GetInitials()</div>
                 <button class="flex items-center gap-2 py-1.5 px-2.5 rounded-[10px] bg-white cursor-pointer text-gray-700 transition-all duration-200 ease-in-out hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)]" style="border: 1px solid #E0E0E0;">
                     <span class="text-sm">@DisplayName()</span>
@@ -83,7 +108,7 @@
                 </button>
                 @if (profileOpen)
                 {
-                    <div class="absolute top-14 right-0 bg-white rounded-xl shadow-[0_12px_28px_rgba(0,0,0,0.12)] p-2 w-60 z-10" style="border: 1px solid #E0E0E0;" @onclick:stopPropagation>
+                    <div class="absolute top-14 right-0 bg-white rounded-xl shadow-[0_12px_28px_rgba(0,0,0,0.12)] p-2 w-60" style="border: 1px solid #E0E0E0; z-index: 50;" @onclick:stopPropagation>
                         <a class="grid grid-cols-[22px_1fr] items-center gap-2.5 py-2.5 px-3 no-underline text-gray-800 rounded-[10px] border-none bg-transparent w-full text-left transition-all duration-200 ease-in-out hover:bg-platinum" href="/stockclerk/settings" @onclick="CloseProfileMenu">
                             <svg class="w-[18px] h-[18px] stroke-yinmn-blue stroke-2 fill-none" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none"/><path d="M12 8v8M8 12h8"/></svg>
                             <span>Settings</span>
@@ -101,7 +126,7 @@
             </div>
         </header>
 
-        <main class="p-6">
+        <main class="p-6" @onclick="() => { if (profileOpen) CloseProfileMenu(); }">
             @Body
         </main>
     </div>
@@ -110,6 +135,7 @@
 
 @code {
     private bool inventoryMgmtOpen = false;
+    private bool reportsOpen = false;
     private bool profileOpen;
     private bool sidebarCollapsed = false;
     private string currentUri = string.Empty;
@@ -118,6 +144,7 @@
     {
         currentUri = Nav.Uri;
         CheckInventoryMgmtExpansion();
+        CheckReportsExpansion();
         Nav.LocationChanged += OnLocationChanged;
     }
 
@@ -125,14 +152,23 @@
     {
         currentUri = e.Location;
         CheckInventoryMgmtExpansion();
+        CheckReportsExpansion();
         InvokeAsync(StateHasChanged);
     }
 
     private void CheckInventoryMgmtExpansion()
     {
-        if (IsActive("/stockclerk/Purchase_Orders") || IsActive("/stockclerk/Cancelled_Purchase_Orders") || IsActive("/stockclerk/Completed_Purchase_Orders") || IsActive("/stockclerk/Inventory") || IsActive("/stockclerk/Stock_In") || IsActive("/stockclerk/Stock_Out") || IsActive("/stockclerk/Stock_Adjustment") || IsActive("/stockclerk/Supplier"))
+        if (IsActive("/stockclerk/Purchase_Orders") || IsActive("/stockclerk/Cancelled_Purchase_Orders") || IsActive("/stockclerk/Completed_Purchase_Orders") || IsActive("/stockclerk/Inventory"))
         {
             inventoryMgmtOpen = true;
+        }
+    }
+
+    private void CheckReportsExpansion()
+    {
+        if (IsActive("/stockclerk/Stock_In_Report") || IsActive("/stockclerk/Stock_Out_Report") || IsActive("/stockclerk/Stock_Adjustment_Report") || IsActive("/stockclerk/Supplier_Report") || IsActive("/stockclerk/Purchase_Order_Completed_Report") || IsActive("/stockclerk/Purchase_Order_Cancelled_Report"))
+        {
+            reportsOpen = true;
         }
     }
 
@@ -172,7 +208,12 @@
 
     private bool IsInventoryMgmtActive()
     {
-        return IsActive("/stockclerk/Purchase_Orders") || IsActive("/stockclerk/Cancelled_Purchase_Orders") || IsActive("/stockclerk/Completed_Purchase_Orders") || IsActive("/stockclerk/Inventory") || IsActive("/stockclerk/Stock_In") || IsActive("/stockclerk/Stock_Out") || IsActive("/stockclerk/Stock_Adjustment") || IsActive("/stockclerk/Supplier");
+        return IsActive("/stockclerk/Purchase_Orders") || IsActive("/stockclerk/Cancelled_Purchase_Orders") || IsActive("/stockclerk/Completed_Purchase_Orders") || IsActive("/stockclerk/Inventory");
+    }
+
+    private bool IsReportsActive()
+    {
+        return IsActive("/stockclerk/Stock_In_Report") || IsActive("/stockclerk/Stock_Out_Report") || IsActive("/stockclerk/Stock_Adjustment_Report") || IsActive("/stockclerk/Supplier_Report") || IsActive("/stockclerk/Purchase_Order_Completed_Report") || IsActive("/stockclerk/Purchase_Order_Cancelled_Report");
     }
 
     private string GetInventoryMgmtButtonClass()
@@ -180,6 +221,17 @@
         var baseClass = "relative w-full text-left cursor-pointer py-2.5 px-3 rounded-lg no-underline flex items-center gap-3 transition-all duration-200 ease-in-out";
         
         if (IsInventoryMgmtActive())
+        {
+            return $"{baseClass} bg-uranian-blue text-yinmn-blue";
+        }
+        return $"{baseClass} bg-transparent text-gray-800 hover:bg-uranian-blue hover:bg-opacity-30";
+    }
+
+    private string GetReportsButtonClass()
+    {
+        var baseClass = "relative w-full text-left cursor-pointer py-2.5 px-3 rounded-lg no-underline flex items-center gap-3 transition-all duration-200 ease-in-out";
+        
+        if (IsReportsActive())
         {
             return $"{baseClass} bg-uranian-blue text-yinmn-blue";
         }
@@ -223,10 +275,12 @@
         if (sidebarCollapsed)
         {
             inventoryMgmtOpen = false;
+            reportsOpen = false;
         }
         else
         {
             CheckInventoryMgmtExpansion();
+            CheckReportsExpansion();
         }
     }
 
@@ -251,6 +305,42 @@
         var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length >= 2) return (parts[0][0].ToString() + parts[1][0]).ToUpperInvariant();
         return name[0].ToString().ToUpperInvariant();
+    }
+
+    private string GetPageTitle()
+    {
+        if (string.IsNullOrEmpty(currentUri)) return $"Welcome, {AuthState.CurrentUser?.FullName ?? "Stock Clerk"}!";
+        
+        try
+        {
+            var uri = Nav.ToAbsoluteUri(currentUri);
+            var path = uri.AbsolutePath.ToLowerInvariant().TrimEnd('/');
+            
+            // Map routes to page titles
+            if (path == "/stockclerk/dashboard") return $"Welcome, {AuthState.CurrentUser?.FullName ?? "Stock Clerk"}!";
+            if (path == "/stockclerk/purchase_orders") return "Purchase Orders";
+            if (path == "/stockclerk/cancelled_purchase_orders") return "Cancelled Purchase Orders";
+            if (path == "/stockclerk/completed_purchase_orders") return "Completed Purchase Orders";
+            if (path == "/stockclerk/inventory") return "Inventory Records";
+            if (path == "/stockclerk/stock_in") return "Stock In Records";
+            if (path == "/stockclerk/stock_out") return "Stock Out Records";
+            if (path == "/stockclerk/stock_adjustment") return "Stock Adjustments";
+            if (path == "/stockclerk/supplier") return "Supplier Records";
+            if (path == "/stockclerk/stock_in_report") return "Stock In Report";
+            if (path == "/stockclerk/stock_out_report") return "Stock Out Report";
+            if (path == "/stockclerk/stock_adjustment_report") return "Stock Adjustment Report";
+            if (path == "/stockclerk/supplier_report") return "Supplier Report";
+            if (path == "/stockclerk/purchase_order_completed_report") return "Purchase Order Completed Report";
+            if (path == "/stockclerk/purchase_order_cancelled_report") return "Purchase Order Cancelled Report";
+            if (path == "/stockclerk/settings") return "Settings";
+            if (path == "/stockclerk/activitylog") return "My Activity Logs";
+            
+            return "Dashboard";
+        }
+        catch
+        {
+            return "Dashboard";
+        }
     }
 
     private async void OnSignOut()

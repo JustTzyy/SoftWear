@@ -76,16 +76,19 @@ namespace IT13_Final.Services.Data
     {
         Task<List<PurchaseOrderModel>> GetPurchaseOrdersAsync(int userId, string? searchTerm = null, string? status = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
         Task<int> GetPurchaseOrdersCountAsync(int userId, string? searchTerm = null, string? status = null, CancellationToken ct = default);
-        Task<List<PurchaseOrderModel>> GetCancelledPurchaseOrdersAsync(int userId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
-        Task<int> GetCancelledPurchaseOrdersCountAsync(int userId, string? searchTerm = null, CancellationToken ct = default);
-        Task<List<PurchaseOrderModel>> GetCompletedPurchaseOrdersAsync(int userId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
-        Task<int> GetCompletedPurchaseOrdersCountAsync(int userId, string? searchTerm = null, CancellationToken ct = default);
+        Task<List<PurchaseOrderModel>> GetCancelledPurchaseOrdersAsync(int userId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
+        Task<int> GetCancelledPurchaseOrdersCountAsync(int userId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, CancellationToken ct = default);
+        Task<List<PurchaseOrderModel>> GetCompletedPurchaseOrdersAsync(int userId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
+        Task<int> GetCompletedPurchaseOrdersCountAsync(int userId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, CancellationToken ct = default);
         Task<PurchaseOrderDetailsModel?> GetPurchaseOrderDetailsAsync(int poId, int userId, CancellationToken ct = default);
         Task<int?> CreatePurchaseOrderAsync(int sellerUserId, int createdByUserId, CreatePOModel model, CancellationToken ct = default);
         Task<bool> UpdatePurchaseOrderStatusAsync(int poId, string status, int userId, CancellationToken ct = default);
         Task<bool> UpdatePurchaseOrderExpectedDateAsync(int poId, DateTime? expectedDeliveryDate, int userId, CancellationToken ct = default);
         Task<bool> DeletePurchaseOrderAsync(int poId, int userId, CancellationToken ct = default);
         Task<string> GeneratePONumberAsync(int userId, CancellationToken ct = default);
+        Task<List<PurchaseOrderModel>> GetPendingPurchaseOrdersForAccountingAsync(int sellerUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
+        Task<int> GetPendingPurchaseOrdersCountForAccountingAsync(int sellerUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, CancellationToken ct = default);
+        Task<PurchaseOrderDetailsModel?> GetPurchaseOrderDetailsForAccountingAsync(int poId, int sellerUserId, CancellationToken ct = default);
     }
 
     public class PurchaseOrderService : IPurchaseOrderService
@@ -196,7 +199,7 @@ namespace IT13_Final.Services.Data
             return result;
         }
 
-        public async Task<List<PurchaseOrderModel>> GetCancelledPurchaseOrdersAsync(int userId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
+        public async Task<List<PurchaseOrderModel>> GetCancelledPurchaseOrdersAsync(int userId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
         {
             var purchaseOrders = new List<PurchaseOrderModel>();
             var offset = (page - 1) * pageSize;
@@ -216,6 +219,16 @@ namespace IT13_Final.Services.Data
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 sql += " AND (po.po_number LIKE @SearchTerm OR s.company_name LIKE @SearchTerm)";
+            }
+
+            if (startDate.HasValue)
+            {
+                sql += " AND CAST(po.archived_at AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                sql += " AND CAST(po.archived_at AS DATE) <= @EndDate";
             }
 
             sql += " ORDER BY po.archived_at DESC OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
@@ -226,6 +239,14 @@ namespace IT13_Final.Services.Data
             {
                 cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
             }
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value);
+            }
             cmd.Parameters.AddWithValue("@Offset", offset);
             cmd.Parameters.AddWithValue("@PageSize", pageSize);
 
@@ -249,7 +270,7 @@ namespace IT13_Final.Services.Data
             return purchaseOrders;
         }
 
-        public async Task<int> GetCancelledPurchaseOrdersCountAsync(int userId, string? searchTerm = null, CancellationToken ct = default)
+        public async Task<int> GetCancelledPurchaseOrdersCountAsync(int userId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -265,18 +286,36 @@ namespace IT13_Final.Services.Data
                 sql += " AND (po.po_number LIKE @SearchTerm OR s.company_name LIKE @SearchTerm)";
             }
 
+            if (startDate.HasValue)
+            {
+                sql += " AND CAST(po.archived_at AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                sql += " AND CAST(po.archived_at AS DATE) <= @EndDate";
+            }
+
             using var cmd = new SqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@UserId", userId);
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
             }
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value);
+            }
 
             var count = await cmd.ExecuteScalarAsync(ct);
             return count != null ? Convert.ToInt32(count) : 0;
         }
 
-        public async Task<List<PurchaseOrderModel>> GetCompletedPurchaseOrdersAsync(int userId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
+        public async Task<List<PurchaseOrderModel>> GetCompletedPurchaseOrdersAsync(int userId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
         {
             var purchaseOrders = new List<PurchaseOrderModel>();
             var offset = (page - 1) * pageSize;
@@ -298,6 +337,16 @@ namespace IT13_Final.Services.Data
                 sql += " AND (po.po_number LIKE @SearchTerm OR s.company_name LIKE @SearchTerm)";
             }
 
+            if (startDate.HasValue)
+            {
+                sql += " AND CAST(po.updated_at AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                sql += " AND CAST(po.updated_at AS DATE) <= @EndDate";
+            }
+
             sql += " ORDER BY po.updated_at DESC, po.created_at DESC OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
 
             using var cmd = new SqlCommand(sql, conn);
@@ -305,6 +354,14 @@ namespace IT13_Final.Services.Data
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
+            }
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value);
             }
             cmd.Parameters.AddWithValue("@Offset", offset);
             cmd.Parameters.AddWithValue("@PageSize", pageSize);
@@ -329,7 +386,7 @@ namespace IT13_Final.Services.Data
             return purchaseOrders;
         }
 
-        public async Task<int> GetCompletedPurchaseOrdersCountAsync(int userId, string? searchTerm = null, CancellationToken ct = default)
+        public async Task<int> GetCompletedPurchaseOrdersCountAsync(int userId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -345,11 +402,29 @@ namespace IT13_Final.Services.Data
                 sql += " AND (po.po_number LIKE @SearchTerm OR s.company_name LIKE @SearchTerm)";
             }
 
+            if (startDate.HasValue)
+            {
+                sql += " AND CAST(po.updated_at AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                sql += " AND CAST(po.updated_at AS DATE) <= @EndDate";
+            }
+
             using var cmd = new SqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@UserId", userId);
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
+            }
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value);
             }
 
             var count = await cmd.ExecuteScalarAsync(ct);
@@ -372,7 +447,7 @@ namespace IT13_Final.Services.Data
                 INNER JOIN dbo.tbl_suppliers s ON po.supplier_id = s.id
                 INNER JOIN dbo.tbl_users u1 ON po.created_by = u1.id
                 LEFT JOIN dbo.tbl_users u2 ON po.updated_by = u2.id
-                WHERE po.id = @POId AND s.user_id = @UserId";
+                WHERE po.id = @POId AND (@UserId = 0 OR s.user_id = @UserId)";
 
             using var cmd = new SqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@POId", poId);
@@ -782,6 +857,224 @@ namespace IT13_Final.Services.Data
             int sequence = result != null ? Convert.ToInt32(result) : 1;
 
             return $"PO-{DateTime.Now:yyyyMM}-{sequence:D4}";
+        }
+
+        public async Task<List<PurchaseOrderModel>> GetPendingPurchaseOrdersForAccountingAsync(int sellerUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
+        {
+            var purchaseOrders = new List<PurchaseOrderModel>();
+            var offset = (page - 1) * pageSize;
+
+            using var conn = new SqlConnection(_connectionString);
+            await conn.OpenAsync(ct);
+
+            // Get pending purchase orders created by stock clerks that belong to this seller
+            var sql = @"
+                SELECT po.id, po.po_number, po.supplier_id, s.company_name, po.status, 
+                       po.total_amount, po.created_at, po.expected_delivery_date,
+                       COALESCE(u.name, (LTRIM(RTRIM(ISNULL(u.fname,''))) + ' ' + LTRIM(RTRIM(ISNULL(u.lname,''))))) as created_by_name
+                FROM dbo.tbl_purchase_orders po
+                INNER JOIN dbo.tbl_suppliers s ON po.supplier_id = s.id
+                INNER JOIN dbo.tbl_users u ON po.created_by = u.id
+                WHERE po.archived_at IS NULL 
+                AND po.status = 'Pending'
+                AND s.user_id = @SellerUserId";
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                sql += " AND (po.po_number LIKE @SearchTerm OR s.company_name LIKE @SearchTerm)";
+            }
+
+            if (startDate.HasValue)
+            {
+                sql += " AND CAST(po.created_at AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                sql += " AND CAST(po.created_at AS DATE) <= @EndDate";
+            }
+
+            sql += " ORDER BY po.created_at DESC OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
+
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
+            }
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+            }
+            cmd.Parameters.AddWithValue("@Offset", offset);
+            cmd.Parameters.AddWithValue("@PageSize", pageSize);
+
+            using var reader = await cmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                purchaseOrders.Add(new PurchaseOrderModel
+                {
+                    Id = reader.GetInt32(0),
+                    PONumber = reader.GetString(1),
+                    SupplierId = reader.GetInt32(2),
+                    SupplierName = reader.GetString(3),
+                    Status = reader.GetString(4),
+                    TotalAmount = reader.GetDecimal(5),
+                    CreatedAt = reader.GetDateTime(6),
+                    ExpectedDeliveryDate = reader.IsDBNull(7) ? null : reader.GetDateTime(7),
+                    CreatedByName = reader.IsDBNull(8) ? "N/A" : reader.GetString(8)
+                });
+            }
+
+            return purchaseOrders;
+        }
+
+        public async Task<int> GetPendingPurchaseOrdersCountForAccountingAsync(int sellerUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, CancellationToken ct = default)
+        {
+            using var conn = new SqlConnection(_connectionString);
+            await conn.OpenAsync(ct);
+
+            var sql = @"
+                SELECT COUNT(*)
+                FROM dbo.tbl_purchase_orders po
+                INNER JOIN dbo.tbl_suppliers s ON po.supplier_id = s.id
+                WHERE po.archived_at IS NULL 
+                AND po.status = 'Pending'
+                AND s.user_id = @SellerUserId";
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                sql += " AND (po.po_number LIKE @SearchTerm OR s.company_name LIKE @SearchTerm)";
+            }
+
+            if (startDate.HasValue)
+            {
+                sql += " AND CAST(po.created_at AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                sql += " AND CAST(po.created_at AS DATE) <= @EndDate";
+            }
+
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
+            }
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+            }
+
+            var count = await cmd.ExecuteScalarAsync(ct);
+            return count != null ? Convert.ToInt32(count) : 0;
+        }
+
+        public async Task<PurchaseOrderDetailsModel?> GetPurchaseOrderDetailsForAccountingAsync(int poId, int sellerUserId, CancellationToken ct = default)
+        {
+            using var conn = new SqlConnection(_connectionString);
+            await conn.OpenAsync(ct);
+
+            var sql = @"
+                SELECT po.id, po.po_number, po.supplier_id, s.company_name, po.status, 
+                       po.total_amount, po.created_at, po.expected_delivery_date,
+                       COALESCE(u.name, (LTRIM(RTRIM(ISNULL(u.fname,''))) + ' ' + LTRIM(RTRIM(ISNULL(u.lname,''))))) as created_by_name
+                FROM dbo.tbl_purchase_orders po
+                INNER JOIN dbo.tbl_suppliers s ON po.supplier_id = s.id
+                INNER JOIN dbo.tbl_users u ON po.created_by = u.id
+                WHERE po.id = @POId 
+                AND po.archived_at IS NULL 
+                AND s.user_id = @SellerUserId";
+
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@POId", poId);
+            cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+
+            using var reader = await cmd.ExecuteReaderAsync(ct);
+            if (await reader.ReadAsync(ct))
+            {
+                var poModel = new PurchaseOrderModel
+                {
+                    Id = reader.GetInt32(0),
+                    PONumber = reader.GetString(1),
+                    SupplierId = reader.GetInt32(2),
+                    SupplierName = reader.GetString(3),
+                    Status = reader.GetString(4),
+                    TotalAmount = reader.GetDecimal(5),
+                    CreatedAt = reader.GetDateTime(6),
+                    ExpectedDeliveryDate = reader.IsDBNull(7) ? null : reader.GetDateTime(7),
+                    CreatedByName = reader.IsDBNull(8) ? "N/A" : reader.GetString(8)
+                };
+
+                reader.Close();
+
+                // Get PO items
+                var itemsSql = @"
+                    SELECT poi.id, poi.po_id, poi.variant_id, v.name as variant_name, p.name as product_name,
+                           poi.size_id, sz.name as size_name,
+                           poi.color_id, c.name as color_name, c.hex_value as color_hex,
+                           poi.quantity, poi.unit_price, poi.total_price, poi.received_quantity
+                    FROM dbo.tbl_po_items poi
+                    INNER JOIN dbo.tbl_variants v ON poi.variant_id = v.id
+                    INNER JOIN dbo.tbl_products p ON v.product_id = p.id
+                    LEFT JOIN dbo.tbl_sizes sz ON poi.size_id = sz.id
+                    LEFT JOIN dbo.tbl_colors c ON poi.color_id = c.id
+                    WHERE poi.po_id = @POId
+                    ORDER BY poi.id";
+
+                using var itemsCmd = new SqlCommand(itemsSql, conn);
+                itemsCmd.Parameters.AddWithValue("@POId", poModel.Id);
+
+                var items = new List<POItemModel>();
+                using var itemsReader = await itemsCmd.ExecuteReaderAsync(ct);
+                while (await itemsReader.ReadAsync(ct))
+                {
+                    items.Add(new POItemModel
+                    {
+                        Id = itemsReader.GetInt32(0),
+                        POId = itemsReader.GetInt32(1),
+                        VariantId = itemsReader.GetInt32(2),
+                        VariantName = itemsReader.GetString(3),
+                        ProductName = itemsReader.GetString(4),
+                        SizeId = itemsReader.IsDBNull(5) ? null : itemsReader.GetInt32(5),
+                        SizeName = itemsReader.IsDBNull(6) ? null : itemsReader.GetString(6),
+                        ColorId = itemsReader.IsDBNull(7) ? null : itemsReader.GetInt32(7),
+                        ColorName = itemsReader.IsDBNull(8) ? null : itemsReader.GetString(8),
+                        ColorHexValue = itemsReader.IsDBNull(9) ? null : itemsReader.GetString(9),
+                        Quantity = itemsReader.GetInt32(10),
+                        UnitPrice = itemsReader.GetDecimal(11),
+                        TotalPrice = itemsReader.GetDecimal(12),
+                        ReceivedQuantity = itemsReader.GetInt32(13)
+                    });
+                }
+
+                return new PurchaseOrderDetailsModel
+                {
+                    Id = poModel.Id,
+                    PONumber = poModel.PONumber,
+                    SupplierId = poModel.SupplierId,
+                    SupplierName = poModel.SupplierName,
+                    Status = poModel.Status,
+                    TotalAmount = poModel.TotalAmount,
+                    CreatedAt = poModel.CreatedAt,
+                    ExpectedDeliveryDate = poModel.ExpectedDeliveryDate,
+                    CreatedBy = 0, // Not available in this query
+                    CreatedByName = poModel.CreatedByName,
+                    Items = items
+                };
+            }
+
+            return null;
         }
     }
 }

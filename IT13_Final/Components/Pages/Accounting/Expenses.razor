@@ -1,0 +1,1193 @@
+@page "/accounting/financial/expenses"
+@layout IT13_Final.Components.Layout.Accounting.Accounting
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IT13_Final.Services.Data.IExpenseService ExpenseService
+@inject IT13_Final.Services.Audit.IHistoryService HistoryService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Nav
+@using Microsoft.Data.SqlClient
+@using Microsoft.AspNetCore.Components.Forms
+@using System.Linq
+@implements IDisposable
+
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Expenses</h1>
+        <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintReport" disabled="@isGeneratingPDF" title="Print Report">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 9V2h12v7"></path>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                <rect x="6" y="14" width="12" height="8"></rect>
+            </svg>
+        </button>
+    </div>
+</div>
+
+@* Search and Date Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.35-4.35"></path>
+        </svg>
+        <input type="text" id="expenses-search-input" class="search-input" placeholder="Search by description or expense type..." @bind="searchTerm" @bind:event="oninput" @bind:after="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            <button class="clear-search-btn" @onclick="HandleClearSearch" title="Clear">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        }
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date" 
+               class="date-input" 
+               value="@(startDate?.ToString("yyyy-MM-dd"))" 
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@(endDate?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd"))" 
+               @onchange="HandleFromDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date" 
+               class="date-input" 
+               value="@(endDate?.ToString("yyyy-MM-dd"))" 
+               min="@(startDate?.ToString("yyyy-MM-dd"))" 
+               max="@DateTime.Today.ToString("yyyy-MM-dd")" 
+               @onchange="HandleToDateChange" />
+        <button class="filter-btn" @onclick="ApplyDateFilter">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            Apply
+        </button>
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
+
+@* Summary Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Expenses Summary</h3>
+            <span class="card-subtitle">@totalCount total records</span>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <div class="summary-grid">
+            <div class="summary-box">
+                <div class="summary-label">Total Expenses</div>
+                <div class="summary-value">₱@totalExpenses.ToString("N2")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Total Records</div>
+                <div class="summary-value">@totalCount</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Avg Expense</div>
+                <div class="summary-value">₱@avgExpense.ToString("N2")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">This Month</div>
+                <div class="summary-value">₱@thisMonthExpenses.ToString("N2")</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Expenses List Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Expense Records</h3>
+            <span class="card-subtitle">@totalCount total expenses</span>
+        </div>
+        <div class="card-actions">
+            <button class="card-action-btn secondary" @onclick="NavigateToArchive">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect width="20" height="5" x="2" y="3" rx="1"></rect>
+                    <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"></path>
+                    <path d="M10 12h4"></path>
+                </svg>
+                <span>Archive</span>
+            </button>
+            <button class="card-action-btn primary" @onclick="OpenAddExpenseModal">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="16"></line>
+                    <line x1="8" y1="12" x2="16" y2="12"></line>
+                </svg>
+                <span>Add Expense</span>
+            </button>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Expense Type</th>
+                        <th>Amount</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (isLoading)
+                    {
+                        <tr>
+                            <td colspan="4" class="loading-cell">Loading expenses...</td>
+                        </tr>
+                    }
+                    else if (expenses.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="4" class="empty-cell">No expenses found for this filter.</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var expense in expenses)
+                        {
+                            <tr class="clickable-row" @onclick="() => HandleRowClick(expense.Id)">
+                                <td>
+                                    <div class="timestamp-info">
+                                        <div class="timestamp-date">@expense.ExpenseDate.ToString("MMM dd, yyyy")</div>
+                                    </div>
+                                </td>
+                                <td>@expense.ExpenseType</td>
+                                <td style="font-weight: 600; color: #dc3545;">₱@expense.Amount.ToString("N2")</td>
+                                <td class="actions-cell" @onclick:stopPropagation="true">
+                                    <button class="action-btn edit-btn" @onclick='() => EditExpense(expense.Id)' title="Edit Expense" disabled="@isProcessing">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
+                                            <path d="m15 5 4 4"></path>
+                                        </svg>
+                                    </button>
+                                    <button class="action-btn delete-btn" @onclick='() => DeleteExpense(expense.Id)' title="Archive Expense" disabled="@isProcessing">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <rect width="20" height="5" x="2" y="3" rx="1"></rect>
+                                            <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"></path>
+                                            <path d="M10 12h4"></path>
+                                        </svg>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                var pageNum = i;
+                @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
+                {
+                    <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 2 || i == currentPage + 2)
+                {
+                    <span class="page-ellipsis">...</span>
+                }
+            }
+
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+<!-- Add/Edit Expense Modal -->
+@if (showExpenseModal)
+{
+    <div class="modal-overlay" @onclick="CloseExpenseModal">
+        <div class="add-admin-modal" @onclick:stopPropagation style="max-width: 700px;">
+            <div class="modal-header">
+                <h2 class="modal-title-text">@(isEditing ? "Edit Expense" : "Add Expense")</h2>
+                <button class="modal-close-btn" @onclick="CloseExpenseModal" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="form-field full-width">
+                        <label class="field-label">Expense Category *</label>
+                        <select class="form-input" @bind="selectedCategory" @bind:after="HandleCategoryChange">
+                            <option value="">Select Category</option>
+                            <option value="Operating Expenses">Operating Expenses</option>
+                            <option value="Utilities Expenses">Utilities Expenses</option>
+                            <option value="Salaries and Wages">Salaries and Wages</option>
+                            <option value="Maintenance and Repairs">Maintenance and Repairs</option>
+                        </select>
+                    </div>
+
+                    <div class="form-field full-width">
+                        <label class="field-label">Expense Subcategory *</label>
+                        <select class="form-input" @bind="selectedSubcategory" @bind:after="HandleSubcategoryChange" disabled="@(string.IsNullOrEmpty(selectedCategory))">
+                            <option value="">Select Subcategory</option>
+                            @if (selectedCategory == "Operating Expenses")
+                            {
+                                <option value="Rent">Rent</option>
+                                <option value="Office Supplies">Office Supplies</option>
+                                <option value="Printing materials">Printing materials</option>
+                                <option value="Others">Others</option>
+                            }
+                            else if (selectedCategory == "Utilities Expenses")
+                            {
+                                <option value="Wifi/internet">Wifi/internet</option>
+                                <option value="Water">Water</option>
+                                <option value="Electricity">Electricity</option>
+                                <option value="Others">Others</option>
+                            }
+                            else if (selectedCategory == "Salaries and Wages")
+                            {
+                                <option value="Incentives">Incentives</option>
+                                <option value="Staff Salaries">Staff Salaries</option>
+                                <option value="Overtime Pay">Overtime Pay</option>
+                                <option value="Others">Others</option>
+                            }
+                            else if (selectedCategory == "Maintenance and Repairs")
+                            {
+                                <option value="Miscellaneous">Miscellaneous</option>
+                                <option value="General Supplies">General Supplies</option>
+                                <option value="Fixing Equipment">Fixing Equipment</option>
+                                <option value="Replacing Damaged Machine Repairs">Replacing Damaged Machine Repairs</option>
+                                <option value="Others">Others</option>
+                            }
+                        </select>
+                    </div>
+
+                                    @if (selectedSubcategory == "Others" && !string.IsNullOrEmpty(selectedCategory))
+                                    {
+                                        <div class="form-field full-width">
+                                            <label class="field-label">Specify Other Expense *</label>
+                                            <input type="text" class="form-input" @bind="othersSpecification" @bind:after="UpdateExpenseType" placeholder="Please specify..." />
+                                        </div>
+                                    }
+
+                    <div class="form-field">
+                        <label class="field-label">Amount *</label>
+                        <input type="number" class="form-input" @bind="expenseForm.Amount" step="0.01" min="0" placeholder="0.00" />
+                    </div>
+
+                    <div class="form-field">
+                        <label class="field-label">Date *</label>
+                        <input type="date" class="form-input" @bind="expenseForm.ExpenseDate" max="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                    </div>
+
+                    <div class="form-field full-width">
+                        <label class="field-label">Description</label>
+                        <textarea class="form-input" @bind="expenseForm.Description" @bind:after="UpdateExpenseType" rows="3" placeholder="Enter expense description..." style="resize: vertical;"></textarea>
+                    </div>
+
+                    <div class="form-field full-width">
+                        <label class="field-label">Receipt (Optional)</label>
+                        <InputFile OnChange="HandleFileChange" accept="image/*" class="form-input" />
+                        @if (!string.IsNullOrEmpty(expenseForm.ReceiptImage))
+                        {
+                            <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px;">
+                                <img src="@($"data:{expenseForm.ReceiptContentType};base64,{expenseForm.ReceiptImage}")" alt="Receipt preview" style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 1px solid #ddd;" />
+                                <button type="button" class="btn-secondary" @onclick="ClearReceipt" style="padding: 6px 16px; font-size: 13px;">Remove</button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="cancel-btn" @onclick="CloseExpenseModal" disabled="@isProcessing">Cancel</button>
+                <button class="save-admin-btn" @onclick="SaveExpense" disabled="@isProcessing">
+                    @(isProcessing ? "Saving..." : (isEditing ? "Update" : "Add Expense"))
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@* Expense Details Modal *@
+@if (showExpenseDetails && expenseDetails != null)
+{
+    <div class="modal-overlay" @onclick="CloseExpenseDetails">
+        <div class="modal-container" @onclick:stopPropagation>
+            <div class="modal-header">
+                <div class="modal-title">
+                    <svg class="modal-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                    </svg>
+                    <span>Expense Details</span>
+                </div>
+                <button class="modal-close" @onclick="CloseExpenseDetails" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                    <span class="modal-close-text">Close</span>
+                </button>
+            </div>
+
+            <div class="modal-content">
+                <div class="details-column">
+                    <div class="details-section">
+                        <div class="details-section-header">
+                            <span class="section-icon-emoji">💰</span>
+                            <span class="section-title">Expense Information</span>
+                        </div>
+                        <div class="details-list">
+                            <div class="detail-item">
+                                <span class="detail-label">Expense Type</span>
+                                <span class="detail-value">@expenseDetails.ExpenseType</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Amount</span>
+                                <span class="detail-value" style="font-weight: 600; color: #dc3545;">₱@expenseDetails.Amount.ToString("N2")</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Expense Date</span>
+                                <span class="detail-value">@expenseDetails.ExpenseDate.ToString("MMM dd, yyyy")</span>
+                            </div>
+                            @if (!string.IsNullOrEmpty(expenseDetails.Description))
+                            {
+                                <div class="detail-item">
+                                    <span class="detail-label">Description</span>
+                                    <span class="detail-value">@expenseDetails.Description</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <div class="details-column">
+                    <div class="details-section">
+                        <div class="details-section-header">
+                            <span class="section-icon-emoji">📋</span>
+                            <span class="section-title">Record Information</span>
+                        </div>
+                        <div class="details-list">
+                            <div class="detail-item">
+                                <span class="detail-label">Created By</span>
+                                <span class="detail-value">@expenseDetails.CreatedByName</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Created At</span>
+                                <span class="detail-value">@expenseDetails.CreatedAt.ToString("MMM dd, yyyy HH:mm:ss")</span>
+                            </div>
+                            @if (expenseDetails.UpdatedAt.HasValue)
+                            {
+                                <div class="detail-item">
+                                    <span class="detail-label">Updated At</span>
+                                    <span class="detail-value">@expenseDetails.UpdatedAt.Value.ToString("MMM dd, yyyy HH:mm:ss")</span>
+                                </div>
+                            }
+                            @if (!string.IsNullOrEmpty(expenseDetails.ReceiptImage))
+                            {
+                                <div class="detail-item">
+                                    <span class="detail-label">Receipt</span>
+                                    <span class="detail-value">
+                                        <div style="margin-top: 8px;">
+                                            <img src="@($"data:{expenseDetails.ReceiptContentType};base64,{expenseDetails.ReceiptImage}")" 
+                                                 alt="Receipt" 
+                                                 style="max-width: 300px; max-height: 300px; border-radius: 8px; border: 1px solid #ddd; cursor: pointer; display: block;" 
+                                                 @onclick="() => ViewReceipt(expenseDetails.Id)" />
+                                        </div>
+                                    </span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Receipt View Modal -->
+@if (showReceiptModal && !string.IsNullOrEmpty(viewingReceiptImage))
+{
+    <div class="modal-overlay" @onclick="CloseReceiptModal">
+        <div class="modal-container" @onclick:stopPropagation style="max-width: 800px;">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <svg class="modal-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                        <polyline points="21 15 16 10 5 21"></polyline>
+                    </svg>
+                    <span>Receipt</span>
+                </div>
+                <button class="modal-close" @onclick="CloseReceiptModal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                    <span class="modal-close-text">Close</span>
+                </button>
+            </div>
+            <div class="modal-content" style="text-align: center;">
+                <img src="@($"data:{viewingReceiptContentType};base64,{viewingReceiptImage}")" alt="Receipt" style="max-width: 100%; max-height: 70vh; border-radius: 8px;" />
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<IT13_Final.Services.Data.ExpenseModel> expenses = new();
+    private List<string> expenseTypes = new();
+    private string searchTerm = string.Empty;
+    private DateTime? startDate;
+    private DateTime? endDate;
+    private string selectedDateRange = string.Empty;
+    private string selectedExpenseType = string.Empty;
+
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue || !string.IsNullOrEmpty(selectedExpenseType);
+    private bool isLoading = false;
+    private bool isProcessing = false;
+    private bool isGeneratingPDF = false;
+    private int sellerUserId = 0;
+    
+    // Category/Subcategory selection
+    private string selectedCategory = string.Empty;
+    private string selectedSubcategory = string.Empty;
+    private string othersSpecification = string.Empty;
+    private System.Threading.Timer? _searchTimer;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling(totalCount / (double)pageSize);
+
+    // KPI values
+    private decimal totalExpenses = 0;
+    private decimal avgExpense = 0;
+    private decimal thisMonthExpenses = 0;
+
+    // Modal states
+    private bool showExpenseModal = false;
+    private bool isEditing = false;
+    private int editingExpenseId = 0;
+    private IT13_Final.Services.Data.CreateExpenseModel expenseForm = new();
+
+    // Receipt view
+    private bool showReceiptModal = false;
+    private string viewingReceiptImage = string.Empty;
+    private string viewingReceiptContentType = string.Empty;
+
+    // Expense details modal
+    private bool showExpenseDetails = false;
+    private IT13_Final.Services.Data.ExpenseModel? expenseDetails = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSellerUserId();
+        expenseTypes = await ExpenseService.GetExpenseTypesAsync();
+        await LoadExpenses();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JSRuntime.InvokeVoidAsync("setupSearchInputFilter", "expenses-search-input");
+        }
+    }
+
+    private async Task LoadSellerUserId()
+    {
+        if (AuthState.CurrentUser != null)
+        {
+            try
+            {
+                const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+                using var conn = new SqlConnection(connectionString);
+                await conn.OpenAsync();
+
+                var sql = "SELECT user_id FROM dbo.tbl_users WHERE id = @UserId AND archived_at IS NULL";
+                using var cmd = new SqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@UserId", AuthState.CurrentUser.Id);
+
+                var result = await cmd.ExecuteScalarAsync();
+                if (result != null && result != DBNull.Value)
+                {
+                    sellerUserId = Convert.ToInt32(result);
+                }
+            }
+            catch
+            {
+                sellerUserId = 0;
+            }
+        }
+    }
+
+    private async Task LoadExpenses()
+    {
+        if (sellerUserId <= 0)
+        {
+            await LoadSellerUserId();
+            if (sellerUserId <= 0)
+            {
+                await JSRuntime.InvokeVoidAsync("console.error", "Seller User ID not found.");
+                isLoading = false;
+                StateHasChanged();
+                return;
+            }
+        }
+
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            totalCount = await ExpenseService.GetExpensesCountAsync(
+                sellerUserId,
+                string.IsNullOrWhiteSpace(searchTerm) ? null : searchTerm,
+                string.IsNullOrWhiteSpace(selectedExpenseType) ? null : selectedExpenseType,
+                startDate,
+                endDate
+            );
+
+            expenses = await ExpenseService.GetExpensesAsync(
+                sellerUserId,
+                string.IsNullOrWhiteSpace(searchTerm) ? null : searchTerm,
+                string.IsNullOrWhiteSpace(selectedExpenseType) ? null : selectedExpenseType,
+                startDate,
+                endDate,
+                currentPage,
+                pageSize
+            );
+
+            // Calculate KPIs
+            totalExpenses = expenses.Sum(e => e.Amount);
+            avgExpense = expenses.Count > 0 ? totalExpenses / expenses.Count : 0;
+            var thisMonthStart = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+            thisMonthExpenses = expenses.Where(e => e.ExpenseDate >= thisMonthStart).Sum(e => e.Amount);
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading expenses: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading expenses: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleSearchInput()
+    {
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                currentPage = 1;
+                await LoadExpenses();
+            });
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _searchTimer?.Dispose();
+            currentPage = 1;
+            await LoadExpenses();
+        }
+    }
+
+    private async Task HandleClearSearch()
+    {
+        searchTerm = string.Empty;
+        currentPage = 1;
+        await LoadExpenses();
+    }
+
+    private async Task HandleDateRangeChange()
+    {
+        var today = DateTime.Today;
+        switch (selectedDateRange)
+        {
+            case "today":
+                startDate = today;
+                endDate = today;
+                break;
+            case "yesterday":
+                startDate = today.AddDays(-1);
+                endDate = today.AddDays(-1);
+                break;
+            case "last7days":
+                startDate = today.AddDays(-7);
+                endDate = today;
+                break;
+            case "last30days":
+                startDate = today.AddDays(-30);
+                endDate = today;
+                break;
+            case "thismonth":
+                startDate = new DateTime(today.Year, today.Month, 1);
+                endDate = today;
+                break;
+            case "thisyear":
+                startDate = new DateTime(today.Year, 1, 1);
+                endDate = today;
+                break;
+            default:
+                break;
+        }
+        currentPage = 1;
+        await LoadExpenses();
+    }
+
+    private void HandleFromDateChange(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        {
+            startDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(e.Value?.ToString()))
+        {
+            startDate = null;
+            selectedDateRange = "";
+        }
+    }
+
+    private void HandleToDateChange(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        {
+            endDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(e.Value?.ToString()))
+        {
+            endDate = null;
+            selectedDateRange = "";
+        }
+    }
+
+    private async Task ApplyDateFilter()
+    {
+        currentPage = 1;
+        await LoadExpenses();
+    }
+
+    private async Task HandleExpenseTypeChange()
+    {
+        currentPage = 1;
+        await LoadExpenses();
+    }
+
+    private async Task ClearDateFilter()
+    {
+        searchTerm = string.Empty;
+        startDate = null;
+        endDate = null;
+        selectedDateRange = string.Empty;
+        selectedExpenseType = string.Empty;
+        currentPage = 1;
+        await LoadExpenses();
+    }
+
+    private void OpenAddExpenseModal()
+    {
+        isEditing = false;
+        editingExpenseId = 0;
+        expenseForm = new IT13_Final.Services.Data.CreateExpenseModel
+        {
+            ExpenseDate = DateTime.Today
+        };
+        selectedCategory = string.Empty;
+        selectedSubcategory = string.Empty;
+        othersSpecification = string.Empty;
+        showExpenseModal = true;
+        StateHasChanged();
+    }
+    
+    private void HandleCategoryChange()
+    {
+        selectedSubcategory = string.Empty;
+        othersSpecification = string.Empty;
+        UpdateExpenseType();
+        StateHasChanged();
+    }
+    
+    private void HandleSubcategoryChange()
+    {
+        othersSpecification = string.Empty;
+        UpdateExpenseType();
+        StateHasChanged();
+    }
+    
+    private void UpdateExpenseType()
+    {
+        if (string.IsNullOrEmpty(selectedCategory) || string.IsNullOrEmpty(selectedSubcategory))
+        {
+            expenseForm.ExpenseType = string.Empty;
+            return;
+        }
+        
+        if (selectedSubcategory == "Others")
+        {
+            if (!string.IsNullOrWhiteSpace(othersSpecification))
+            {
+                expenseForm.ExpenseType = $"{selectedCategory} - Others - {othersSpecification}";
+            }
+            else
+            {
+                expenseForm.ExpenseType = $"{selectedCategory} - Others";
+            }
+        }
+        else
+        {
+            expenseForm.ExpenseType = $"{selectedCategory} - {selectedSubcategory}";
+        }
+    }
+
+    private async Task HandleRowClick(int expenseId)
+    {
+        try
+        {
+            if (sellerUserId > 0)
+            {
+                expenseDetails = await ExpenseService.GetExpenseByIdAsync(expenseId, sellerUserId);
+                if (expenseDetails != null)
+                {
+                    showExpenseDetails = true;
+                    StateHasChanged();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading expense details: {ex.Message}");
+        }
+    }
+
+    private void CloseExpenseDetails()
+    {
+        showExpenseDetails = false;
+        expenseDetails = null;
+        StateHasChanged();
+    }
+
+    private async Task EditExpense(int expenseId)
+    {
+        if (AuthState.CurrentUser == null) return;
+
+        try
+        {
+            var expense = await ExpenseService.GetExpenseByIdAsync(expenseId, sellerUserId);
+            if (expense != null)
+            {
+                isEditing = true;
+                editingExpenseId = expenseId;
+                expenseForm = new IT13_Final.Services.Data.CreateExpenseModel
+                {
+                    ExpenseType = expense.ExpenseType,
+                    Amount = expense.Amount,
+                    Description = expense.Description,
+                    ExpenseDate = expense.ExpenseDate,
+                    ReceiptImage = expense.ReceiptImage,
+                    ReceiptContentType = expense.ReceiptContentType
+                };
+                
+                // Parse expense type to extract category and subcategory
+                ParseExpenseType(expense.ExpenseType);
+                
+                showExpenseModal = true;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading expense: {ex.Message}");
+        }
+    }
+    
+    private void ParseExpenseType(string expenseType)
+    {
+        if (string.IsNullOrEmpty(expenseType))
+        {
+            selectedCategory = string.Empty;
+            selectedSubcategory = string.Empty;
+            othersSpecification = string.Empty;
+            return;
+        }
+        
+        var parts = expenseType.Split(new[] { " - " }, StringSplitOptions.None);
+        if (parts.Length >= 2)
+        {
+            selectedCategory = parts[0];
+            selectedSubcategory = parts[1];
+            
+            if (parts.Length > 2 && selectedSubcategory == "Others")
+            {
+                othersSpecification = string.Join(" - ", parts.Skip(2));
+            }
+            else
+            {
+                othersSpecification = string.Empty;
+            }
+        }
+        else
+        {
+            // Fallback for old format
+            selectedCategory = string.Empty;
+            selectedSubcategory = string.Empty;
+            othersSpecification = string.Empty;
+        }
+    }
+
+    private void CloseExpenseModal()
+    {
+        showExpenseModal = false;
+        isEditing = false;
+        editingExpenseId = 0;
+        expenseForm = new IT13_Final.Services.Data.CreateExpenseModel();
+        selectedCategory = string.Empty;
+        selectedSubcategory = string.Empty;
+        othersSpecification = string.Empty;
+        StateHasChanged();
+    }
+
+    private async Task HandleFileChange(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.File;
+            if (file != null && file.Size > 0)
+            {
+                using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024); // 5MB max
+                using var memoryStream = new MemoryStream();
+                await stream.CopyToAsync(memoryStream);
+                var bytes = memoryStream.ToArray();
+                expenseForm.ReceiptImage = Convert.ToBase64String(bytes);
+                expenseForm.ReceiptContentType = file.ContentType;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error uploading file: {ex.Message}");
+        }
+    }
+
+    private void ClearReceipt()
+    {
+        expenseForm.ReceiptImage = null;
+        expenseForm.ReceiptContentType = null;
+        StateHasChanged();
+    }
+
+    private async Task SaveExpense()
+    {
+        if (AuthState.CurrentUser == null) return;
+
+        if (string.IsNullOrEmpty(selectedCategory) || string.IsNullOrEmpty(selectedSubcategory))
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Please select both category and subcategory.");
+            return;
+        }
+        
+        if (selectedSubcategory == "Others" && string.IsNullOrWhiteSpace(othersSpecification))
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Please specify the other expense type.");
+            return;
+        }
+        
+        UpdateExpenseType();
+
+        if (expenseForm.Amount <= 0)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Please enter a valid amount.");
+            return;
+        }
+
+        isProcessing = true;
+        StateHasChanged();
+
+        try
+        {
+            bool success;
+            if (isEditing)
+            {
+                success = await ExpenseService.UpdateExpenseAsync(editingExpenseId, sellerUserId, expenseForm);
+                if (success)
+                {
+                    try
+                    {
+                        await HistoryService.LogAsync(
+                            AuthState.CurrentUser.Id,
+                            "update",
+                            "Expenses",
+                            $"Updated expense: {expenseForm.ExpenseType} - ₱{expenseForm.Amount:N2}"
+                        );
+                    }
+                    catch { }
+
+                    await JSRuntime.InvokeVoidAsync("alert", "Expense updated successfully!");
+                }
+                else
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", "Failed to update expense. Please try again.");
+                }
+            }
+            else
+            {
+                var expenseId = await ExpenseService.CreateExpenseAsync(sellerUserId, AuthState.CurrentUser.Id, expenseForm);
+                if (expenseId.HasValue)
+                {
+                    try
+                    {
+                        await HistoryService.LogAsync(
+                            AuthState.CurrentUser.Id,
+                            "create",
+                            "Expenses",
+                            $"Created expense: {expenseForm.ExpenseType} - ₱{expenseForm.Amount:N2}"
+                        );
+                    }
+                    catch { }
+
+                    await JSRuntime.InvokeVoidAsync("alert", "Expense added successfully!");
+                    success = true;
+                }
+                else
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", "Failed to add expense. Please try again.");
+                    success = false;
+                }
+            }
+
+            if (success)
+            {
+                CloseExpenseModal();
+                await LoadExpenses();
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error saving expense: {ex.Message}");
+        }
+        finally
+        {
+            isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DeleteExpense(int expenseId)
+    {
+        if (AuthState.CurrentUser == null) return;
+
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to archive this expense?");
+        if (!confirmed) return;
+
+        isProcessing = true;
+        StateHasChanged();
+
+        try
+        {
+            var expense = await ExpenseService.GetExpenseByIdAsync(expenseId, sellerUserId);
+            var success = await ExpenseService.DeleteExpenseAsync(expenseId, sellerUserId);
+
+            if (success)
+            {
+                try
+                {
+                    await HistoryService.LogAsync(
+                        AuthState.CurrentUser.Id,
+                        "archive",
+                        "Expenses",
+                        $"Archived expense: {expense?.ExpenseType ?? "Unknown"} - ₱{expense?.Amount:N2 ?? 0}"
+                    );
+                }
+                catch { }
+
+                await JSRuntime.InvokeVoidAsync("alert", "Expense deleted successfully!");
+                await LoadExpenses();
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Failed to delete expense. Please try again.");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error deleting expense: {ex.Message}");
+        }
+        finally
+        {
+            isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ViewReceipt(int expenseId)
+    {
+        try
+        {
+            var expense = await ExpenseService.GetExpenseByIdAsync(expenseId, sellerUserId);
+            if (expense != null && !string.IsNullOrEmpty(expense.ReceiptImage))
+            {
+                viewingReceiptImage = expense.ReceiptImage;
+                viewingReceiptContentType = expense.ReceiptContentType ?? "image/jpeg";
+                showReceiptModal = true;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading receipt: {ex.Message}");
+        }
+    }
+
+    private void CloseReceiptModal()
+    {
+        showReceiptModal = false;
+        viewingReceiptImage = string.Empty;
+        viewingReceiptContentType = string.Empty;
+        StateHasChanged();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages)
+        {
+            currentPage = page;
+            await LoadExpenses();
+        }
+    }
+
+    private void NavigateToArchive()
+    {
+        Nav.NavigateTo("/accounting/financial/expense-archive");
+    }
+
+    private string GetDateRangeText()
+    {
+        if (!startDate.HasValue && !endDate.HasValue)
+            return "All Time";
+        if (startDate.HasValue && endDate.HasValue)
+            return $"{startDate.Value:MMM d} - {endDate.Value:MMM d, yyyy}";
+        return "Custom Range";
+    }
+
+    private async Task PrintReport()
+    {
+        try
+        {
+            isGeneratingPDF = true;
+            StateHasChanged();
+
+            if (AuthState.CurrentUser != null)
+            {
+                await HistoryService.LogAsync(
+                    AuthState.CurrentUser.Id,
+                    "print",
+                    "Expenses",
+                    "Printed expenses report"
+                );
+            }
+
+            // Get all expenses for print (no pagination)
+            var allExpensesForPrint = await ExpenseService.GetExpensesAsync(
+                sellerUserId,
+                string.IsNullOrWhiteSpace(searchTerm) ? null : searchTerm,
+                string.IsNullOrWhiteSpace(selectedExpenseType) ? null : selectedExpenseType,
+                startDate,
+                endDate,
+                1,
+                10000
+            );
+
+            // Calculate KPIs for all expenses
+            var printTotalExpenses = allExpensesForPrint.Sum(e => e.Amount);
+            var printAvgExpense = allExpensesForPrint.Count > 0 ? printTotalExpenses / allExpensesForPrint.Count : 0;
+            var thisMonthStart = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+            var printThisMonthExpenses = allExpensesForPrint.Where(e => e.ExpenseDate >= thisMonthStart).Sum(e => e.Amount);
+
+            var reportData = new
+            {
+                title = "Expenses Report",
+                printedBy = AuthState.CurrentUser?.FullName ?? "Accounting",
+                printedAt = DateTime.Now.ToString("MMMM dd, yyyy hh:mm tt"),
+                dateRange = GetDateRangeText(),
+                
+                kpi = new
+                {
+                    totalExpenses = printTotalExpenses.ToString("N2"),
+                    totalRecords = allExpensesForPrint.Count.ToString(),
+                    avgExpense = printAvgExpense.ToString("N2"),
+                    thisMonthExpenses = printThisMonthExpenses.ToString("N2")
+                },
+                
+                expenses = allExpensesForPrint.Select(e => new
+                {
+                    date = e.ExpenseDate.ToString("MMM dd, yyyy"),
+                    type = e.ExpenseType,
+                    description = e.Description ?? "",
+                    amount = e.Amount.ToString("N2"),
+                    createdBy = e.CreatedByName,
+                    hasReceipt = !string.IsNullOrEmpty(e.ReceiptImage)
+                }).ToList()
+            };
+
+            await JSRuntime.InvokeVoidAsync("printExpenses", reportData);
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error printing report: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to generate PDF. Please try again.");
+        }
+        finally
+        {
+            isGeneratingPDF = false;
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+    }
+}
+

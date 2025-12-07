@@ -7,63 +7,138 @@
 @implements IDisposable
 @using System.Linq
 
-<h1 class="page-title">Sales Reports</h1>
-
-<div class="activity-log-container">
-    <div class="search-filters-row">
-        <div class="search-wrapper">
-            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"></circle>
-                <path d="m21 21-4.35-4.35"></path>
-            </svg>
-            <input type="text" class="search-input" placeholder="Search by sale number..." value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
-        </div>
-
-        <button class="print-btn" @onclick="PrintReport" disabled="@isGeneratingPDF">
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Sales Reports</h1>
+        <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintReport" disabled="@isGeneratingPDF" title="Print Report">
             @if (isGeneratingPDF)
             {
-                <span>Generating PDF...</span>
+                <span>Generating...</span>
             }
             else
             {
-                <svg class="print-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 9V2h12v7"></path>
                     <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
                     <rect x="6" y="14" width="12" height="8"></rect>
                 </svg>
-                <span>Print Report</span>
             }
         </button>
     </div>
+</div>
 
-    <div class="filters-section">
-        <div class="filter-content">
-            <div class="date-filters">
-                <div class="date-range-dropdown">
-                    <label>Quick Range</label>
-                    <select class="date-range-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
-                        <option value="">Custom</option>
-                        <option value="today">Today</option>
-                        <option value="yesterday">Yesterday</option>
-                        <option value="lastweek">Last Week</option>
-                        <option value="thismonth">This Month</option>
-                        <option value="thisyear">This Year</option>
-                    </select>
-                </div>
-                <div class="date-filter">
-                    <label>From</label>
-                    <input type="date" class="date-input" value="@(startDate?.ToString("yyyy-MM-dd"))" max="@(endDate?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd"))" @onchange="HandleFromDateChange" />
-                </div>
-                <div class="date-filter">
-                    <label>To</label>
-                    <input type="date" class="date-input" value="@(endDate?.ToString("yyyy-MM-dd"))" min="@(startDate?.ToString("yyyy-MM-dd"))" max="@DateTime.Today.ToString("yyyy-MM-dd")" @onchange="HandleToDateChange" />
-                </div>
+@* Search and Date Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.3-4.3"></path>
+        </svg>
+        <input type="text" 
+               id="sales-report-search-input"
+               class="search-input" 
+               placeholder="Search by sale number..." 
+               @bind="searchTerm" 
+               @bind:event="oninput" 
+               @bind:after="HandleSearchInput"
+               @onkeypress="HandleSearchKeyPress" />
+        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            <button class="clear-search-btn" @onclick="HandleClearSearch" title="Clear search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date"
+               class="date-input"
+               value="@(startDate?.ToString("yyyy-MM-dd"))"
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleStartDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date"
+               class="date-input"
+               value="@(endDate?.ToString("yyyy-MM-dd"))"
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleEndDateChange" />
+        <button class="filter-btn" @onclick="ApplyFilters">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            Apply
+        </button>
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
+
+@* Summary Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Sales Summary</h3>
+            <span class="card-subtitle">@totalCount total transactions</span>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <div class="summary-grid">
+            <div class="summary-box">
+                <div class="summary-label">Total Sales Amount</div>
+                <div class="summary-value">₱@totalSalesAmount.ToString("N2")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Total Transactions</div>
+                <div class="summary-value">@totalCount</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">VAT (12%)</div>
+                <div class="summary-value">₱@vatAmount.ToString("N2")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Admin Fee (2%)</div>
+                <div class="summary-value">₱@adminFeeAmount.ToString("N2")</div>
             </div>
         </div>
     </div>
+</div>
 
-    <div class="table-container">
-        <table class="activity-table">
+@* Sales List Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Sales List</h3>
+            <span class="card-subtitle">@totalCount sales found</span>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <table class="admin-table">
             <thead>
                 <tr>
                     <th>Sale Number</th>
@@ -77,13 +152,13 @@
                 @if (isLoading)
                 {
                     <tr>
-                        <td colspan="5" class="loading-cell">Loading...</td>
+                        <td colspan="5" class="loading-cell">Loading sales...</td>
                     </tr>
                 }
                 else if (sales.Count == 0)
                 {
                     <tr>
-                        <td colspan="5" class="empty-cell">No sales found</td>
+                        <td colspan="5" class="empty-cell">No sales found for this filter.</td>
                     </tr>
                 }
                 else
@@ -100,10 +175,10 @@
                                     <div class="timestamp-time">@sale.Timestamps.ToString("HH:mm:ss")</div>
                                 </div>
                             </td>
-                            <td @onclick:stopPropagation="true">
-                                <button class="print-row-btn" @onclick="() => HandlePrintSale(sale.Id)" title="Print Receipt">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                            <td class="actions-cell" @onclick:stopPropagation="true">
+                                <button class="action-btn print-row-btn" @onclick="() => HandlePrintSale(sale.Id)" title="Print Receipt">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M6 9V2h12v7"></path>
                                         <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
                                         <rect x="6" y="14" width="12" height="8"></rect>
                                     </svg>
@@ -119,15 +194,15 @@
     @if (totalPages > 1)
     {
         <div class="pagination">
-            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="15 18 9 12 15 6"></polyline>
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)" title="Previous page">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m15 18-6-6 6-6"></path>
                 </svg>
             </button>
 
             @for (int i = 1; i <= totalPages; i++)
             {
-                var pageNum = i; // Capture loop variable for lambda
+                var pageNum = i;
                 @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
                 {
                     <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
@@ -140,9 +215,9 @@
                 }
             }
 
-            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="9 18 15 12 9 6"></polyline>
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)" title="Next page">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m9 18 6-6-6-6"></path>
                 </svg>
             </button>
         </div>
@@ -152,13 +227,13 @@
 @if (showSaleDetailsModal && selectedSale != null)
 {
     <div class="modal-overlay" @onclick="CloseSaleDetailsModal">
-        <div class="modal-content" @onclick:stopPropagation>
+        <div class="add-admin-modal" @onclick:stopPropagation>
             <div class="modal-header">
-                <h3>Sale Details - @selectedSale.SaleNumber</h3>
-                <button class="modal-close" @onclick="CloseSaleDetailsModal">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                <h2 class="modal-title-text">Sale Details - @selectedSale.SaleNumber</h2>
+                <button class="modal-close-btn" @onclick="CloseSaleDetailsModal" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
                     </svg>
                 </button>
             </div>
@@ -234,15 +309,15 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn-print" @onclick="() => HandlePrintSale(selectedSale.Id)">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <button class="save-admin-btn" @onclick="() => HandlePrintSale(selectedSale.Id)">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="6 9 6 2 18 2 18 9"></polyline>
                         <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
                         <rect x="6" y="14" width="12" height="8"></rect>
                     </svg>
-                    Print Receipt
+                    <span>Print Receipt</span>
                 </button>
-                <button class="btn-close" @onclick="CloseSaleDetailsModal">Close</button>
+                <button class="cancel-btn" @onclick="CloseSaleDetailsModal">Close</button>
             </div>
         </div>
     </div>
@@ -250,11 +325,15 @@
 
 @code {
     private List<IT13_Final.Services.Data.SaleReportModel> sales = new();
+    private List<IT13_Final.Services.Data.SaleReportModel> allSalesForPrint = new();
     private string searchTerm = string.Empty;
     private DateTime? startDate;
     private DateTime? endDate;
     private string selectedDateRange = string.Empty;
+
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue;
     private bool isLoading = false;
+    private bool isGeneratingPDF = false;
     private int currentPage = 1;
     private int pageSize = 10;
     private int totalCount = 0;
@@ -263,12 +342,22 @@
     private bool showSaleDetailsModal = false;
     private IT13_Final.Services.Data.SaleReportModel? selectedSale = null;
     private List<IT13_Final.Services.Data.SaleReportItemModel> saleItems = new();
-    private List<IT13_Final.Services.Data.SaleReportModel> allSalesForPrint = new();
-    private bool isGeneratingPDF = false;
+
+    private decimal totalSalesAmount = 0m;
+    private decimal vatAmount = 0m;
+    private decimal adminFeeAmount = 0m;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadSales();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JSRuntime.InvokeVoidAsync("setupSearchInputFilter", "sales-report-search-input");
+        }
     }
 
     private async Task LoadSales()
@@ -281,22 +370,32 @@
             var cashierUserId = AuthState.CurrentUser?.Id ?? 0;
             if (cashierUserId > 0)
             {
-                totalCount = await SalesService.GetSalesCountForReportsAsync(cashierUserId, searchTerm, startDate, endDate);
-                sales = await SalesService.GetSalesForReportsAsync(cashierUserId, searchTerm, startDate, endDate, currentPage, pageSize);
+                totalCount = await SalesService.GetSalesCountForReportsAsync(cashierUserId, searchTerm, startDate, endDate, false);
+                sales = await SalesService.GetSalesForReportsAsync(cashierUserId, searchTerm, startDate, endDate, false, currentPage, pageSize);
 
                 if (currentPage > totalPages && totalPages > 0)
                 {
                     currentPage = totalPages;
-                    sales = await SalesService.GetSalesForReportsAsync(cashierUserId, searchTerm, startDate, endDate, currentPage, pageSize);
+                    sales = await SalesService.GetSalesForReportsAsync(cashierUserId, searchTerm, startDate, endDate, false, currentPage, pageSize);
                 }
+
+                // Calculate summary statistics
+                totalSalesAmount = sales.Sum(s => s.Amount);
+                vatAmount = totalSalesAmount * 0.12m;
+                
+                // Calculate Admin Fee (2% on total sales)
+                adminFeeAmount = totalSalesAmount * 0.02m;
             }
         }
         catch (Exception ex)
         {
             await JSRuntime.InvokeVoidAsync("console.error", $"Error loading sales: {ex.Message}");
-            await JSRuntime.InvokeVoidAsync("alert", "Failed to load sales. Please try again.");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to load sales reports. Please try again.");
             sales = new List<IT13_Final.Services.Data.SaleReportModel>();
             totalCount = 0;
+            totalSalesAmount = 0;
+            vatAmount = 0;
+            adminFeeAmount = 0;
         }
         finally
         {
@@ -305,92 +404,82 @@
         }
     }
 
-    private async Task HandleFromDateChange(ChangeEventArgs e)
+    private async void HandleStartDateChange(ChangeEventArgs e)
     {
-        selectedDateRange = string.Empty; // Reset dropdown when manually changing dates
-        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
         {
-            startDate = date.Date;
-            // If endDate is before startDate, reset endDate
-            if (endDate.HasValue && endDate.Value < startDate.Value)
-            {
-                endDate = null;
-            }
+            startDate = date;
+            selectedDateRange = "";
         }
-        else
+        else if (string.IsNullOrWhiteSpace(value))
         {
             startDate = null;
+            selectedDateRange = "";
         }
         await ApplyFilters();
     }
 
-    private async Task HandleToDateChange(ChangeEventArgs e)
+    private async void HandleEndDateChange(ChangeEventArgs e)
     {
-        selectedDateRange = string.Empty; // Reset dropdown when manually changing dates
-        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
         {
-            var dateValue = date.Date;
-            // Ensure toDate is not before fromDate
-            if (startDate.HasValue && dateValue < startDate.Value)
-            {
-                // Don't allow toDate to be set before fromDate
-                return;
-            }
-            endDate = dateValue;
+            endDate = date;
+            selectedDateRange = "";
         }
-        else
+        else if (string.IsNullOrWhiteSpace(value))
         {
             endDate = null;
+            selectedDateRange = "";
         }
         await ApplyFilters();
     }
 
     private async Task HandleDateRangeChange()
     {
-        var today = DateTime.Today;
-        
+        var now = DateTime.Now;
         switch (selectedDateRange)
         {
+            case "":
+                startDate = null;
+                endDate = null;
+                break;
             case "today":
-                startDate = today;
-                endDate = today;
+                startDate = now.Date;
+                endDate = now.Date;
                 break;
             case "yesterday":
-                startDate = today.AddDays(-1);
-                endDate = today.AddDays(-1);
+                startDate = now.Date.AddDays(-1);
+                endDate = now.Date.AddDays(-1);
                 break;
-            case "lastweek":
-                startDate = today.AddDays(-7);
-                endDate = today;
+            case "last7days":
+                startDate = now.Date.AddDays(-6);
+                endDate = now.Date;
+                break;
+            case "last30days":
+                startDate = now.Date.AddDays(-29);
+                endDate = now.Date;
                 break;
             case "thismonth":
-                startDate = new DateTime(today.Year, today.Month, 1);
-                endDate = today;
+                startDate = new DateTime(now.Year, now.Month, 1);
+                endDate = now.Date;
                 break;
             case "thisyear":
-                startDate = new DateTime(today.Year, 1, 1);
-                endDate = today;
-                break;
-            default:
-                // Custom - don't change dates
+                startDate = new DateTime(now.Year, 1, 1);
+                endDate = now.Date;
                 break;
         }
-        
-        try
-        {
-            if (AuthState.CurrentUser != null && !string.IsNullOrEmpty(selectedDateRange))
-            {
-                await HistoryService.LogAsync(
-                    AuthState.CurrentUser.Id,
-                    "filter",
-                    "Sales_Report",
-                    $"Changed date range filter to: {selectedDateRange}"
-                );
-            }
-        }
-        catch { }
-        
         await ApplyFilters();
+    }
+
+    private async Task ClearDateFilter()
+    {
+        selectedDateRange = "";
+        startDate = null;
+        endDate = null;
+        currentPage = 1;
+        await LoadSales();
     }
 
     private async Task ApplyFilters()
@@ -399,31 +488,27 @@
         await LoadSales();
     }
 
-    private void HandleSearchInput(ChangeEventArgs e)
+    private void HandleSearchInput()
     {
-        searchTerm = e.Value?.ToString() ?? string.Empty;
+        var filtered = System.Text.RegularExpressions.Regex.Replace(searchTerm, @"[^a-zA-Z0-9\s\-_]", "");
+        if (filtered != searchTerm)
+        {
+            searchTerm = filtered;
+        }
+
         _searchTimer?.Dispose();
         _searchTimer = new System.Threading.Timer(async _ =>
         {
             currentPage = 1;
-            await InvokeAsync(async () =>
-            {
-                try
-                {
-                    if (AuthState.CurrentUser != null && !string.IsNullOrWhiteSpace(searchTerm))
-                    {
-                        await HistoryService.LogAsync(
-                            AuthState.CurrentUser.Id,
-                            "search",
-                            "Sales_Report",
-                            $"Searched sales report: {searchTerm}"
-                        );
-                    }
-                }
-                catch { }
-                await LoadSales();
-            });
+            await InvokeAsync(LoadSales);
         }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task HandleClearSearch()
+    {
+        searchTerm = string.Empty;
+        currentPage = 1;
+        await LoadSales();
     }
 
     private async Task HandleSearchKeyPress(KeyboardEventArgs e)
@@ -437,13 +522,10 @@
 
     private async Task GoToPage(int page)
     {
-        if (page >= 1 && page <= totalPages)
+        if (page >= 1 && page <= totalPages && page != currentPage)
         {
-            if (page != currentPage)
-            {
-                currentPage = page;
-                await LoadSales();
-            }
+            currentPage = page;
+            await LoadSales();
         }
     }
 
@@ -468,7 +550,6 @@
             saleItems = await SalesService.GetSaleItemsForReportAsync(saleId);
             showSaleDetailsModal = true;
             
-            // Log view action
             try
             {
                 if (AuthState.CurrentUser != null)
@@ -525,7 +606,6 @@
                 return;
             }
 
-            // Prepare receipt data
             var receiptData = new
             {
                 saleNumber = sale.SaleNumber,
@@ -547,10 +627,8 @@
                 referenceNumber = sale.ReferenceNumber
             };
 
-            // Call JavaScript print function
             await JSRuntime.InvokeVoidAsync("printReceipt", receiptData);
             
-            // Log print action
             try
             {
                 if (AuthState.CurrentUser != null)
@@ -579,13 +657,11 @@
             isGeneratingPDF = true;
             StateHasChanged();
 
-            // Fetch all sales without pagination
             var cashierUserId = AuthState.CurrentUser?.Id ?? 0;
             if (cashierUserId > 0)
             {
-                allSalesForPrint = await SalesService.GetSalesForReportsAsync(cashierUserId, searchTerm, startDate, endDate, 1, 10000);
+                allSalesForPrint = await SalesService.GetSalesForReportsAsync(cashierUserId, searchTerm, startDate, endDate, false, 1, 10000);
                 
-                // Generate PDF and print
                 await JSRuntime.InvokeVoidAsync("generateAndPrintSalesReport", 
                     allSalesForPrint.Select(sale => new {
                         saleNumber = sale.SaleNumber,
@@ -600,7 +676,6 @@
                     endDate?.ToString("MMM dd, yyyy") ?? "Today"
                 );
                 
-                // Log print report action
                 try
                 {
                     if (AuthState.CurrentUser != null)
@@ -619,8 +694,7 @@
         catch (Exception ex)
         {
             await JSRuntime.InvokeVoidAsync("console.error", $"Error generating report: {ex.Message}");
-            // Fallback to regular print if PDF generation fails
-            await JSRuntime.InvokeVoidAsync("window.print");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to generate PDF. Please try again.");
         }
         finally
         {
@@ -634,4 +708,3 @@
         _searchTimer?.Dispose();
     }
 }
-

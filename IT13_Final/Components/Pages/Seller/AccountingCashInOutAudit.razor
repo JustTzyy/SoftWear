@@ -1,0 +1,763 @@
+@page "/seller/AccountingCashInOutAudit"
+@layout IT13_Final.Components.Layout.Seller.Seller
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IT13_Final.Services.Audit.IHistoryService HistoryService
+@inject IJSRuntime JSRuntime
+@inject IT13_Final.Services.Data.ICashflowAuditService CashflowAuditService
+
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Cash-in / Cash-out Audit</h1>
+        <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintCashflow" disabled="@isGeneratingPDF" title="Print Report">
+            @if (isGeneratingPDF)
+            {
+                <span>Generating...</span>
+            }
+            else
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 9V2h12v7"></path>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+            }
+        </button>
+    </div>
+</div>
+
+@* Search and Date Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper" style="flex: 1;">
+        <!-- Reserved for future search -->
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date" 
+               class="date-input" 
+               value="@(startDate?.ToString("yyyy-MM-dd"))" 
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@(endDate?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd"))" 
+               @onchange="HandleFromDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date" 
+               class="date-input" 
+               value="@(endDate?.ToString("yyyy-MM-dd"))" 
+               min="@(startDate?.ToString("yyyy-MM-dd"))" 
+               max="@DateTime.Today.ToString("yyyy-MM-dd")" 
+               @onchange="HandleToDateChange" />
+        <select class="date-select" @bind="selectedCashierId" @bind:after="HandleCashierChange" style="min-width: 150px;">
+            <option value="">All Cashiers</option>
+            @foreach (var cashier in cashiers)
+            {
+                <option value="@cashier.Id">@cashier.Name</option>
+            }
+        </select>
+        <select class="date-select" @bind="selectedAccountingUserId" @bind:after="HandleAccountingChange" style="min-width: 150px;">
+            <option value="">All Accounting</option>
+            @foreach (var acc in accountingUsers)
+            {
+                <option value="@acc.Id">@acc.Name</option>
+            }
+        </select>
+        <button class="filter-btn" @onclick="ApplyFilters">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            Apply
+        </button>
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearFilters" title="Clear">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
+
+@* Summary Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Audit Summary</h3>
+            <span class="card-subtitle">@GetDateRangeText()</span>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <div class="summary-grid">
+            <div class="summary-box">
+                <div class="summary-label">Cash-in</div>
+                <div class="summary-value" style="color: #10B981;">₱@totalCashIn.ToString("N2")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Cash-out</div>
+                <div class="summary-value" style="color: #dc3545;">₱@totalCashOut.ToString("N2")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Net Cash Movement</div>
+                <div class="summary-value" style="color: @(netCashMovement >= 0 ? "#10B981" : "#dc3545");">
+                    ₱@netCashMovement.ToString("N2")
+                </div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">VAT (12%)</div>
+                <div class="summary-value">₱@vatAmount.ToString("N2")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Admin Fee (2%)</div>
+                <div class="summary-value">₱@adminFeeAmount.ToString("N2")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Total Records</div>
+                <div class="summary-value">@(totalCashInCount + totalCashOutCount)</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="content-card">
+        <div class="card-body">
+            <div class="loading-cell">Loading cash movements...</div>
+        </div>
+    </div>
+}
+else
+{
+    @* Cash-in / Cash-out Details Card *@
+    <div class="content-card">
+        <div class="card-header">
+            <div class="card-title-section">
+                <h3 class="card-title">Cash Movements</h3>
+                <span class="card-subtitle">@GetDateRangeText()</span>
+            </div>
+        </div>
+        
+        <div class="card-body" style="padding: 0;">
+            <div style="display: flex; flex-direction: column; gap: 32px;">
+                <div style="width: 100%;">
+                    <div style="padding: 24px 24px 16px 24px;">
+                        <h4 style="margin-bottom: 16px; font-size: 16px; font-weight: 700; color: #1f2937;">Cash-in (Money added to drawer)</h4>
+                    </div>
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Cashier / Accounting</th>
+                                <th>Source</th>
+                                <th>Module</th>
+                                <th>Reference</th>
+                                <th>Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (cashInMovements.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="6" class="empty-cell">No cash-in records for this filter.</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var m in cashInMovements)
+                                {
+                                    <tr>
+                                        <td>
+                                            <div class="timestamp-info">
+                                                <div class="timestamp-date">@m.Timestamp.ToString("MMM dd, yyyy")</div>
+                                                <div class="timestamp-time">@m.Timestamp.ToString("HH:mm")</div>
+                                            </div>
+                                        </td>
+                                        <td>@m.CashierName</td>
+                                        <td>@m.Source</td>
+                                        <td>@m.Module</td>
+                                        <td>@(m.Reference ?? "-")</td>
+                                        <td style="text-align: right; font-weight: 600; color: #10B981;">₱@m.Amount.ToString("N2")</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+
+                    @if (totalCashInPages > 1)
+                    {
+                        <div class="pagination">
+                            <button class="page-btn" @onclick="() => GoToCashInPage(currentCashInPage - 1)" disabled="@(currentCashInPage == 1)">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="15 18 9 12 15 6"></polyline>
+                                </svg>
+                            </button>
+
+                            @for (int i = 1; i <= totalCashInPages; i++)
+                            {
+                                var pageNum = i;
+                                @if (i == 1 || i == totalCashInPages || (i >= currentCashInPage - 1 && i <= currentCashInPage + 1))
+                                {
+                                    <button class="page-btn @(i == currentCashInPage ? "active" : "")" @onclick="() => GoToCashInPage(pageNum)">
+                                        @i
+                                    </button>
+                                }
+                                else if (i == currentCashInPage - 2 || i == currentCashInPage + 2)
+                                {
+                                    <span class="page-ellipsis">...</span>
+                                }
+                            }
+
+                            <button class="page-btn" @onclick="() => GoToCashInPage(currentCashInPage + 1)" disabled="@(currentCashInPage == totalCashInPages)">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="9 18 15 12 9 6"></polyline>
+                                </svg>
+                            </button>
+                        </div>
+                    }
+                </div>
+
+                <div style="width: 100%;">
+                    <div style="padding: 24px 24px 16px 24px;">
+                        <h4 style="margin-bottom: 16px; font-size: 16px; font-weight: 700; color: #1f2937;">Cash-out (Money removed from drawer)</h4>
+                    </div>
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Cashier / Accounting</th>
+                                <th>Source</th>
+                                <th>Module</th>
+                                <th>Reference</th>
+                                <th>Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (cashOutMovements.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="6" class="empty-cell">No cash-out records for this filter.</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var m in cashOutMovements)
+                                {
+                                    <tr>
+                                        <td>
+                                            <div class="timestamp-info">
+                                                <div class="timestamp-date">@m.Timestamp.ToString("MMM dd, yyyy")</div>
+                                                <div class="timestamp-time">@m.Timestamp.ToString("HH:mm")</div>
+                                            </div>
+                                        </td>
+                                        <td>@m.CashierName</td>
+                                        <td>@m.Source</td>
+                                        <td>@m.Module</td>
+                                        <td>@(m.Reference ?? "-")</td>
+                                        <td style="text-align: right; font-weight: 600; color: #dc3545;">₱@m.Amount.ToString("N2")</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+
+                    @if (totalCashOutPages > 1)
+                    {
+                        <div class="pagination">
+                            <button class="page-btn" @onclick="() => GoToCashOutPage(currentCashOutPage - 1)" disabled="@(currentCashOutPage == 1)">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="15 18 9 12 15 6"></polyline>
+                                </svg>
+                            </button>
+
+                            @for (int i = 1; i <= totalCashOutPages; i++)
+                            {
+                                var pageNum = i;
+                                @if (i == 1 || i == totalCashOutPages || (i >= currentCashOutPage - 1 && i <= currentCashOutPage + 1))
+                                {
+                                    <button class="page-btn @(i == currentCashOutPage ? "active" : "")" @onclick="() => GoToCashOutPage(pageNum)">
+                                        @i
+                                    </button>
+                                }
+                                else if (i == currentCashOutPage - 2 || i == currentCashOutPage + 2)
+                                {
+                                    <span class="page-ellipsis">...</span>
+                                }
+                            }
+
+                            <button class="page-btn" @onclick="() => GoToCashOutPage(currentCashOutPage + 1)" disabled="@(currentCashOutPage == totalCashOutPages)">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="9 18 15 12 9 6"></polyline>
+                                </svg>
+                            </button>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private class CashierOption
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+    }
+
+    private bool isLoading = false;
+    private DateTime? startDate;
+    private DateTime? endDate;
+    private string selectedDateRange = string.Empty;
+    private int? selectedCashierId = null;
+    private int? selectedAccountingUserId = null;
+    private const bool onlyApprovedDays = true; // Default to only show approved daily sales verification
+
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue || selectedCashierId.HasValue || selectedAccountingUserId.HasValue;
+
+    private int sellerUserId = 0;
+
+    private List<CashierOption> cashiers = new();
+    private List<CashierOption> accountingUsers = new();
+    private List<IT13_Final.Services.Data.CashMovementModel> allMovements = new();
+    private List<IT13_Final.Services.Data.CashMovementModel> cashInMovements = new();
+    private List<IT13_Final.Services.Data.CashMovementModel> cashOutMovements = new();
+
+    private decimal totalCashIn;
+    private decimal totalCashOut;
+    private decimal netCashMovement;
+    private decimal vatAmount = 0m;
+    private decimal adminFeeAmount = 0m;
+
+    private int currentCashInPage = 1;
+    private int currentCashOutPage = 1;
+    private int pageSize = 10;
+
+    private int totalCashInCount = 0;
+    private int totalCashOutCount = 0;
+    private int totalCashInPages => (int)Math.Ceiling(totalCashInCount / (double)pageSize);
+    private int totalCashOutPages => (int)Math.Ceiling(totalCashOutCount / (double)pageSize);
+
+    private bool isGeneratingPDF = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // For seller audit, use the seller's own tbl_users.id
+        sellerUserId = AuthState.CurrentUser?.Id ?? 0;
+        if (sellerUserId > 0)
+        {
+            await ApplyFilters();
+        }
+    }
+
+    private async Task ApplyFilters()
+    {
+        if (sellerUserId <= 0)
+        {
+            sellerUserId = AuthState.CurrentUser?.Id ?? 0;
+            if (sellerUserId <= 0)
+            {
+                return;
+            }
+        }
+
+        isLoading = true;
+        StateHasChanged();
+
+        allMovements = await CashflowAuditService.GetMovementsAsync(
+            sellerUserId,
+            selectedCashierId,
+            startDate,
+            endDate
+        );
+        
+        var query = allMovements.AsEnumerable();
+
+        if (startDate.HasValue)
+        {
+            query = query.Where(m => m.Timestamp.Date >= startDate.Value.Date);
+        }
+
+        if (endDate.HasValue)
+        {
+            query = query.Where(m => m.Timestamp.Date <= endDate.Value.Date);
+        }
+
+        if (selectedCashierId.HasValue)
+        {
+            query = query.Where(m => m.CashierUserId == selectedCashierId.Value);
+        }
+
+        if (selectedAccountingUserId.HasValue)
+        {
+            query = query.Where(m => m.CashierUserId == selectedAccountingUserId.Value);
+        }
+
+        var filtered = query.OrderBy(m => m.Timestamp).ToList();
+
+        // Build cashier dropdown options from cashier-side movements only (Sales / Returns)
+        if (cashiers.Count == 0)
+        {
+            var cashierCandidates = filtered
+                .Where(m => m.Module == "Sales" || m.Module == "Returns");
+
+            cashiers = cashierCandidates
+                .GroupBy(m => new { m.CashierUserId, m.CashierName })
+                .Select(g => new CashierOption
+                {
+                    Id = g.Key.CashierUserId,
+                    Name = g.Key.CashierName
+                })
+                .OrderBy(c => c.Name)
+                .ToList();
+        }
+
+        // Build accounting dropdown options from accounting-side movements (Expenses / Supplier Payments)
+        if (accountingUsers.Count == 0)
+        {
+            var accountingCandidates = filtered
+                .Where(m => m.Module == "Expenses" || m.Module == "Supplier Payments");
+
+            accountingUsers = accountingCandidates
+                .GroupBy(m => new { m.CashierUserId, m.CashierName })
+                .Select(g => new CashierOption
+                {
+                    Id = g.Key.CashierUserId,
+                    Name = g.Key.CashierName
+                })
+                .OrderBy(c => c.Name)
+                .ToList();
+        }
+
+        // Totals for the summary are based on the full filtered list
+        totalCashIn = filtered.Where(m => m.IsCashIn).Sum(m => m.Amount);
+        totalCashOut = filtered.Where(m => !m.IsCashIn).Sum(m => m.Amount);
+        netCashMovement = totalCashIn - totalCashOut;
+
+        // Calculate VAT and Admin Fee from cash sales
+        await CalculateTaxAmounts();
+
+        var filteredCashIn = filtered.Where(m => m.IsCashIn).ToList();
+        var filteredCashOut = filtered.Where(m => !m.IsCashIn).ToList();
+
+        totalCashInCount = filteredCashIn.Count;
+        totalCashOutCount = filteredCashOut.Count;
+
+        if (totalCashInPages == 0) currentCashInPage = 1;
+        if (currentCashInPage > totalCashInPages) currentCashInPage = totalCashInPages;
+        if (currentCashInPage < 1) currentCashInPage = 1;
+
+        if (totalCashOutPages == 0) currentCashOutPage = 1;
+        if (currentCashOutPage > totalCashOutPages) currentCashOutPage = totalCashOutPages;
+        if (currentCashOutPage < 1) currentCashOutPage = 1;
+
+        var inOffset = (currentCashInPage - 1) * pageSize;
+        var outOffset = (currentCashOutPage - 1) * pageSize;
+
+        cashInMovements = filteredCashIn.Skip(inOffset).Take(pageSize).ToList();
+        cashOutMovements = filteredCashOut.Skip(outOffset).Take(pageSize).ToList();
+
+        isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task HandleDateRangeChange()
+    {
+        var today = DateTime.Today;
+        switch (selectedDateRange)
+        {
+            case "":
+                startDate = null;
+                endDate = null;
+                break;
+            case "today":
+                startDate = today;
+                endDate = today;
+                break;
+            case "yesterday":
+                startDate = today.AddDays(-1);
+                endDate = today.AddDays(-1);
+                break;
+            case "last7days":
+                startDate = today.AddDays(-7);
+                endDate = today;
+                break;
+            case "last30days":
+                startDate = today.AddDays(-30);
+                endDate = today;
+                break;
+            case "thismonth":
+                startDate = new DateTime(today.Year, today.Month, 1);
+                endDate = today;
+                break;
+            case "thisyear":
+                startDate = new DateTime(today.Year, 1, 1);
+                endDate = today;
+                break;
+        }
+        await ApplyFilters();
+    }
+
+    private async Task HandleFromDateChange(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        {
+            startDate = date;
+            selectedDateRange = string.Empty;
+            await ApplyFilters();
+        }
+    }
+
+    private async Task HandleToDateChange(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        {
+            endDate = date;
+            selectedDateRange = string.Empty;
+            await ApplyFilters();
+        }
+    }
+
+    private async Task HandleCashierChange()
+    {
+        // When filtering by cashier, clear accounting filter
+        selectedAccountingUserId = null;
+        await ApplyFilters();
+    }
+
+    private async Task HandleAccountingChange()
+    {
+        // When filtering by accounting, clear cashier filter
+        selectedCashierId = null;
+        await ApplyFilters();
+    }
+
+    private async Task ClearFilters()
+    {
+        startDate = null;
+        endDate = null;
+        selectedCashierId = null;
+        selectedAccountingUserId = null;
+        selectedDateRange = string.Empty;
+        currentCashInPage = 1;
+        currentCashOutPage = 1;
+        await ApplyFilters();
+    }
+
+    private async Task GoToCashInPage(int page)
+    {
+        if (page >= 1 && page <= totalCashInPages)
+        {
+            currentCashInPage = page;
+            await ApplyFilters();
+        }
+    }
+
+    private async Task GoToCashOutPage(int page)
+    {
+        if (page >= 1 && page <= totalCashOutPages)
+        {
+            currentCashOutPage = page;
+            await ApplyFilters();
+        }
+    }
+
+    private async Task CalculateTaxAmounts()
+    {
+        try
+        {
+            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+            using var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            // Get total sales from cash payments within the date range
+            var sql = @"
+                SELECT 
+                    SUM(p.amount_paid) as total_sales,
+                    SUM(si.subtotal) as total_revenue
+                FROM dbo.tbl_payments p
+                INNER JOIN dbo.tbl_sales s ON p.sale_id = s.id
+                INNER JOIN dbo.tbl_sales_items si ON s.id = si.sale_id
+                INNER JOIN dbo.tbl_users u ON s.user_id = u.id
+                WHERE p.payment_method = 'Cash'
+                AND s.status = 'Completed'
+                AND s.archives IS NULL
+                AND p.archives IS NULL
+                AND si.archives IS NULL
+                AND u.archived_at IS NULL";
+
+            if (sellerUserId > 0)
+            {
+                sql += " AND u.user_id = @SellerUserId";
+            }
+
+            if (startDate.HasValue)
+            {
+                sql += " AND CAST(s.timestamps AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                sql += " AND CAST(s.timestamps AS DATE) <= @EndDate";
+            }
+
+            // Filter by approved daily sales verification
+            if (onlyApprovedDays)
+            {
+                sql += @"
+                    AND EXISTS (
+                        SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
+                        WHERE dsv.cashier_user_id = s.user_id
+                        AND CAST(dsv.sale_date AS DATE) = CAST(s.timestamps AS DATE)
+                        AND dsv.status = 'Approved'
+                        AND dsv.archived_at IS NULL";
+                if (sellerUserId > 0)
+                {
+                    sql += " AND dsv.seller_user_id = @SellerUserId";
+                }
+                sql += ")";
+            }
+
+            using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
+            if (sellerUserId > 0)
+            {
+                cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+            }
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+            }
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                var totalSales = reader.IsDBNull(0) ? 0m : reader.GetDecimal(0);
+                var totalRevenue = reader.IsDBNull(1) ? 0m : reader.GetDecimal(1);
+
+                // VAT is 12% on total sales
+                vatAmount = totalSales * 0.12m;
+
+                // Admin Fee is 2% on total product revenue
+                adminFeeAmount = totalRevenue * 0.02m;
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error calculating tax amounts: {ex.Message}");
+            vatAmount = 0m;
+            adminFeeAmount = 0m;
+        }
+    }
+
+    private string GetDateRangeText()
+    {
+        if (!startDate.HasValue && !endDate.HasValue)
+            return "All Time";
+        if (startDate.HasValue && endDate.HasValue)
+            return $"{startDate.Value:MMM d} - {endDate.Value:MMM d, yyyy}";
+        return "Custom Range";
+    }
+
+    private async Task PrintCashflow()
+    {
+        if (allMovements.Count == 0) return;
+
+        try
+        {
+            isGeneratingPDF = true;
+            StateHasChanged();
+
+            var userName = AuthState.CurrentUser?.FullName ?? "User";
+            var fromText = startDate?.ToString("MMM dd, yyyy") ?? "All Time";
+            var toText = endDate?.ToString("MMM dd, yyyy") ?? "Today";
+
+            var summary = new
+            {
+                totalCashIn = totalCashIn.ToString("N2"),
+                totalCashOut = totalCashOut.ToString("N2"),
+                netCash = netCashMovement.ToString("N2"),
+                vat = vatAmount.ToString("N2"),
+                adminFee = adminFeeAmount.ToString("N2")
+            };
+
+            var cashIn = allMovements
+                .Where(m => m.IsCashIn)
+                .OrderBy(m => m.Timestamp)
+                .Select(m => new
+                {
+                    date = m.Timestamp.ToString("MMM dd, yyyy"),
+                    time = m.Timestamp.ToString("HH:mm"),
+                    cashier = m.CashierName,
+                    source = m.Source,
+                    module = m.Module,
+                    reference = m.Reference ?? "-",
+                    amount = m.Amount.ToString("N2")
+                })
+                .ToArray();
+
+            var cashOut = allMovements
+                .Where(m => !m.IsCashIn)
+                .OrderBy(m => m.Timestamp)
+                .Select(m => new
+                {
+                    date = m.Timestamp.ToString("MMM dd, yyyy"),
+                    time = m.Timestamp.ToString("HH:mm"),
+                    cashier = m.CashierName,
+                    source = m.Source,
+                    module = m.Module,
+                    reference = m.Reference ?? "-",
+                    amount = m.Amount.ToString("N2")
+                })
+                .ToArray();
+
+            await JSRuntime.InvokeVoidAsync(
+                "generateAndPrintCashflowPDF",
+                summary,
+                cashIn,
+                cashOut,
+                userName,
+                fromText,
+                toText
+            );
+
+            try
+            {
+                if (AuthState.CurrentUser != null)
+                {
+                    await HistoryService.LogAsync(
+                        AuthState.CurrentUser.Id,
+                        "print",
+                        "Cashflow Audit",
+                        $"Printed cash-in / cash-out audit (Range: {fromText} - {toText})"
+                    );
+                }
+            }
+            catch { }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error printing Cashflow Audit: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to generate PDF. Please try again.");
+        }
+        finally
+        {
+            isGeneratingPDF = false;
+            StateHasChanged();
+        }
+    }
+}

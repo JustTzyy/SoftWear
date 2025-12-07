@@ -4,114 +4,196 @@
 @inject IT13_Final.Services.Data.IInventoryService InventoryService
 @inject IT13_Final.Services.Data.IVariantService VariantService
 @inject IT13_Final.Services.Data.ISalesService SalesService
+@inject IT13_Final.Services.Data.ICategoryService CategoryService
 @inject IT13_Final.Services.Audit.IHistoryService HistoryService
 @inject IJSRuntime JSRuntime
 @inject NavigationManager Nav
 @using Microsoft.Data.SqlClient
 @implements IDisposable
 
-<h1 class="page-title">Point of Sale</h1>
+<div class="pos-wrapper">
+    @* Left Panel - Products *@
+    <section class="products-section">
+        <header class="section-header">
+            <div class="header-brand">
+                <div class="brand-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <path d="M16 10a4 4 0 0 1-8 0"></path>
+                    </svg>
+                </div>
+                <div class="brand-text">
+                    <h1>Store POS</h1>
+                    <span>Select items to sell</span>
+                </div>
+            </div>
+            <div class="header-badges">
+                <div class="badge badge-products">
+                    <span class="badge-num">@totalCount</span>
+                    <span class="badge-label">Products</span>
+                </div>
+            </div>
+        </header>
 
-<div class="pos-container">
-    <!-- Left Side: Product Selection -->
-    <div class="pos-products-section">
-        <div class="search-filter-row">
-            <div class="search-bar">
+        <div class="toolbar">
+            <div class="search-wrapper">
                 <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="11" cy="11" r="8"></circle>
                     <path d="m21 21-4.35-4.35"></path>
                 </svg>
-                <input type="text" class="search-input" placeholder="Search products..." value="@productSearchTerm" @oninput="HandleProductSearch" @onkeypress="HandleSearchKeyPress" />
+                <input type="text" id="sales-search-input" class="search-field" placeholder="Search by product name..." @bind="productSearchTerm" @bind:event="oninput" @bind:after="HandleProductSearch" @onkeypress="HandleSearchKeyPress" />
+                @if (!string.IsNullOrWhiteSpace(productSearchTerm))
+                {
+                    <button class="search-clear" @onclick="HandleClearSearch">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                }
             </div>
-            <div class="filter-dropdown">
-                <select class="filter-select" @bind="selectedFilter" @bind:after="HandleFilterChange">
-                    <option value="all">All Products</option>
-                    <option value="bestsellers">Best Sellers</option>
-                    <option value="price-low">Price: Low to High</option>
-                    <option value="price-high">Price: High to Low</option>
-                    <option value="stock-high">Stock: High to Low</option>
-                    <option value="stock-low">Stock: Low to High</option>
-                </select>
+            <div class="filters-row">
+                <div class="filter-item">
+                    <select class="filter-dropdown" @bind="selectedCategory" @bind:after="HandleCategoryChange">
+                        <option value="0">📦 All Categories</option>
+                        @foreach (var category in categories)
+                        {
+                            <option value="@category.Id">@category.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="filter-item">
+                    <select class="filter-dropdown" @bind="selectedFilter" @bind:after="HandleFilterChange">
+                        <option value="all">🔄 Default Order</option>
+                        <option value="bestsellers">🔥 Best Sellers</option>
+                        <option value="price-low">💵 Price: Low to High</option>
+                        <option value="price-high">💎 Price: High to Low</option>
+                        <option value="stock-high">📈 Stock: High to Low</option>
+                        <option value="stock-low">📉 Stock: Low to High</option>
+                    </select>
+                </div>
             </div>
         </div>
 
-        <div class="products-grid">
+        <div class="products-area">
             @if (isLoadingProducts)
             {
-                <div class="loading-message">Loading products...</div>
+                <div class="state-loading">
+                    <div class="loader">
+                        <div class="loader-ring"></div>
+                        <div class="loader-ring"></div>
+                        <div class="loader-ring"></div>
+                    </div>
+                    <span>Loading inventory...</span>
+                </div>
             }
             else if (availableProducts.Count == 0)
             {
-                <div class="empty-message">No products available</div>
+                <div class="state-empty">
+                    <div class="empty-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                            <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                        </svg>
+                    </div>
+                    <h3>No products found</h3>
+                    <p>Try different search terms or filters</p>
+                </div>
             }
             else
             {
-                @foreach (var product in availableProducts)
-                {
-                    <div class="product-card" @onclick="() => HandleProductClick(product)">
-                        <div class="product-image-container" style="background-color: @(string.IsNullOrEmpty(product.ColorHexValue) ? "#F9F9F9" : product.ColorHexValue);">
-                            @if (!string.IsNullOrEmpty(product.ProductImageBase64))
+                <div class="product-grid">
+                    @foreach (var product in availableProducts)
+                    {
+                        <article class="product-tile @(product.CurrentStock <= 5 ? "low-stock" : "") @(IsInCart(product) ? "in-cart" : "")" @onclick="() => HandleProductClick(product)">
+                            @if (product.CurrentStock <= 5)
                             {
-                                <img src="data:@(product.ImageContentType ?? "image/jpeg");base64,@product.ProductImageBase64" 
-                                     alt="@product.ProductName" 
-                                     class="product-image" />
-                            }
-                            else
-                            {
-                                <div class="product-image-placeholder">
+                                <div class="tile-badge warning">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                                        <polyline points="21 15 16 10 5 21"></polyline>
+                                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                        <line x1="12" y1="9" x2="12" y2="13"></line>
+                                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
                                     </svg>
+                                    Low Stock
                                 </div>
                             }
-                        </div>
-                        <div class="product-info">
-                            <div class="product-name">@product.ProductName</div>
-                            <div class="product-variant">@product.VariantName</div>
-                            @if (!string.IsNullOrEmpty(product.SizeName))
+                            @if (IsInCart(product))
                             {
-                                <div class="product-attr">Size: @product.SizeName</div>
+                                <div class="tile-badge cart-badge">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M20 6L9 17l-5-5"></path>
+                                    </svg>
+                                    In Cart
+                                </div>
                             }
-                            @if (!string.IsNullOrEmpty(product.ColorName))
-                            {
-                                <div class="product-attr">
-                                    Color: 
-                                    @if (!string.IsNullOrEmpty(product.ColorHexValue))
+                            <div class="tile-image" style="@GetProductBackground(product)">
+                                @if (!string.IsNullOrEmpty(product.ProductImageBase64))
+                                {
+                                    <img src="data:@(product.ImageContentType ?? "image/jpeg");base64,@product.ProductImageBase64" alt="@product.ProductName" loading="lazy" />
+                                }
+                                else
+                                {
+                                    <div class="image-fallback">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                            <polyline points="21 15 16 10 5 21"></polyline>
+                                        </svg>
+                                    </div>
+                                }
+                                <button class="quick-add" @onclick:stopPropagation @onclick="() => QuickAddToCart(product)" title="Quick add to cart">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="tile-content">
+                                <h3 class="tile-name">@product.ProductName</h3>
+                                <p class="tile-variant">@product.VariantName</p>
+                                <div class="tile-attributes">
+                                    @if (!string.IsNullOrEmpty(product.SizeName))
                                     {
-                                        <span class="color-dot" style="background-color: @product.ColorHexValue;"></span>
+                                        <span class="attr-chip size">@product.SizeName</span>
                                     }
-                                    @product.ColorName
+                                    @if (!string.IsNullOrEmpty(product.ColorName))
+                                    {
+                                        <span class="attr-chip color">
+                                            @if (!string.IsNullOrEmpty(product.ColorHexValue))
+                                            {
+                                                <span class="color-indicator" style="background: @product.ColorHexValue;"></span>
+                                            }
+                                            @product.ColorName
+                                        </span>
+                                    }
                                 </div>
-                            }
-                            <div class="product-stock">Stock: @product.CurrentStock</div>
-                            <div class="product-price">₱@((product.CostPrice ?? product.Price).ToString("N2"))</div>
-                        </div>
-                        <button class="add-to-cart-btn" @onclick:stopPropagation="true" @onclick="() => HandleAddToCart(product)">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="9" cy="21" r="1"></circle>
-                                <circle cx="20" cy="21" r="1"></circle>
-                                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
-                            </svg>
-                        </button>
-                    </div>
-                }
+                                <div class="tile-footer">
+                                    <span class="tile-price">₱@((product.CostPrice ?? product.Price).ToString("N2"))</span>
+                                    <span class="tile-stock @(product.CurrentStock <= 5 ? "critical" : product.CurrentStock <= 20 ? "low" : "")">
+                                        @product.CurrentStock available
+                                    </span>
+                                </div>
+                            </div>
+                        </article>
+                    }
+                </div>
             }
         </div>
 
         @if (totalPages > 1)
         {
             <div class="pagination">
-                <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="15 18 9 12 15 6"></polyline>
+                <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)" title="Previous page">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="m15 18-6-6 6-6"></path>
                     </svg>
                 </button>
 
                 @for (int i = 1; i <= totalPages; i++)
                 {
-                    var pageNum = i; // Capture loop variable for lambda
+                    var pageNum = i;
                     @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
                     {
                         <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
@@ -124,185 +206,385 @@
                     }
                 }
 
-                <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="9 18 15 12 9 6"></polyline>
+                <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)" title="Next page">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="m9 18 6-6-6-6"></path>
                     </svg>
                 </button>
             </div>
         }
-    </div>
+    </section>
 
-    <!-- Right Side: Cart and Payment -->
-    <div class="pos-cart-section">
-        <div class="cart-header">
-            <h2>Cart</h2>
-            <button class="clear-cart-btn" @onclick="ClearCart" disabled="@(cartItems.Count == 0)">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="3 6 5 6 21 6"></polyline>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                </svg>
-                Clear
-            </button>
-        </div>
+    @* Right Panel - Cart *@
+    <aside class="cart-section @(cartItems.Count > 0 ? "active" : "")">
+        <header class="cart-header">
+            <div class="cart-title">
+                <div class="cart-icon-wrap">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="9" cy="21" r="1"></circle>
+                        <circle cx="20" cy="21" r="1"></circle>
+                        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+                    </svg>
+                    @if (cartItems.Count > 0)
+                    {
+                        <span class="cart-badge-count">@cartItems.Sum(i => i.Quantity)</span>
+                    }
+                </div>
+                <div>
+                    <h2>Order Cart</h2>
+                    <span class="cart-subtitle">@(cartItems.Count == 0 ? "No items yet" : $"{cartItems.Count} item(s) selected")</span>
+                </div>
+            </div>
+            @if (cartItems.Count > 0)
+            {
+                <button class="btn-clear-cart" @onclick="ClearCart" title="Clear all items">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        <line x1="10" y1="11" x2="10" y2="17"></line>
+                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                    </svg>
+                </button>
+            }
+        </header>
 
-        <div class="cart-items">
+        <div class="cart-body">
             @if (cartItems.Count == 0)
             {
-                <div class="empty-cart">Cart is empty</div>
+                <div class="cart-empty">
+                    <div class="empty-illustration">
+                        <svg viewBox="0 0 120 120" fill="none">
+                            <circle cx="60" cy="60" r="50" fill="#f0f4f8" stroke="#e2e8f0" stroke-width="2"/>
+                            <path d="M40 45h40l-4 30H44l-4-30z" fill="#cbd5e1" stroke="#94a3b8" stroke-width="2"/>
+                            <circle cx="48" cy="85" r="5" fill="#94a3b8"/>
+                            <circle cx="72" cy="85" r="5" fill="#94a3b8"/>
+                            <path d="M35 45l5-15h40l5 15" stroke="#94a3b8" stroke-width="2" fill="none"/>
+                            <line x1="50" y1="55" x2="50" y2="65" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+                            <line x1="60" y1="55" x2="60" y2="65" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+                            <line x1="70" y1="55" x2="70" y2="65" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <h3>Cart is Empty</h3>
+                    <p>Click on products to add them here</p>
+                </div>
             }
             else
             {
-                @foreach (var item in cartItems)
-                {
-                    <div class="cart-item">
-                        <div class="cart-item-info">
-                            <div class="cart-item-name">@item.ProductName - @item.VariantName</div>
-                            @if (!string.IsNullOrEmpty(item.SizeName))
-                            {
-                                <div class="cart-item-attr">Size: @item.SizeName</div>
-                            }
-                            @if (!string.IsNullOrEmpty(item.ColorName))
-                            {
-                                <div class="cart-item-attr">
-                                    Color: 
-                                    @if (!string.IsNullOrEmpty(item.ColorHexValue))
-                                    {
-                                        <span class="color-dot-small" style="background-color: @item.ColorHexValue;"></span>
-                                    }
-                                    @item.ColorName
-                                </div>
-                            }
-                            <div class="cart-item-price">₱@item.Price.ToString("N2") × @item.Quantity = ₱@item.Subtotal.ToString("N2")</div>
-                        </div>
-                        <div class="cart-item-actions">
-                            <button class="qty-btn" @onclick="() => UpdateQuantity(item, -1)">-</button>
-                            <span class="qty-display">@item.Quantity</span>
-                            <button class="qty-btn" @onclick="() => UpdateQuantity(item, 1)" disabled="@(item.Quantity >= item.AvailableStock)">+</button>
-                            <button class="remove-item-btn" @onclick="() => RemoveFromCart(item)">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                }
-            }
-        </div>
-
-        <div class="cart-summary">
-            <div class="summary-row total">
-                <span>Total:</span>
-                <span>₱@cartSubtotal.ToString("N2")</span>
-            </div>
-        </div>
-
-        <div class="payment-section">
-            <div class="payment-method">
-                <label>Payment Method</label>
-                <select class="payment-select" @bind="selectedPaymentMethod">
-                    <option value="Cash">Cash</option>
-                    <option value="GCash">GCash</option>
-                </select>
-            </div>
-
-            @if (selectedPaymentMethod == "Cash")
-            {
-                <div class="cash-payment">
-                    <label>Amount Paid</label>
-                    <input type="number" class="amount-input" @bind="amountPaid" @bind:event="oninput" step="0.01" min="0" />
-                    @if (amountPaid > 0 && amountPaid >= cartSubtotal)
+                <div class="cart-items-list">
+                    @foreach (var item in cartItems)
                     {
-                        <div class="change-display">Change: ₱@((amountPaid - cartSubtotal).ToString("N2"))</div>
+                        <div class="cart-item-card">
+                            <div class="item-main">
+                                <div class="item-details">
+                                    <h4>@item.ProductName</h4>
+                                    <span class="item-subtitle">@item.VariantName</span>
+                                    <div class="item-meta">
+                                        @if (!string.IsNullOrEmpty(item.SizeName))
+                                        {
+                                            <span>@item.SizeName</span>
+                                        }
+                                        @if (!string.IsNullOrEmpty(item.ColorName))
+                                        {
+                                            <span>
+                                                @if (!string.IsNullOrEmpty(item.ColorHexValue))
+                                                {
+                                                    <span class="meta-color" style="background: @item.ColorHexValue;"></span>
+                                                }
+                                                @item.ColorName
+                                            </span>
+                                        }
+                                    </div>
+                                    <span class="item-unit-price">₱@item.Price.ToString("N2") each</span>
+                                </div>
+                                <button class="item-remove" @onclick="() => RemoveFromCart(item)" title="Remove item">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="item-actions">
+                                <div class="qty-stepper">
+                                    <button class="stepper-btn" @onclick="() => UpdateQuantity(item, -1)" disabled="@(item.Quantity <= 1)">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                    </button>
+                                    <span class="stepper-value">@item.Quantity</span>
+                                    <button class="stepper-btn" @onclick="() => UpdateQuantity(item, 1)" disabled="@(item.Quantity >= item.AvailableStock)">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                    </button>
+                                </div>
+                                <span class="item-total">₱@item.Subtotal.ToString("N2")</span>
+                            </div>
+                        </div>
                     }
                 </div>
             }
+        </div>
 
-            @if (selectedPaymentMethod == "GCash")
-            {
-                <div class="gcash-payment">
-                    <label>GCash Reference Number <span class="required">*</span></label>
-                    <input type="text" class="reference-input" @bind="gcashReferenceNumber" @bind:event="oninput" placeholder="Enter GCash transaction reference" maxlength="100" />
-                    <div class="gcash-info">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <line x1="12" y1="16" x2="12" y2="12"></line>
-                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                        </svg>
-                        <span>Enter the GCash transaction reference number from the customer's payment confirmation.</span>
+        @if (cartItems.Count > 0)
+        {
+            <div class="cart-checkout">
+                <div class="checkout-summary">
+                    <div class="summary-row grand-total">
+                        <span>Total Amount</span>
+                        <span class="total-value">₱@cartSubtotal.ToString("N2")</span>
                     </div>
                 </div>
-            }
 
-            <button class="checkout-btn" @onclick="ProcessSale" disabled="@(cartItems.Count == 0 || (selectedPaymentMethod == "Cash" && amountPaid < cartSubtotal) || (selectedPaymentMethod == "GCash" && string.IsNullOrWhiteSpace(gcashReferenceNumber)))">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M20 6L9 17l-5-5"></path>
-                </svg>
-                Complete Sale
-            </button>
-        </div>
-    </div>
+                <div class="payment-method-picker">
+                    <span class="picker-label">Payment Method</span>
+                    <div class="method-options">
+                        <label class="method-option @(selectedPaymentMethod == "Cash" ? "selected" : "")">
+                            <input type="radio" name="payment" value="Cash" @onchange='() => selectedPaymentMethod = "Cash"' checked="@(selectedPaymentMethod == "Cash")" />
+                            <div class="option-content">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                                    <line x1="1" y1="10" x2="23" y2="10"></line>
+                                </svg>
+                                <span>Cash</span>
+                            </div>
+                        </label>
+                        <label class="method-option @(selectedPaymentMethod == "GCash" ? "selected" : "")">
+                            <input type="radio" name="payment" value="GCash" @onchange='() => selectedPaymentMethod = "GCash"' checked="@(selectedPaymentMethod == "GCash")" />
+                            <div class="option-content">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+                                    <line x1="12" y1="18" x2="12.01" y2="18"></line>
+                                </svg>
+                                <span>GCash</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                @if (selectedPaymentMethod == "Cash")
+                {
+                    <div class="cash-payment-form">
+                        <div class="form-group">
+                            <label class="form-label">Amount Tendered</label>
+                            <div class="currency-input">
+                                <span class="currency-symbol">₱</span>
+                                <input type="number" @bind="amountPaid" @bind:event="oninput" step="0.01" min="0" placeholder="0.00" />
+                            </div>
+                        </div>
+                        
+                        <div class="quick-cash-btns">
+                            @foreach (var amt in GetQuickAmounts())
+                            {
+                                <button class="quick-btn @(amountPaid == amt ? "active" : "")" @onclick="() => amountPaid = amt">₱@amt.ToString("N0")</button>
+                            }
+                            <button class="quick-btn exact @(amountPaid == cartSubtotal ? "active" : "")" @onclick="() => amountPaid = cartSubtotal">Exact</button>
+                        </div>
+                        
+                        @if (amountPaid > 0)
+                        {
+                            <div class="change-box @(amountPaid >= cartSubtotal ? "positive" : "negative")">
+                                <span class="change-label">@(amountPaid >= cartSubtotal ? "Change Due" : "Amount Short")</span>
+                                <span class="change-value">₱@Math.Abs(amountPaid - cartSubtotal).ToString("N2")</span>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="gcash-payment-form">
+                        <div class="form-group">
+                            <label class="form-label">GCash Reference Number <span class="required">*</span></label>
+                            <input type="text" id="gcash-reference-input" class="reference-field" @bind="gcashReferenceNumber" @bind:event="oninput" @bind:after="HandleGCashReferenceInput" placeholder="Enter 13-digit reference" maxlength="13" />
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(gcashReferenceNumber) && gcashReferenceNumber.Length != 13)
+                        {
+                            <div class="form-error">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                                Reference must be exactly 13 digits
+                            </div>
+                        }
+                        <div class="form-hint">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                            Enter the 13-digit reference from customer's GCash payment confirmation
+                        </div>
+                    </div>
+                }
+
+                <button class="btn-checkout" @onclick="ShowCheckoutConfirmation" disabled="@(!CanCheckout())">
+                    <span class="btn-text">Complete Transaction</span>
+                    <span class="btn-amount">₱@cartSubtotal.ToString("N2")</span>
+                </button>
+            </div>
+        }
+    </aside>
 </div>
 
-<!-- Add to Cart Modal -->
-@if (showAddToCartModal)
+@* Product Detail Modal *@
+@if (showAddToCartModal && selectedProductForCart != null)
 {
-    <div class="modal-overlay" @onclick="CloseAddToCartModal">
-        <div class="modal-content" @onclick:stopPropagation>
-            <div class="modal-header">
-                <h3>Add to Cart</h3>
-                <button class="modal-close" @onclick="CloseAddToCartModal">
+    <div class="modal-backdrop" @onclick="CloseAddToCartModal">
+        <div class="modal-dialog product-modal" @onclick:stopPropagation>
+            <button class="modal-dismiss" @onclick="CloseAddToCartModal">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+            
+            <div class="modal-image" style="@GetProductBackground(selectedProductForCart)">
+                @if (!string.IsNullOrEmpty(selectedProductForCart.ProductImageBase64))
+                {
+                    <img src="data:@(selectedProductForCart.ImageContentType ?? "image/jpeg");base64,@selectedProductForCart.ProductImageBase64" alt="@selectedProductForCart.ProductName" />
+                }
+                else
+                {
+                    <div class="modal-image-placeholder">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                            <polyline points="21 15 16 10 5 21"></polyline>
+                        </svg>
+                    </div>
+                }
+            </div>
+            
+            <div class="modal-info">
+                <h2 class="modal-product-name">@selectedProductForCart.ProductName</h2>
+                <p class="modal-product-variant">@selectedProductForCart.VariantName</p>
+                
+                <div class="modal-attributes">
+                    @if (!string.IsNullOrEmpty(selectedProductForCart.SizeName))
+                    {
+                        <div class="modal-attr">
+                            <span class="attr-label">Size</span>
+                            <span class="attr-value">@selectedProductForCart.SizeName</span>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(selectedProductForCart.ColorName))
+                    {
+                        <div class="modal-attr">
+                            <span class="attr-label">Color</span>
+                            <span class="attr-value">
+                                @if (!string.IsNullOrEmpty(selectedProductForCart.ColorHexValue))
+                                {
+                                    <span class="attr-color-dot" style="background: @selectedProductForCart.ColorHexValue;"></span>
+                                }
+                                @selectedProductForCart.ColorName
+                            </span>
+                        </div>
+                    }
+                </div>
+                
+                <div class="modal-price-stock">
+                    <span class="modal-price">₱@((selectedProductForCart.CostPrice ?? selectedProductForCart.Price).ToString("N2"))</span>
+                    <span class="modal-stock">@selectedProductForCart.CurrentStock in stock</span>
+                </div>
+            </div>
+            
+            <div class="modal-quantity-picker">
+                <span class="qty-label">Quantity</span>
+                <div class="qty-picker">
+                    <button class="qty-btn" @onclick="() => AdjustModalQuantity(-1)" disabled="@(modalQuantity <= 1)">−</button>
+                    <input type="number" @bind="modalQuantity" @bind:event="oninput" min="1" max="@selectedProductForCart.CurrentStock" />
+                    <button class="qty-btn" @onclick="() => AdjustModalQuantity(1)" disabled="@(modalQuantity >= selectedProductForCart.CurrentStock)">+</button>
+                </div>
+                <span class="qty-total">= ₱@(((selectedProductForCart.CostPrice ?? selectedProductForCart.Price) * modalQuantity).ToString("N2"))</span>
+            </div>
+            
+            <div class="modal-buttons">
+                <button class="btn-cancel" @onclick="CloseAddToCartModal">Cancel</button>
+                <button class="btn-add-cart" @onclick="ConfirmAddToCart" disabled="@(modalQuantity < 1 || modalQuantity > selectedProductForCart.CurrentStock)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="9" cy="21" r="1"></circle>
+                        <circle cx="20" cy="21" r="1"></circle>
+                        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+                    </svg>
+                    Add to Cart
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@* Checkout Confirmation Modal *@
+@if (showCheckoutConfirmation)
+{
+    <div class="modal-backdrop" @onclick="CloseCheckoutConfirmation">
+        <div class="modal-dialog checkout-modal" @onclick:stopPropagation>
+            <div class="checkout-header">
+                <div class="checkout-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 11l3 3L22 4"></path>
+                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                    </svg>
+                </div>
+                <h2>Confirm Transaction</h2>
+                <p>Review the order details before completing</p>
+                <button class="modal-dismiss" @onclick="CloseCheckoutConfirmation">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
                     </svg>
                 </button>
             </div>
-            <div class="modal-body">
-                @if (selectedProductForCart != null)
-                {
-                    <div class="modal-product-image-container" style="background-color: @(string.IsNullOrEmpty(selectedProductForCart.ColorHexValue) ? "#F9F9F9" : selectedProductForCart.ColorHexValue);">
-                        @if (!string.IsNullOrEmpty(selectedProductForCart.ProductImageBase64))
-                        {
-                            <img src="data:@(selectedProductForCart.ImageContentType ?? "image/jpeg");base64,@selectedProductForCart.ProductImageBase64" 
-                                 alt="@selectedProductForCart.ProductName" 
-                                 class="modal-product-image" />
-                        }
-                        else
-                        {
-                            <div class="modal-product-image-placeholder">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                                    <polyline points="21 15 16 10 5 21"></polyline>
-                                </svg>
+            
+            <div class="checkout-body">
+                <div class="order-list">
+                    <h3>Order Items (@cartItems.Sum(i => i.Quantity))</h3>
+                    @foreach (var item in cartItems)
+                    {
+                        <div class="order-row">
+                            <div class="order-product">
+                                <span class="product-name">@item.ProductName</span>
+                                <span class="product-detail">@item.VariantName @(!string.IsNullOrEmpty(item.SizeName) ? $"• {item.SizeName}" : "") @(!string.IsNullOrEmpty(item.ColorName) ? $"• {item.ColorName}" : "")</span>
                             </div>
-                        }
-                    </div>
-                    <div class="modal-product-info">
-                        <div class="modal-product-name">@selectedProductForCart.ProductName</div>
-                        <div class="modal-product-variant">@selectedProductForCart.VariantName</div>
-                        <div class="modal-product-price">₱@((selectedProductForCart.CostPrice ?? selectedProductForCart.Price).ToString("N2"))</div>
-                        <div class="modal-product-stock">Available: @selectedProductForCart.CurrentStock</div>
-                    </div>
-
-                    <div class="modal-form">
-                        <div class="form-field">
-                            <label>Quantity</label>
-                            <div class="qty-input-group">
-                                <button class="qty-btn" @onclick="() => AdjustModalQuantity(-1)">-</button>
-                                <input type="number" class="qty-input" @bind="modalQuantity" @bind:event="oninput" min="1" max="@selectedProductForCart.CurrentStock" />
-                                <button class="qty-btn" @onclick="() => AdjustModalQuantity(1)">+</button>
-                            </div>
+                            <div class="order-qty">×@item.Quantity</div>
+                            <div class="order-amount">₱@item.Subtotal.ToString("N2")</div>
                         </div>
+                    }
+                </div>
+                
+                <div class="order-totals">
+                    <div class="total-row final">
+                        <span>Total</span>
+                        <span>₱@cartSubtotal.ToString("N2")</span>
                     </div>
-                }
+                </div>
+                
+                <div class="payment-details">
+                    <h3>Payment Information</h3>
+                    <div class="payment-row">
+                        <span>Method</span>
+                        <span class="payment-badge">@selectedPaymentMethod</span>
+                    </div>
+                    @if (selectedPaymentMethod == "Cash")
+                    {
+                        <div class="payment-row">
+                            <span>Tendered</span>
+                            <span>₱@amountPaid.ToString("N2")</span>
+                        </div>
+                        <div class="payment-row highlight">
+                            <span>Change</span>
+                            <span>₱@((amountPaid - cartSubtotal).ToString("N2"))</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="payment-row">
+                            <span>Reference #</span>
+                            <span class="mono">@gcashReferenceNumber</span>
+                        </div>
+                    }
+                </div>
             </div>
-            <div class="modal-footer">
-                <button class="btn-secondary" @onclick="CloseAddToCartModal">Cancel</button>
-                <button class="btn-primary" @onclick="ConfirmAddToCart" disabled="@(modalQuantity < 1 || modalQuantity > (selectedProductForCart?.CurrentStock ?? 0))">
-                    Add to Cart
+            
+            <div class="checkout-actions">
+                <button class="btn-back" @onclick="CloseCheckoutConfirmation">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                    Go Back
+                </button>
+                <button class="btn-confirm" @onclick="ConfirmCheckout">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="9 11 12 14 22 4"></polyline>
+                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                    </svg>
+                    Confirm & Print
                 </button>
             </div>
         </div>
@@ -313,13 +595,15 @@
     private int sellerUserId = 0;
     private string productSearchTerm = string.Empty;
     private string selectedFilter = "all";
+    private int selectedCategory = 0;
     private List<IT13_Final.Services.Data.InventoryModel> availableProducts = new();
-    private List<IT13_Final.Services.Data.InventoryModel> allProducts = new(); // Store all products for filtering
+    private List<IT13_Final.Services.Data.InventoryModel> allProducts = new();
     private List<IT13_Final.Services.Data.TopSellingProductModel> topSellingProducts = new();
+    private List<IT13_Final.Services.Data.CategoryModel> categories = new();
     private bool isLoadingProducts = true;
     private System.Threading.Timer? _searchTimer;
     private int currentPage = 1;
-    private int pageSize = 6; // Show 6 products per page
+    private int pageSize = 6;
     private int totalCount = 0;
     private int totalPages => (int)Math.Ceiling(totalCount / (double)pageSize);
 
@@ -341,8 +625,6 @@
 
     private List<CartItem> cartItems = new();
     private decimal cartSubtotal => cartItems.Sum(item => item.Subtotal);
-    // Customer pays the full cost price, deductions applied after transaction
-    private decimal cartTotal => cartSubtotal; // Customer pays full amount
     private string selectedPaymentMethod = "Cash";
     private decimal amountPaid = 0;
     private string gcashReferenceNumber = string.Empty;
@@ -350,14 +632,59 @@
     private bool showAddToCartModal = false;
     private IT13_Final.Services.Data.InventoryModel? selectedProductForCart = null;
     private int modalQuantity = 1;
+    private bool showCheckoutConfirmation = false;
+
+    private string GetProductBackground(IT13_Final.Services.Data.InventoryModel product)
+    {
+        if (!string.IsNullOrEmpty(product.ColorHexValue))
+            return $"background: {product.ColorHexValue};";
+        return "background: #f8fafc;";
+    }
+
+    private bool IsInCart(IT13_Final.Services.Data.InventoryModel product)
+    {
+        return cartItems.Any(c => c.VariantId == product.VariantId && c.SizeId == product.SizeId && c.ColorId == product.ColorId);
+    }
+
+    private bool CanCheckout()
+    {
+        if (cartItems.Count == 0) return false;
+        if (selectedPaymentMethod == "Cash" && amountPaid < cartSubtotal) return false;
+        if (selectedPaymentMethod == "GCash" && (string.IsNullOrWhiteSpace(gcashReferenceNumber) || gcashReferenceNumber.Length != 13)) return false;
+        return true;
+    }
+
+    private List<decimal> GetQuickAmounts()
+    {
+        var amounts = new List<decimal>();
+        var total = cartSubtotal;
+        
+        if (total <= 100) amounts.AddRange(new[] { 50m, 100m, 200m, 500m });
+        else if (total <= 500) amounts.AddRange(new[] { 200m, 500m, 1000m, 2000m });
+        else if (total <= 1000) amounts.AddRange(new[] { 500m, 1000m, 2000m, 5000m });
+        else if (total <= 5000) amounts.AddRange(new[] { 1000m, 2000m, 5000m, 10000m });
+        else amounts.AddRange(new[] { 5000m, 10000m, 20000m, 50000m });
+        
+        return amounts.Where(a => a >= total * 0.5m).Take(4).ToList();
+    }
 
     protected override async Task OnInitializedAsync()
     {
         await LoadSellerUserId();
         if (sellerUserId > 0)
         {
+            await LoadCategories();
             await LoadTopSellingProducts();
             await LoadProducts();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JSRuntime.InvokeVoidAsync("setupSearchInputFilter", "sales-search-input");
+            await JSRuntime.InvokeVoidAsync("setupGCashReferenceFilter", "gcash-reference-input");
         }
     }
 
@@ -368,7 +695,7 @@
             var cashierUserId = AuthState.CurrentUser?.Id ?? 0;
             if (cashierUserId > 0)
             {
-                topSellingProducts = await SalesService.GetTopSellingProductsAsync(cashierUserId, 50); // Get top 50 for filtering
+                topSellingProducts = await SalesService.GetTopSellingProductsAsync(cashierUserId, 50);
             }
         }
         catch
@@ -413,27 +740,15 @@
         {
             if (sellerUserId > 0)
             {
-                // Load all products first (without pagination) for filtering
                 allProducts = await InventoryService.GetInventoriesAsync(sellerUserId, productSearchTerm, 1, 10000);
-                
-                // Apply filter
                 var filteredProducts = ApplyFilter(allProducts);
-                
-                // Apply pagination
                 totalCount = filteredProducts.Count;
-                availableProducts = filteredProducts
-                    .Skip((currentPage - 1) * pageSize)
-                    .Take(pageSize)
-                    .ToList();
+                availableProducts = filteredProducts.Skip((currentPage - 1) * pageSize).Take(pageSize).ToList();
                 
-                // Adjust current page if it exceeds total pages
                 if (currentPage > totalPages && totalPages > 0)
                 {
                     currentPage = totalPages;
-                    availableProducts = filteredProducts
-                        .Skip((currentPage - 1) * pageSize)
-                        .Take(pageSize)
-                        .ToList();
+                    availableProducts = filteredProducts.Skip((currentPage - 1) * pageSize).Take(pageSize).ToList();
                 }
             }
         }
@@ -450,43 +765,55 @@
         }
     }
 
+    private async Task LoadCategories()
+    {
+        try
+        {
+            if (sellerUserId > 0)
+            {
+                categories = await CategoryService.GetCategoriesAsync(sellerUserId, null, 1, 1000);
+            }
+        }
+        catch
+        {
+            categories = new List<IT13_Final.Services.Data.CategoryModel>();
+        }
+    }
+
+    private async Task HandleCategoryChange()
+    {
+        currentPage = 1;
+        await LoadProducts();
+    }
+
     private List<IT13_Final.Services.Data.InventoryModel> ApplyFilter(List<IT13_Final.Services.Data.InventoryModel> products)
     {
         var filtered = products.ToList();
 
+        if (selectedCategory > 0)
+        {
+            filtered = filtered.Where(p => p.CategoryId == selectedCategory).ToList();
+        }
+
         switch (selectedFilter)
         {
             case "bestsellers":
-                // Filter to show only best selling products
                 var bestSellerVariantIds = topSellingProducts.Select(p => p.VariantId).ToHashSet();
                 filtered = filtered.Where(p => bestSellerVariantIds.Contains(p.VariantId))
-                    .OrderByDescending(p => 
-                    {
-                        var topProduct = topSellingProducts.FirstOrDefault(t => t.VariantId == p.VariantId);
-                        return topProduct?.TotalQuantity ?? 0;
-                    })
+                    .OrderByDescending(p => topSellingProducts.FirstOrDefault(t => t.VariantId == p.VariantId)?.TotalQuantity ?? 0)
                     .ToList();
                 break;
-
             case "price-low":
                 filtered = filtered.OrderBy(p => p.Price).ToList();
                 break;
-
             case "price-high":
                 filtered = filtered.OrderByDescending(p => p.Price).ToList();
                 break;
-
             case "stock-high":
                 filtered = filtered.OrderByDescending(p => p.CurrentStock).ToList();
                 break;
-
             case "stock-low":
                 filtered = filtered.OrderBy(p => p.CurrentStock).ToList();
-                break;
-
-            case "all":
-            default:
-                // No additional filtering, just maintain current order
                 break;
         }
 
@@ -497,34 +824,18 @@
     {
         currentPage = 1;
         await LoadProducts();
-        
-        // Log filter change
-        try
-        {
-            if (AuthState.CurrentUser != null)
-            {
-                await HistoryService.LogAsync(
-                    AuthState.CurrentUser.Id,
-                    "filter",
-                    "Sales",
-                    $"Changed product filter to: {selectedFilter}"
-                );
-            }
-        }
-        catch { }
     }
 
-    private void HandleProductSearch(ChangeEventArgs e)
+    private void HandleProductSearch()
     {
-        productSearchTerm = e.Value?.ToString() ?? string.Empty;
-        currentPage = 1; // Reset to first page on search
+        var filtered = System.Text.RegularExpressions.Regex.Replace(productSearchTerm, @"[^a-zA-Z0-9\s\-_]", "");
+        if (filtered != productSearchTerm) productSearchTerm = filtered;
+        
+        currentPage = 1;
         _searchTimer?.Dispose();
         _searchTimer = new System.Threading.Timer(async _ =>
         {
-            await InvokeAsync(async () =>
-            {
-                await LoadProducts();
-            });
+            await InvokeAsync(async () => await LoadProducts());
         }, null, 500, Timeout.Infinite);
     }
 
@@ -532,10 +843,28 @@
     {
         if (e.Key == "Enter")
         {
-            currentPage = 1; // Reset to first page on search
+            currentPage = 1;
             await LoadProducts();
         }
     }
+
+    private async Task HandleClearSearch()
+    {
+        productSearchTerm = string.Empty;
+        currentPage = 1;
+        await LoadProducts();
+    }
+
+    private void HandleGCashReferenceInput()
+    {
+        var filtered = System.Text.RegularExpressions.Regex.Replace(gcashReferenceNumber, @"[^0-9]", "");
+        if (filtered != gcashReferenceNumber) gcashReferenceNumber = filtered;
+        if (gcashReferenceNumber.Length > 13) gcashReferenceNumber = gcashReferenceNumber.Substring(0, 13);
+        StateHasChanged();
+    }
+
+    private void ShowCheckoutConfirmation() => showCheckoutConfirmation = true;
+    private void CloseCheckoutConfirmation() => showCheckoutConfirmation = false;
 
     private async Task GoToPage(int page)
     {
@@ -551,12 +880,38 @@
         selectedProductForCart = product;
         modalQuantity = 1;
         showAddToCartModal = true;
-        StateHasChanged();
     }
 
-    private void HandleAddToCart(IT13_Final.Services.Data.InventoryModel product)
+    private void QuickAddToCart(IT13_Final.Services.Data.InventoryModel product)
     {
-        HandleProductClick(product);
+        var existingItem = cartItems.FirstOrDefault(item =>
+            item.VariantId == product.VariantId &&
+            item.SizeId == product.SizeId &&
+            item.ColorId == product.ColorId);
+
+        if (existingItem != null)
+        {
+            if (existingItem.Quantity < existingItem.AvailableStock)
+                existingItem.Quantity++;
+        }
+        else
+        {
+            cartItems.Add(new CartItem
+            {
+                VariantId = product.VariantId,
+                SizeId = product.SizeId,
+                ColorId = product.ColorId,
+                ProductName = product.ProductName,
+                VariantName = product.VariantName,
+                SizeName = product.SizeName,
+                ColorName = product.ColorName,
+                ColorHexValue = product.ColorHexValue,
+                Price = product.CostPrice ?? product.Price,
+                Quantity = 1,
+                AvailableStock = product.CurrentStock
+            });
+        }
+        StateHasChanged();
     }
 
     private void AdjustModalQuantity(int change)
@@ -565,10 +920,7 @@
         {
             var newQty = modalQuantity + change;
             if (newQty >= 1 && newQty <= selectedProductForCart.CurrentStock)
-            {
                 modalQuantity = newQty;
-                StateHasChanged();
-            }
         }
     }
 
@@ -577,14 +929,12 @@
         showAddToCartModal = false;
         selectedProductForCart = null;
         modalQuantity = 1;
-        StateHasChanged();
     }
 
-    private async Task ConfirmAddToCart()
+    private void ConfirmAddToCart()
     {
         if (selectedProductForCart != null && modalQuantity > 0 && modalQuantity <= selectedProductForCart.CurrentStock)
         {
-            // Check if item already exists in cart
             var existingItem = cartItems.FirstOrDefault(item =>
                 item.VariantId == selectedProductForCart.VariantId &&
                 item.SizeId == selectedProductForCart.SizeId &&
@@ -592,18 +942,12 @@
 
             if (existingItem != null)
             {
-                // Update quantity if adding same item
                 var newQty = existingItem.Quantity + modalQuantity;
                 if (newQty <= existingItem.AvailableStock)
-                {
                     existingItem.Quantity = newQty;
-                }
             }
             else
             {
-                // Store cost price (deductions will be applied in transaction calculations)
-                var itemPrice = selectedProductForCart.CostPrice ?? selectedProductForCart.Price;
-                
                 cartItems.Add(new CartItem
                 {
                     VariantId = selectedProductForCart.VariantId,
@@ -614,60 +958,36 @@
                     SizeName = selectedProductForCart.SizeName,
                     ColorName = selectedProductForCart.ColorName,
                     ColorHexValue = selectedProductForCart.ColorHexValue,
-                    Price = itemPrice,
+                    Price = selectedProductForCart.CostPrice ?? selectedProductForCart.Price,
                     Quantity = modalQuantity,
                     AvailableStock = selectedProductForCart.CurrentStock
                 });
             }
 
             CloseAddToCartModal();
-            StateHasChanged();
         }
     }
-
 
     private void UpdateQuantity(CartItem item, int change)
     {
         var newQty = item.Quantity + change;
         if (newQty >= 1 && newQty <= item.AvailableStock)
-        {
             item.Quantity = newQty;
-            StateHasChanged();
-        }
     }
 
-    private void RemoveFromCart(CartItem item)
-    {
-        cartItems.Remove(item);
-        StateHasChanged();
-    }
+    private void RemoveFromCart(CartItem item) => cartItems.Remove(item);
 
     private void ClearCart()
     {
         cartItems.Clear();
         amountPaid = 0;
         gcashReferenceNumber = string.Empty;
-        StateHasChanged();
     }
 
-    private decimal CalculateTax(decimal amount)
+    private async Task ConfirmCheckout()
     {
-        // Calculate 12% tax
-        return amount * 0.12m;
-    }
-
-    private decimal CalculateAdminFee(decimal amount)
-    {
-        // Calculate 2% admin fee
-        return amount * 0.02m;
-    }
-
-    private decimal CalculateNetAmount(decimal grossAmount)
-    {
-        // Calculate net amount after deductions (for internal use only)
-        // Net = grossAmount * (1 - 0.12 - 0.02) = grossAmount * 0.86
-        // This is what the business receives after tax and admin fee deductions
-        return grossAmount * 0.86m;
+        showCheckoutConfirmation = false;
+        await ProcessSale();
     }
 
     private async Task ProcessSale()
@@ -677,10 +997,8 @@
 
         try
         {
-            // Calculate change for cash payments
             var changeGiven = selectedPaymentMethod == "Cash" ? Math.Max(0, amountPaid - cartSubtotal) : 0;
 
-            // Prepare sale items
             var saleItems = cartItems.Select(item => new IT13_Final.Services.Data.SaleItemModel
             {
                 VariantId = item.VariantId,
@@ -691,11 +1009,10 @@
                 Subtotal = item.Subtotal
             }).ToList();
 
-            // Create sale model
             var sale = new IT13_Final.Services.Data.CreateSaleModel
             {
                 Items = saleItems,
-                TotalAmount = cartSubtotal, // Customer pays full cost price
+                TotalAmount = cartSubtotal,
                 PaymentMethod = selectedPaymentMethod,
                 AmountPaid = selectedPaymentMethod == "Cash" ? amountPaid : cartSubtotal,
                 ChangeGiven = changeGiven,
@@ -703,12 +1020,10 @@
                 CashierUserId = AuthState.CurrentUser?.Id ?? 0
             };
 
-            // Process the sale
             var saleResult = await SalesService.CreateSaleAsync(sale);
 
             if (saleResult != null && saleResult.SaleId.HasValue && saleResult.SaleId.Value > 0)
             {
-                // Log sale creation to history
                 try
                 {
                     if (AuthState.CurrentUser != null)
@@ -723,7 +1038,6 @@
                 }
                 catch { }
 
-                // Prepare receipt data before clearing cart
                 var receiptData = new
                 {
                     saleNumber = saleResult.SaleNumber,
@@ -745,36 +1059,18 @@
                     referenceNumber = selectedPaymentMethod == "GCash" ? gcashReferenceNumber.Trim() : null
                 };
 
-                // Success - clear cart and show success message
                 cartItems.Clear();
                 amountPaid = 0;
                 gcashReferenceNumber = string.Empty;
                 StateHasChanged();
 
-                // Print receipt automatically
                 try
                 {
                     await JSRuntime.InvokeVoidAsync("printReceipt", receiptData);
-                    // Log print action
-                    if (AuthState.CurrentUser != null)
-                    {
-                        await HistoryService.LogAsync(
-                            AuthState.CurrentUser.Id,
-                            "print",
-                            "Sales",
-                            $"Printed receipt for sale: {saleResult.SaleNumber}"
-                        );
-                    }
                 }
-                catch (Exception printEx)
-                {
-                    System.Diagnostics.Debug.WriteLine($"Error printing receipt: {printEx.Message}");
-                    // Continue even if printing fails
-                }
+                catch { }
 
-                await JSRuntime.InvokeVoidAsync("alert", $"Sale completed successfully! Sale Number: {saleResult.SaleNumber}");
-                
-                // Reload products to update stock
+                await JSRuntime.InvokeVoidAsync("alert", $"Sale completed successfully!\nSale Number: {saleResult.SaleNumber}");
                 await LoadProducts();
             }
             else
@@ -784,13 +1080,9 @@
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Error processing sale: {ex.Message}");
             await JSRuntime.InvokeVoidAsync("alert", $"Error processing sale: {ex.Message}");
         }
     }
 
-    public void Dispose()
-    {
-        _searchTimer?.Dispose();
-    }
+    public void Dispose() => _searchTimer?.Dispose();
 }

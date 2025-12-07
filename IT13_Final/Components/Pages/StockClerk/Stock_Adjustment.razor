@@ -2,14 +2,13 @@
 @layout IT13_Final.Components.Layout.StockClerk.StockClerk
 @inject IT13_Final.Services.Data.IStockAdjustmentService StockAdjustmentService
 @inject IT13_Final.Services.Data.IVariantService VariantService
+@inject IT13_Final.Services.Data.IInventoryService InventoryService
 @inject IT13_Final.Services.Auth.AuthState AuthState
 @inject IJSRuntime JSRuntime
 @inject NavigationManager Nav
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.Data.SqlClient
 @implements IDisposable
-
-<h1 class="page-title">Stock Adjustments</h1>
 
 @if (showSuccessMessage && !string.IsNullOrEmpty(successMessageText))
 {
@@ -156,7 +155,7 @@
 @if (showAddStockAdjustmentModal)
 {
     <div class="modal-overlay" @onclick="CloseAddStockAdjustmentModal">
-        <div class="add-supplier-modal" @onclick:stopPropagation>
+        <div class="add-admin-modal" @onclick:stopPropagation>
             <div class="modal-header">
                 <h2 class="modal-title-text">Add Stock Adjustment</h2>
                 <button class="modal-close-btn" @onclick="CloseAddStockAdjustmentModal">
@@ -173,7 +172,7 @@
                     
                     <div class="form-grid">
                         <div class="form-field full-width">
-                            <label class="field-label">Variant <span class="required">*</span></label>
+                            <label class="field-label">Variant <span class="required-asterisk">*</span></label>
                             <InputSelect class="form-input" @bind-Value="_addStockAdjustmentModel.VariantId" @bind-Value:after="OnVariantSelectedAsync">
                                 <option value="0">Select Variant</option>
                                 @foreach (var variant in availableVariants)
@@ -210,8 +209,8 @@
                             </InputSelect>
                         </div>
                         <div class="form-field">
-                            <label class="field-label">Adjustment Type <span class="required">*</span></label>
-                            <InputSelect class="form-input" @bind-Value="_addStockAdjustmentModel.AdjustmentType">
+                            <label class="field-label">Adjustment Type <span class="required-asterisk">*</span></label>
+                            <InputSelect class="form-input" @bind-Value="_addStockAdjustmentModel.AdjustmentType" @bind-Value:after="OnAdjustmentTypeChanged">
                                 <option value="">Select Type</option>
                                 <option value="Increase">Increase</option>
                                 <option value="Decrease">Decrease</option>
@@ -219,21 +218,34 @@
                             <ValidationMessage For="@(() => _addStockAdjustmentModel.AdjustmentType)" />
                         </div>
                         <div class="form-field">
-                            <label class="field-label">Quantity <span class="required">*</span></label>
+                            <label class="field-label">Quantity <span class="required-asterisk">*</span></label>
                             <InputNumber class="form-input" @bind-Value="_addStockAdjustmentModel.QuantityAdjusted" placeholder="Enter quantity" />
                             <ValidationMessage For="@(() => _addStockAdjustmentModel.QuantityAdjusted)" />
                         </div>
                         <div class="form-field full-width">
                             <label class="field-label">Reason</label>
-                            <InputSelect class="form-input" @bind-Value="_addStockAdjustmentModel.Reason">
+                            <InputSelect class="form-input" @bind-Value="_addStockAdjustmentModel.Reason" disabled="@(string.IsNullOrEmpty(_addStockAdjustmentModel.AdjustmentType))">
                                 <option value="">Select Reason (Optional)</option>
-                                <option value="Miscount">Miscount</option>
-                                <option value="Theft">Theft</option>
-                                <option value="Human Error">Human Error</option>
-                                <option value="System Mismatch">System Mismatch</option>
-                                <option value="Damage">Damage</option>
-                                <option value="Expired">Expired</option>
-                                <option value="Other">Other</option>
+                                @if (_addStockAdjustmentModel.AdjustmentType == "Increase")
+                                {
+                                    <option value="Miscount">Miscount</option>
+                                    <option value="Human Error">Human Error</option>
+                                    <option value="System Mismatch">System Mismatch</option>
+                                    <option value="Found">Found</option>
+                                    <option value="Returned">Returned</option>
+                                    <option value="Other">Other</option>
+                                }
+                                else if (_addStockAdjustmentModel.AdjustmentType == "Decrease")
+                                {
+                                    <option value="Miscount">Miscount</option>
+                                    <option value="Theft">Theft</option>
+                                    <option value="Human Error">Human Error</option>
+                                    <option value="System Mismatch">System Mismatch</option>
+                                    <option value="Damage">Damage</option>
+                                    <option value="Expired">Expired</option>
+                                    <option value="Lost">Lost</option>
+                                    <option value="Other">Other</option>
+                                }
                             </InputSelect>
                         </div>
                         @if (_addStockAdjustmentModel.Reason == "Other")
@@ -247,7 +259,7 @@
 
                     <div class="modal-footer">
                         <button type="button" class="cancel-btn" @onclick="CloseAddStockAdjustmentModal">Cancel</button>
-                        <button type="submit" class="save-supplier-btn">
+                        <button type="submit" class="save-admin-btn">
                             <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
                                 <polyline points="17 21 17 13 7 13 7 21"></polyline>
@@ -454,8 +466,8 @@
         {
             if (sellerUserId > 0)
             {
-                totalCount = await StockAdjustmentService.GetStockAdjustmentsCountAsync(sellerUserId, searchTerm, string.IsNullOrEmpty(selectedAdjustmentType) ? null : selectedAdjustmentType);
-                stockAdjustments = await StockAdjustmentService.GetStockAdjustmentsAsync(sellerUserId, searchTerm, string.IsNullOrEmpty(selectedAdjustmentType) ? null : selectedAdjustmentType, currentPage, pageSize);
+                totalCount = await StockAdjustmentService.GetStockAdjustmentsCountAsync(sellerUserId, searchTerm, string.IsNullOrEmpty(selectedAdjustmentType) ? null : selectedAdjustmentType, null, null);
+                stockAdjustments = await StockAdjustmentService.GetStockAdjustmentsAsync(sellerUserId, searchTerm, string.IsNullOrEmpty(selectedAdjustmentType) ? null : selectedAdjustmentType, null, null, currentPage, pageSize);
             }
         }
         catch (Exception)
@@ -576,12 +588,38 @@
         await InvokeAsync(StateHasChanged);
     }
 
+    private void OnAdjustmentTypeChanged()
+    {
+        // Clear reason when adjustment type changes so user must select appropriate reason
+        _addStockAdjustmentModel.Reason = null;
+        _addStockAdjustmentModel.CustomReason = null;
+        StateHasChanged();
+    }
+
     private async Task SaveStockAdjustmentAsync()
     {
         try
         {
             if (sellerUserId > 0 && AuthState.CurrentUser != null)
             {
+                // Validate that there's enough stock available for decrease adjustments
+                if (_addStockAdjustmentModel.AdjustmentType == "Decrease")
+                {
+                    var inventory = await InventoryService.GetInventoryDetailsAsync(
+                        _addStockAdjustmentModel.VariantId,
+                        _addStockAdjustmentModel.SizeId == 0 ? null : _addStockAdjustmentModel.SizeId,
+                        _addStockAdjustmentModel.ColorId == 0 ? null : _addStockAdjustmentModel.ColorId,
+                        sellerUserId
+                    );
+
+                    if (inventory == null || inventory.CurrentStock < _addStockAdjustmentModel.QuantityAdjusted)
+                    {
+                        var availableStock = inventory?.CurrentStock ?? 0;
+                        await JSRuntime.InvokeVoidAsync("alert", $"Insufficient stock for decrease adjustment! Available stock: {availableStock}, Requested decrease: {_addStockAdjustmentModel.QuantityAdjusted}");
+                        return;
+                    }
+                }
+
                 // Use custom reason if "Other" is selected
                 string finalReason = _addStockAdjustmentModel.Reason == "Other" 
                     ? _addStockAdjustmentModel.CustomReason 

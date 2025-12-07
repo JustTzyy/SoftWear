@@ -103,6 +103,9 @@ namespace IT13_Final.Services.Data
         Task<ReturnReportModel?> GetReturnForReportAsync(int returnId, int cashierUserId, CancellationToken ct = default);
         Task<List<ReturnReportItemModel>> GetReturnItemsForReportAsync(int returnId, CancellationToken ct = default);
         Task<List<DailyReturnsData>> GetDailyReturnsDataAsync(int cashierUserId, int days = 30, CancellationToken ct = default);
+        Task<List<ReturnReportModel>> GetPendingReturnsForAccountingAsync(int sellerUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
+        Task<int> GetPendingReturnsCountForAccountingAsync(int sellerUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, CancellationToken ct = default);
+        Task<ReturnReportModel?> GetReturnDetailsForAccountingAsync(int returnId, int sellerUserId, CancellationToken ct = default);
     }
 
     public class ReturnsService : IReturnsService
@@ -537,7 +540,9 @@ namespace IT13_Final.Services.Data
                 FROM dbo.tbl_returns r
                 INNER JOIN dbo.tbl_sales s ON r.sale_id = s.id
                 INNER JOIN dbo.tbl_users u ON r.user_id = u.id
-                WHERE r.id = @ReturnId AND r.user_id = @CashierUserId AND r.archives IS NULL";
+                WHERE r.id = @ReturnId
+                AND (@CashierUserId = 0 OR r.user_id = @CashierUserId)
+                AND r.archives IS NULL";
 
             using var cmd = new SqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@ReturnId", returnId);
@@ -706,32 +711,42 @@ namespace IT13_Final.Services.Data
                     using var itemsCmd = new SqlCommand(itemsSql, conn, transaction);
                     itemsCmd.Parameters.AddWithValue("@ReturnId", returnId);
 
-                    using var reader = await itemsCmd.ExecuteReaderAsync(ct);
-                    while (await reader.ReadAsync(ct))
+                    // Read all items into a list first to avoid DataReader conflict
+                    var returnItems = new List<(int VariantId, int? SizeId, int? ColorId, int Quantity, int VariantOwnerUserId, decimal CostPrice)>();
+                    
+                    using (var reader = await itemsCmd.ExecuteReaderAsync(ct))
                     {
-                        var variantId = reader.GetInt32(0);
-                        var sizeId = reader.IsDBNull(1) ? (int?)null : reader.GetInt32(1);
-                        var colorId = reader.IsDBNull(2) ? (int?)null : reader.GetInt32(2);
-                        var quantity = reader.GetInt32(3);
-                        var variantOwnerUserId = reader.GetInt32(4);
-                        var costPrice = reader.GetDecimal(5);
+                        while (await reader.ReadAsync(ct))
+                        {
+                            returnItems.Add((
+                                reader.GetInt32(0),
+                                reader.IsDBNull(1) ? (int?)null : reader.GetInt32(1),
+                                reader.IsDBNull(2) ? (int?)null : reader.GetInt32(2),
+                                reader.GetInt32(3),
+                                reader.GetInt32(4),
+                                reader.GetDecimal(5)
+                            ));
+                        }
+                    }
 
+                    // Now process all items after reader is closed
+                    foreach (var item in returnItems)
+                    {
                         // Create stock_in record to add inventory back
                         var stockInSql = @"
                             INSERT INTO dbo.tbl_stock_in (user_id, variant_id, size_id, color_id, quantity_added, cost_price, supplier_id, timestamps)
                             VALUES (@UserId, @VariantId, @SizeId, @ColorId, @Quantity, @CostPrice, NULL, SYSUTCDATETIME());";
 
                         using var stockInCmd = new SqlCommand(stockInSql, conn, transaction);
-                        stockInCmd.Parameters.AddWithValue("@UserId", variantOwnerUserId);
-                        stockInCmd.Parameters.AddWithValue("@VariantId", variantId);
-                        stockInCmd.Parameters.AddWithValue("@SizeId", (object?)sizeId ?? DBNull.Value);
-                        stockInCmd.Parameters.AddWithValue("@ColorId", (object?)colorId ?? DBNull.Value);
-                        stockInCmd.Parameters.AddWithValue("@Quantity", quantity);
-                        stockInCmd.Parameters.AddWithValue("@CostPrice", costPrice);
+                        stockInCmd.Parameters.AddWithValue("@UserId", item.VariantOwnerUserId);
+                        stockInCmd.Parameters.AddWithValue("@VariantId", item.VariantId);
+                        stockInCmd.Parameters.AddWithValue("@SizeId", (object?)item.SizeId ?? DBNull.Value);
+                        stockInCmd.Parameters.AddWithValue("@ColorId", (object?)item.ColorId ?? DBNull.Value);
+                        stockInCmd.Parameters.AddWithValue("@Quantity", item.Quantity);
+                        stockInCmd.Parameters.AddWithValue("@CostPrice", item.CostPrice);
 
                         await stockInCmd.ExecuteNonQueryAsync(ct);
                     }
-                    reader.Close();
                 }
 
                 transaction.Commit();
@@ -742,6 +757,165 @@ namespace IT13_Final.Services.Data
                 transaction.Rollback();
                 throw;
             }
+        }
+
+        public async Task<List<ReturnReportModel>> GetPendingReturnsForAccountingAsync(int sellerUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
+        {
+            var returns = new List<ReturnReportModel>();
+            var offset = (page - 1) * pageSize;
+
+            using var conn = new SqlConnection(_connectionString);
+            await conn.OpenAsync(ct);
+
+            // Get returns created by cashiers that belong to this seller
+            // Returns are filtered by: cashier's user_id = sellerUserId AND return status = 'Pending'
+            var sql = @"
+                SELECT r.id, r.return_number, r.sale_id, s.sale_number, r.reason, r.status, r.timestamps,
+                       COALESCE(u.name, (LTRIM(RTRIM(ISNULL(u.fname,''))) + ' ' + LTRIM(RTRIM(ISNULL(u.lname,''))))) as cashier_name
+                FROM dbo.tbl_returns r
+                INNER JOIN dbo.tbl_sales s ON r.sale_id = s.id
+                INNER JOIN dbo.tbl_users u ON r.user_id = u.id
+                WHERE r.archives IS NULL 
+                AND r.status = 'Pending'
+                AND u.user_id = @SellerUserId";
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                sql += " AND (r.return_number LIKE @SearchTerm OR s.sale_number LIKE @SearchTerm)";
+            }
+
+            if (startDate.HasValue)
+            {
+                sql += " AND CAST(r.timestamps AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                sql += " AND CAST(r.timestamps AS DATE) <= @EndDate";
+            }
+
+            sql += " ORDER BY r.timestamps DESC OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
+
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
+            }
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+            }
+            cmd.Parameters.AddWithValue("@Offset", offset);
+            cmd.Parameters.AddWithValue("@PageSize", pageSize);
+
+            using var reader = await cmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                returns.Add(new ReturnReportModel
+                {
+                    Id = reader.GetInt32(0),
+                    ReturnNumber = reader.GetString(1),
+                    SaleId = reader.GetInt32(2),
+                    SaleNumber = reader.GetString(3),
+                    Reason = reader.IsDBNull(4) ? null : reader.GetString(4),
+                    Status = reader.GetString(5),
+                    Timestamps = reader.GetDateTime(6),
+                    CashierName = reader.IsDBNull(7) ? string.Empty : reader.GetString(7)
+                });
+            }
+
+            return returns;
+        }
+
+        public async Task<int> GetPendingReturnsCountForAccountingAsync(int sellerUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, CancellationToken ct = default)
+        {
+            using var conn = new SqlConnection(_connectionString);
+            await conn.OpenAsync(ct);
+
+            var sql = @"
+                SELECT COUNT(*)
+                FROM dbo.tbl_returns r
+                INNER JOIN dbo.tbl_sales s ON r.sale_id = s.id
+                INNER JOIN dbo.tbl_users u ON r.user_id = u.id
+                WHERE r.archives IS NULL 
+                AND r.status = 'Pending'
+                AND u.user_id = @SellerUserId";
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                sql += " AND (r.return_number LIKE @SearchTerm OR s.sale_number LIKE @SearchTerm)";
+            }
+
+            if (startDate.HasValue)
+            {
+                sql += " AND CAST(r.timestamps AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                sql += " AND CAST(r.timestamps AS DATE) <= @EndDate";
+            }
+
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
+            }
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+            }
+
+            var count = await cmd.ExecuteScalarAsync(ct);
+            return count != null ? Convert.ToInt32(count) : 0;
+        }
+
+        public async Task<ReturnReportModel?> GetReturnDetailsForAccountingAsync(int returnId, int sellerUserId, CancellationToken ct = default)
+        {
+            using var conn = new SqlConnection(_connectionString);
+            await conn.OpenAsync(ct);
+
+            var sql = @"
+                SELECT r.id, r.return_number, r.sale_id, s.sale_number, r.reason, r.status, r.timestamps,
+                       COALESCE(u.name, (LTRIM(RTRIM(ISNULL(u.fname,''))) + ' ' + LTRIM(RTRIM(ISNULL(u.lname,''))))) as cashier_name
+                FROM dbo.tbl_returns r
+                INNER JOIN dbo.tbl_sales s ON r.sale_id = s.id
+                INNER JOIN dbo.tbl_users u ON r.user_id = u.id
+                WHERE r.id = @ReturnId 
+                AND r.archives IS NULL 
+                AND u.user_id = @SellerUserId";
+
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@ReturnId", returnId);
+            cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+
+            using var reader = await cmd.ExecuteReaderAsync(ct);
+            if (await reader.ReadAsync(ct))
+            {
+                return new ReturnReportModel
+                {
+                    Id = reader.GetInt32(0),
+                    ReturnNumber = reader.GetString(1),
+                    SaleId = reader.GetInt32(2),
+                    SaleNumber = reader.GetString(3),
+                    Reason = reader.IsDBNull(4) ? null : reader.GetString(4),
+                    Status = reader.GetString(5),
+                    Timestamps = reader.GetDateTime(6),
+                    CashierName = reader.IsDBNull(7) ? string.Empty : reader.GetString(7)
+                };
+            }
+
+            return null;
         }
     }
 }

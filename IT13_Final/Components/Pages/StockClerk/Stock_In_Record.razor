@@ -10,8 +10,6 @@
 @using Microsoft.Data.SqlClient
 @implements IDisposable
 
-<h1 class="page-title">Stock In Records</h1>
-
 @if (showSuccessMessage && !string.IsNullOrEmpty(successMessageText))
 {
     <div class="success-banner">
@@ -127,7 +125,7 @@
 @if (showAddStockInModal)
 {
     <div class="modal-overlay" @onclick="CloseAddStockInModal">
-        <div class="add-supplier-modal" @onclick:stopPropagation>
+        <div class="add-admin-modal" @onclick:stopPropagation>
             <div class="modal-header">
                 <h2 class="modal-title-text">Add Stock In</h2>
                 <button class="modal-close-btn" @onclick="CloseAddStockInModal">
@@ -144,7 +142,7 @@
                     
                     <div class="form-grid">
                         <div class="form-field full-width">
-                            <label class="field-label">Variant <span class="required">*</span></label>
+                            <label class="field-label">Variant <span class="required-asterisk">*</span></label>
                             <InputSelect class="form-input" @bind-Value="_addStockInModel.VariantId" @bind-Value:after="OnVariantSelectedAsync">
                                 <option value="0">Select Variant</option>
                                 @foreach (var variant in availableVariants)
@@ -155,7 +153,7 @@
                             <ValidationMessage For="@(() => _addStockInModel.VariantId)" />
                         </div>
                         <div class="form-field">
-                            <label class="field-label">Size <span class="required">*</span></label>
+                            <label class="field-label">Size <span class="required-asterisk">*</span></label>
                             <InputSelect class="form-input" @bind-Value="_addStockInModel.SizeId" disabled="@(selectedVariantDetails == null || selectedVariantDetails.SizeIds.Count == 0)">
                                 <option value="0">Select Size</option>
                                 @if (selectedVariantDetails != null && selectedVariantDetails.SizeIds.Count > 0)
@@ -169,7 +167,7 @@
                             <ValidationMessage For="@(() => _addStockInModel.SizeId)" />
                         </div>
                         <div class="form-field">
-                            <label class="field-label">Color <span class="required">*</span></label>
+                            <label class="field-label">Color <span class="required-asterisk">*</span></label>
                             <InputSelect class="form-input" @bind-Value="_addStockInModel.ColorId" disabled="@(selectedVariantDetails == null || selectedVariantDetails.ColorIds.Count == 0)">
                                 <option value="0">Select Color</option>
                                 @if (selectedVariantDetails != null && selectedVariantDetails.ColorIds.Count > 0)
@@ -183,12 +181,12 @@
                             <ValidationMessage For="@(() => _addStockInModel.ColorId)" />
                         </div>
                         <div class="form-field">
-                            <label class="field-label">Quantity <span class="required">*</span></label>
+                            <label class="field-label">Quantity <span class="required-asterisk">*</span></label>
                             <InputNumber class="form-input" @bind-Value="_addStockInModel.QuantityAdded" @bind-Value:after="OnQuantityChanged" placeholder="Enter quantity" />
                             <ValidationMessage For="@(() => _addStockInModel.QuantityAdded)" />
                         </div>
                         <div class="form-field">
-                            <label class="field-label">Cost Price <span class="required">*</span></label>
+                            <label class="field-label">Cost Price <span class="required-asterisk">*</span></label>
                             <InputNumber class="form-input" @bind-Value="_addStockInModel.CostPrice" placeholder="Auto-calculated" step="0.01" readonly />
                             <ValidationMessage For="@(() => _addStockInModel.CostPrice)" />
                             @if (selectedVariantDetails != null)
@@ -210,7 +208,7 @@
 
                     <div class="modal-footer">
                         <button type="button" class="cancel-btn" @onclick="CloseAddStockInModal">Cancel</button>
-                        <button type="submit" class="save-supplier-btn">
+                        <button type="submit" class="save-admin-btn">
                             <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
                                 <polyline points="17 21 17 13 7 13 7 21"></polyline>
@@ -431,7 +429,7 @@
         {
             if (sellerUserId > 0)
             {
-                availableSuppliers = await SupplierService.GetSuppliersAsync(sellerUserId, null, 1, 1000);
+                availableSuppliers = await SupplierService.GetSuppliersAsync(sellerUserId, null, null, null, 1, 1000);
             }
         }
         catch (Exception)
@@ -449,8 +447,8 @@
         {
             if (sellerUserId > 0)
             {
-                totalCount = await StockInService.GetStockInsCountAsync(sellerUserId, searchTerm);
-                stockIns = await StockInService.GetStockInsAsync(sellerUserId, searchTerm, currentPage, pageSize);
+                totalCount = await StockInService.GetStockInsCountAsync(sellerUserId, searchTerm, null, null);
+                stockIns = await StockInService.GetStockInsAsync(sellerUserId, searchTerm, null, null, currentPage, pageSize);
             }
         }
         catch (Exception)
@@ -567,14 +565,15 @@
     {
         try
         {
-            if (sellerUserId == 0)
+            var stockClerkUserId = AuthState.CurrentUser?.Id ?? 0;
+            if (stockClerkUserId == 0)
             {
-                await JSRuntime.InvokeVoidAsync("alert", "Unable to determine seller user ID. Please refresh the page.");
+                await JSRuntime.InvokeVoidAsync("alert", "Unable to determine user ID. Please refresh the page.");
                 return;
             }
 
             var result = await StockInService.CreateStockInAsync(
-                sellerUserId,
+                stockClerkUserId,
                 _addStockInModel.VariantId,
                 _addStockInModel.SizeId,
                 _addStockInModel.ColorId,

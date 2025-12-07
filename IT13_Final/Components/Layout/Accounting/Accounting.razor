@@ -1,0 +1,480 @@
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IT13_Final.Services.Audit.IHistoryService HistoryService
+@inject NavigationManager Nav
+@inject IJSRuntime JSRuntime
+@inherits LayoutComponentBase
+@implements IDisposable
+
+<div class="accounting-layout-root grid min-h-screen transition-all duration-300 ease-in-out" style="grid-template-columns: @(sidebarCollapsed ? "80px" : "260px") 1fr; background: #F5F5F5;">
+    <aside class="accounting-sidebar bg-white transition-all duration-300 ease-in-out overflow-hidden" style="border-right: 1px solid #E0E0E0;">
+        <div class="flex items-start gap-3 py-4 px-4 cursor-pointer hover:bg-gray-50 transition-colors duration-200" style="min-height: 64px;" @onclick="ToggleSidebar" title="Toggle sidebar">
+            <a href="/accounting/dashboard" class="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style="border: 2px solid #5C7CFA; padding: 6px; background-color: #1a2332;" @onclick:stopPropagation>
+                <img src="/images/logo.png" alt="Logo" class="w-full h-full object-contain" style="display: block; margin: auto;" />
+            </a>
+            <div class="transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">
+                <div class="font-extrabold tracking-wide text-sm leading-tight">SOFTWEAR</div>
+                <div class="text-gray-500 text-xs -mt-0.5">Accounting</div>
+            </div>
+        </div>
+
+        <nav class="grid gap-1 px-2 mt-1">
+            <a class="@GetNavItemClass("/accounting/dashboard")" href="/accounting/dashboard" title="Dashboard">
+                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/accounting/dashboard")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+                <span class="transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">Dashboard</span>
+                @if (IsActive("/accounting/dashboard"))
+                {
+                    <div class="absolute left-0 top-0 bottom-0 w-1 bg-yinmn-blue rounded-r"></div>
+                }
+            </a>
+
+            <button class="@GetApprovalsButtonClass()" @onclick="() => approvalsOpen = !approvalsOpen" aria-expanded="@approvalsOpen" title="Approvals">
+                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/accounting/approvals/refund-return", "/accounting/approvals/purchase-orders")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span class="flex-1 transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">Approvals</span>
+                <span class="@GetIconClass("/accounting/approvals/refund-return", "/accounting/approvals/purchase-orders") transition-all duration-300 ease-in-out" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">@(approvalsOpen ? "▾" : "▸")</span>
+                @if (IsApprovalsActive())
+                {
+                    <div class="absolute left-0 top-0 bottom-0 w-1 bg-yinmn-blue rounded-r"></div>
+                }
+            </button>
+            @if (approvalsOpen && !sidebarCollapsed)
+            {
+                <div class="grid gap-1 py-1 pl-4">
+                    <a class="@GetSubNavItemClass("/accounting/approvals/refund-return")" href="/accounting/approvals/refund-return">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/accounting/approvals/refund-return")"></span>
+                        <span>Returns</span>
+                    </a>
+                    <a class="@GetSubNavItemClass("/accounting/approvals/purchase-orders")" href="/accounting/approvals/purchase-orders">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/accounting/approvals/purchase-orders")"></span>
+                        <span>Purchase Orders</span>
+                    </a>
+                </div>
+            }
+
+            <button class="@GetFinancialTrackingButtonClass()" @onclick="() => financialTrackingOpen = !financialTrackingOpen" aria-expanded="@financialTrackingOpen" title="Financial Tracking">
+                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/accounting/financial/daily-sales", "/accounting/financial/expenses", "/accounting/financial/supplier-payments", "/accounting/financial/income")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span class="flex-1 transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">Financial Tracking</span>
+                <span class="@GetIconClass("/accounting/financial/daily-sales", "/accounting/financial/expenses", "/accounting/financial/supplier-payments", "/accounting/financial/income") transition-all duration-300 ease-in-out" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">@(financialTrackingOpen ? "▾" : "▸")</span>
+                @if (IsFinancialTrackingActive())
+                {
+                    <div class="absolute left-0 top-0 bottom-0 w-1 bg-yinmn-blue rounded-r"></div>
+                }
+            </button>
+            @if (financialTrackingOpen && !sidebarCollapsed)
+            {
+                <div class="grid gap-1 py-1 pl-4">
+                    <a class="@GetSubNavItemClass("/accounting/financial/daily-sales")" href="/accounting/financial/daily-sales">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/accounting/financial/daily-sales")"></span>
+                        <span>Daily Sales Verification</span>
+                    </a>
+                    <a class="@GetSubNavItemClass("/accounting/financial/expenses")" href="/accounting/financial/expenses">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/accounting/financial/expenses")"></span>
+                        <span>Expenses</span>
+                    </a>
+                    <a class="@GetSubNavItemClass("/accounting/financial/supplier-payments")" href="/accounting/financial/supplier-payments">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/accounting/financial/supplier-payments")"></span>
+                        <span>Supplier Payments</span>
+                    </a>
+                    <a class="@GetSubNavItemClass("/accounting/financial/income")" href="/accounting/financial/income">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/accounting/financial/income")"></span>
+                        <span>Income Breakdown</span>
+                    </a>
+                </div>
+            }
+
+            <button class="@GetCashflowButtonClass()" @onclick="() => cashflowOpen = !cashflowOpen" aria-expanded="@cashflowOpen" title="Cashflow Management">
+                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/accounting/cashflow/audit", "/accounting/cashflow/petty-cash")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span class="flex-1 transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">Cashflow Management</span>
+                <span class="@GetIconClass("/accounting/cashflow/audit", "/accounting/cashflow/petty-cash") transition-all duration-300 ease-in-out" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">@(cashflowOpen ? "▾" : "▸")</span>
+                @if (IsCashflowActive())
+                {
+                    <div class="absolute left-0 top-0 bottom-0 w-1 bg-yinmn-blue rounded-r"></div>
+                }
+            </button>
+            @if (cashflowOpen && !sidebarCollapsed)
+            {
+                <div class="grid gap-1 py-1 pl-4">
+                    <a class="@GetSubNavItemClass("/accounting/cashflow/audit")" href="/accounting/cashflow/audit">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/accounting/cashflow/audit")"></span>
+                        <span>Cash-in / Cash-out Audit</span>
+                    </a>
+                    <a class="@GetSubNavItemClass("/accounting/cashflow/petty-cash")" href="/accounting/cashflow/petty-cash">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/accounting/cashflow/petty-cash")"></span>
+                        <span>Petty Cash Management</span>
+                    </a>
+                </div>
+            }
+
+            <button class="@GetReportsButtonClass()" @onclick="() => reportsOpen = !reportsOpen" aria-expanded="@reportsOpen" title="Reports">
+                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/accounting/reports/daily-sales-verification", "/accounting/reports/sales", "/accounting/reports/expenses", "/accounting/reports/profit-loss", "/accounting/reports/tax")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span class="flex-1 transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">Reports</span>
+                <span class="@GetIconClass("/accounting/reports/daily-sales-verification", "/accounting/reports/sales", "/accounting/reports/expenses", "/accounting/reports/profit-loss", "/accounting/reports/tax") transition-all duration-300 ease-in-out" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">@(reportsOpen ? "▾" : "▸")</span>
+                @if (IsReportsActive())
+                {
+                    <div class="absolute left-0 top-0 bottom-0 w-1 bg-yinmn-blue rounded-r"></div>
+                }
+            </button>
+            @if (reportsOpen && !sidebarCollapsed)
+            {
+                <div class="grid gap-1 py-1 pl-4">
+                    <a class="@GetSubNavItemClass("/accounting/reports/daily-sales-verification")" href="/accounting/reports/daily-sales-verification">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/accounting/reports/daily-sales-verification")"></span>
+                        <span>Daily Sales Verification</span>
+                    </a>
+                    <a class="@GetSubNavItemClass("/accounting/reports/sales")" href="/accounting/reports/sales">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/accounting/reports/sales")"></span>
+                        <span>Sales Reports</span>
+                    </a>
+                    <a class="@GetSubNavItemClass("/accounting/reports/expenses")" href="/accounting/reports/expenses">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/accounting/reports/expenses")"></span>
+                        <span>Expense Reports</span>
+                    </a>
+                    <a class="@GetSubNavItemClass("/accounting/reports/profit-loss")" href="/accounting/reports/profit-loss">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/accounting/reports/profit-loss")"></span>
+                        <span>Profit & Loss Statement</span>
+                    </a>
+                    <a class="@GetSubNavItemClass("/accounting/reports/tax")" href="/accounting/reports/tax">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/accounting/reports/tax")"></span>
+                        <span>Tax Reports</span>
+                    </a>
+                </div>
+            }
+        </nav>
+    </aside>
+
+    <div class="accounting-layout-main grid grid-rows-[64px_1fr]">
+        <header class="flex items-center gap-3 px-5 bg-white" style="border-bottom: 1px solid #E0E0E0; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 100;">
+            <div class="flex-1"></div>
+            <div class="relative flex items-center gap-2.5" id="profile-menu-container" @onclick="ToggleProfileMenu" @onclick:stopPropagation>
+                <div class="w-9 h-9 rounded-full bg-gradient-to-br from-uranian-blue to-white text-yinmn-blue flex items-center justify-center font-extrabold">@GetInitials()</div>
+                <button class="flex items-center gap-2 py-1.5 px-2.5 rounded-[10px] bg-white cursor-pointer text-gray-700 transition-all duration-200 ease-in-out hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)]" style="border: 1px solid #E0E0E0;">
+                    <span class="text-sm">@DisplayName()</span>
+                    <span class="text-yinmn-blue text-xs">▾</span>
+                </button>
+                @if (profileOpen)
+                {
+                    <div class="absolute top-14 right-0 bg-white rounded-xl shadow-[0_12px_28px_rgba(0,0,0,0.12)] p-2 w-60" style="border: 1px solid #E0E0E0; z-index: 50;" @onclick:stopPropagation>
+                        <a class="grid grid-cols-[22px_1fr] items-center gap-2.5 py-2.5 px-3 no-underline text-gray-800 rounded-[10px] border-none bg-transparent w-full text-left transition-all duration-200 ease-in-out hover:bg-platinum" href="/accounting/settings" @onclick="CloseProfileMenu">
+                            <svg class="w-[18px] h-[18px] stroke-yinmn-blue stroke-2 fill-none" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none"/><path d="M12 8v8M8 12h8"/></svg>
+                            <span>Settings</span>
+                        </a>
+                        <a class="grid grid-cols-[22px_1fr] items-center gap-2.5 py-2.5 px-3 no-underline text-gray-800 rounded-[10px] border-none bg-transparent w-full text-left transition-all duration-200 ease-in-out hover:bg-platinum" href="/accounting/activitylog" @onclick="CloseProfileMenu">
+                            <svg class="w-[18px] h-[18px] stroke-yinmn-blue stroke-2 fill-none" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M5 12h14"/></svg>
+                            <span>My Activity Log</span>
+                        </a>
+                        <button class="grid grid-cols-[22px_1fr] items-center gap-2.5 py-2.5 px-3 no-underline text-gray-800 rounded-[10px] border-none bg-transparent w-full text-left transition-all duration-200 ease-in-out hover:bg-platinum" @onclick="OnSignOut">
+                            <svg class="w-[18px] h-[18px] stroke-yinmn-blue stroke-2 fill-none" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 7l5 5-5 5"/><path d="M4 12h11"/></svg>
+                            <span>Signout</span>
+                        </button>
+                    </div>
+                }
+            </div>
+        </header>
+
+        <main class="accounting-main p-6" @onclick="() => { if (profileOpen) CloseProfileMenu(); }">
+            @Body
+        </main>
+    </div>
+</div>
+
+
+@code {
+    private bool approvalsOpen = false;
+    private bool financialTrackingOpen = false;
+    private bool cashflowOpen = false;
+    private bool reportsOpen = false;
+    private bool profileOpen;
+    private bool sidebarCollapsed = false;
+    private string currentUri = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        currentUri = Nav.Uri;
+        CheckApprovalsExpansion();
+        CheckFinancialTrackingExpansion();
+        CheckCashflowExpansion();
+        CheckReportsExpansion();
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        currentUri = e.Location;
+        CheckApprovalsExpansion();
+        CheckFinancialTrackingExpansion();
+        CheckCashflowExpansion();
+        CheckReportsExpansion();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void CheckApprovalsExpansion()
+    {
+        if (IsActive("/accounting/approvals/refund-return") || IsActive("/accounting/approvals/purchase-orders"))
+        {
+            approvalsOpen = true;
+        }
+    }
+
+    private void CheckFinancialTrackingExpansion()
+    {
+        if (IsActive("/accounting/financial/daily-sales") || IsActive("/accounting/financial/expenses") || 
+            IsActive("/accounting/financial/supplier-payments") || IsActive("/accounting/financial/income"))
+        {
+            financialTrackingOpen = true;
+        }
+    }
+
+    private void CheckCashflowExpansion()
+    {
+        if (IsActive("/accounting/cashflow/audit") || IsActive("/accounting/cashflow/petty-cash"))
+        {
+            cashflowOpen = true;
+        }
+    }
+
+    private void CheckReportsExpansion()
+    {
+        if (IsActive("/accounting/reports/daily-sales-verification") || IsActive("/accounting/reports/sales") || 
+            IsActive("/accounting/reports/expenses") || IsActive("/accounting/reports/profit-loss") || 
+            IsActive("/accounting/reports/tax"))
+        {
+            reportsOpen = true;
+        }
+    }
+
+    private bool IsActive(string path)
+    {
+        if (string.IsNullOrEmpty(currentUri)) return false;
+        
+        try
+        {
+            var uri = Nav.ToAbsoluteUri(currentUri);
+            var currentPath = uri.AbsolutePath.ToLowerInvariant().TrimEnd('/');
+            var checkPath = path.ToLowerInvariant().TrimEnd('/');
+            
+            // Exact match
+            if (currentPath == checkPath) return true;
+            
+            // Check if current path starts with the check path (for sub-routes)
+            if (currentPath.StartsWith(checkPath + "/", StringComparison.OrdinalIgnoreCase)) return true;
+            
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private string GetNavItemClass(string path)
+    {
+        var baseClass = "relative py-2.5 px-3 rounded-lg no-underline flex items-center gap-3 transition-all duration-200 ease-in-out whitespace-nowrap";
+        if (IsActive(path))
+        {
+            return $"{baseClass} bg-uranian-blue text-yinmn-blue";
+        }
+        return $"{baseClass} text-gray-800 hover:bg-uranian-blue hover:bg-opacity-30";
+    }
+
+    private bool IsApprovalsActive()
+    {
+        return IsActive("/accounting/approvals/refund-return") || IsActive("/accounting/approvals/purchase-orders");
+    }
+
+    private bool IsFinancialTrackingActive()
+    {
+        return IsActive("/accounting/financial/daily-sales") || IsActive("/accounting/financial/expenses") || 
+               IsActive("/accounting/financial/supplier-payments") || IsActive("/accounting/financial/income");
+    }
+
+    private bool IsCashflowActive()
+    {
+        return IsActive("/accounting/cashflow/audit") || IsActive("/accounting/cashflow/petty-cash");
+    }
+
+    private bool IsReportsActive()
+    {
+        return IsActive("/accounting/reports/daily-sales-verification") || IsActive("/accounting/reports/sales") || 
+               IsActive("/accounting/reports/expenses") || IsActive("/accounting/reports/profit-loss") || 
+               IsActive("/accounting/reports/tax");
+    }
+
+    private string GetApprovalsButtonClass()
+    {
+        var baseClass = "relative w-full text-left cursor-pointer py-2.5 px-3 rounded-lg no-underline flex items-center gap-3 transition-all duration-200 ease-in-out";
+        
+        if (IsApprovalsActive())
+        {
+            return $"{baseClass} bg-uranian-blue text-yinmn-blue";
+        }
+        return $"{baseClass} bg-transparent text-gray-800 hover:bg-uranian-blue hover:bg-opacity-30";
+    }
+
+    private string GetFinancialTrackingButtonClass()
+    {
+        var baseClass = "relative w-full text-left cursor-pointer py-2.5 px-3 rounded-lg no-underline flex items-center gap-3 transition-all duration-200 ease-in-out";
+        
+        if (IsFinancialTrackingActive())
+        {
+            return $"{baseClass} bg-uranian-blue text-yinmn-blue";
+        }
+        return $"{baseClass} bg-transparent text-gray-800 hover:bg-uranian-blue hover:bg-opacity-30";
+    }
+
+    private string GetCashflowButtonClass()
+    {
+        var baseClass = "relative w-full text-left cursor-pointer py-2.5 px-3 rounded-lg no-underline flex items-center gap-3 transition-all duration-200 ease-in-out";
+        
+        if (IsCashflowActive())
+        {
+            return $"{baseClass} bg-uranian-blue text-yinmn-blue";
+        }
+        return $"{baseClass} bg-transparent text-gray-800 hover:bg-uranian-blue hover:bg-opacity-30";
+    }
+
+    private string GetReportsButtonClass()
+    {
+        var baseClass = "relative w-full text-left cursor-pointer py-2.5 px-3 rounded-lg no-underline flex items-center gap-3 transition-all duration-200 ease-in-out";
+        
+        if (IsReportsActive())
+        {
+            return $"{baseClass} bg-uranian-blue text-yinmn-blue";
+        }
+        return $"{baseClass} bg-transparent text-gray-800 hover:bg-uranian-blue hover:bg-opacity-30";
+    }
+
+    private string GetSubNavItemClass(string path)
+    {
+        var baseClass = "py-2 px-3 rounded-lg no-underline flex items-center gap-3 transition-all duration-200 ease-in-out whitespace-nowrap";
+        if (IsActive(path))
+        {
+            return $"{baseClass} bg-uranian-blue bg-opacity-30 text-yinmn-blue font-medium";
+        }
+        return $"{baseClass} text-gray-700 hover:bg-platinum";
+    }
+
+    private string GetSubNavDotClass(string path)
+    {
+        if (IsActive(path))
+        {
+            return "bg-yinmn-blue";
+        }
+        return "bg-gray-400";
+    }
+
+    private string GetIconClass(params string[] paths)
+    {
+        foreach (var path in paths)
+        {
+            if (IsActive(path))
+            {
+                return "text-yinmn-blue";
+            }
+        }
+        return "text-gray-600";
+    }
+
+    private void ToggleSidebar()
+    {
+        sidebarCollapsed = !sidebarCollapsed;
+        if (sidebarCollapsed)
+        {
+            approvalsOpen = false;
+            financialTrackingOpen = false;
+            cashflowOpen = false;
+            reportsOpen = false;
+        }
+        else
+        {
+            CheckApprovalsExpansion();
+            CheckFinancialTrackingExpansion();
+            CheckCashflowExpansion();
+            CheckReportsExpansion();
+        }
+    }
+
+    private void ToggleProfileMenu()
+    {
+        profileOpen = !profileOpen;
+    }
+
+    private void CloseProfileMenu()
+    {
+        profileOpen = false;
+    }
+
+    private string DisplayName()
+    {
+        return AuthState.CurrentUser?.FullName ?? AuthState.CurrentUser?.Email ?? "User";
+    }
+
+    private string GetInitials()
+    {
+        var name = AuthState.CurrentUser?.FullName ?? AuthState.CurrentUser?.Email ?? "U";
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2) return (parts[0][0].ToString() + parts[1][0]).ToUpperInvariant();
+        return name[0].ToString().ToUpperInvariant();
+    }
+
+    private string GetPageTitle()
+    {
+        if (string.IsNullOrEmpty(currentUri)) return string.Empty;
+        
+        try
+        {
+            var uri = Nav.ToAbsoluteUri(currentUri);
+            var path = uri.AbsolutePath.ToLowerInvariant().TrimEnd('/');
+            
+            // Map routes to page titles
+            if (path == "/accounting/dashboard") return string.Empty;
+            if (path == "/accounting/financial/income") return "Income Breakdown";
+            if (path == "/accounting/financial/expenses") return "Expenses";
+            if (path == "/accounting/financial/expense-archive") return "Archived Expenses";
+            if (path == "/accounting/financial/supplier-payments") return "Supplier Payments";
+            if (path == "/accounting/financial/daily-sales") return "Daily Sales Verification";
+            if (path == "/accounting/cashflow/audit") return "Cash-in / Cash-out Audit";
+            if (path == "/accounting/cashflow/petty-cash") return "Petty Cash Management";
+            if (path == "/accounting/reports/daily-sales-verification") return "Daily Sales Verification Report";
+            if (path == "/accounting/reports/sales") return "Sales Reports (All Cashiers)";
+            if (path == "/accounting/reports/expenses") return "Expense Reports";
+            if (path == "/accounting/reports/profit-loss") return "Profit & Loss Statement";
+            if (path == "/accounting/reports/tax") return "Tax Reports";
+            if (path == "/accounting/approvals/purchase-orders") return "Purchase Orders";
+            if (path == "/accounting/approvals/refund-return") return "Refund / Return Approvals";
+            if (path == "/accounting/settings") return "Settings";
+            if (path == "/accounting/activitylog") return "My Activity Logs";
+            
+            return string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private async void OnSignOut()
+    {
+        if (AuthState.CurrentUser is not null)
+        {
+            try { await HistoryService.LogAsync(AuthState.CurrentUser.Id, "logout", "Authentication", "User signed out"); } catch {}
+        }
+        AuthState.Logout();
+        profileOpen = false;
+        Nav.NavigateTo("/");
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+    }
+}
+

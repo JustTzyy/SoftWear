@@ -4,10 +4,10 @@
 @inherits LayoutComponentBase
 @implements IDisposable
 
-<div class="grid min-h-screen transition-all duration-300 ease-in-out" style="grid-template-columns: @(sidebarCollapsed ? "80px" : "260px") 1fr; background-color: #E0E0E0;">
-    <aside class="bg-white transition-all duration-300 ease-in-out overflow-hidden" style="border-right: 1px solid #E0E0E0;">
-        <div class="flex items-start gap-3 py-4 px-4" style="min-height: 64px;">
-            <a href="/admin/dashboard" class="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style="border: 2px solid #5C7CFA; padding: 6px; background-color: #1a2332;">
+<div class="grid min-h-screen transition-all duration-300 ease-in-out" style="grid-template-columns: @(sidebarCollapsed ? "80px" : "260px") 1fr; background: #F5F5F5;">
+    <aside class="bg-white transition-all duration-300 ease-in-out overflow-hidden" style="border-right: 1px solid #E0E0E0; position: sticky; top: 0; height: 100vh;">
+        <div class="flex items-start gap-3 py-4 px-4 cursor-pointer hover:bg-gray-50 transition-colors duration-200" style="min-height: 64px;" @onclick="ToggleSidebar" title="Toggle sidebar">
+            <a href="/admin/dashboard" class="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style="border: 2px solid #5C7CFA; padding: 6px; background-color: #1a2332;" @onclick:stopPropagation>
                 <img src="/images/logo.png" alt="Logo" class="w-full h-full object-contain" style="display: block; margin: auto;" />
             </a>
             <div class="transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">
@@ -57,22 +57,44 @@
                 </div>
             }
 
-            <a class="@GetNavItemClass("/admin/room")" href="#" title="Room Management">
-                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/admin/room")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+            <button class="@GetReportsButtonClass()" @onclick="() => reportsOpen = !reportsOpen" aria-expanded="@reportsOpen" title="Reports">
+                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/admin/fee-summary", "/admin/seller-fees", "/admin/monthly-collection", "/admin/audit-logs")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <span class="transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">Room Management</span>
-                @if (IsActive("/admin/room"))
+                <span class="flex-1 transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">Reports</span>
+                <span class="@GetIconClass("/admin/fee-summary", "/admin/seller-fees", "/admin/monthly-collection", "/admin/audit-logs") transition-all duration-300 ease-in-out" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">@(reportsOpen ? "▾" : "▸")</span>
+                @if (IsReportsActive())
                 {
                     <div class="absolute left-0 top-0 bottom-0 w-1 bg-yinmn-blue rounded-r"></div>
                 }
-            </a>
-            <a class="@GetNavItemClass("/admin/reports")" href="#" title="Reports">
-                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/admin/reports")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </button>
+            @if (reportsOpen && !sidebarCollapsed)
+            {
+                <div class="grid gap-1 py-1 pl-4">
+                    <a class="@GetSubNavItemClass("/admin/fee-summary")" href="/admin/fee-summary">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/admin/fee-summary")"></span>
+                        <span>Admin Fee Summary</span>
+                    </a>
+                    <a class="@GetSubNavItemClass("/admin/seller-fees")" href="/admin/seller-fees">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/admin/seller-fees")"></span>
+                        <span>Seller Fee Breakdown</span>
+                    </a>
+                    <a class="@GetSubNavItemClass("/admin/monthly-collection")" href="/admin/monthly-collection">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/admin/monthly-collection")"></span>
+                        <span>Monthly Collection</span>
+                    </a>
+                    <a class="@GetSubNavItemClass("/admin/audit-logs")" href="/admin/audit-logs">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/admin/audit-logs")"></span>
+                        <span>Audit Logs</span>
+                    </a>
+                </div>
+            }
+            <a class="@GetNavItemClass("/admin/database-sync")" href="/admin/database-sync" title="Database Sync">
+                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/admin/database-sync")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                <span class="transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">Reports</span>
-                @if (IsActive("/admin/reports"))
+                <span class="transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">Database Sync</span>
+                @if (IsActive("/admin/database-sync"))
                 {
                     <div class="absolute left-0 top-0 bottom-0 w-1 bg-yinmn-blue rounded-r"></div>
                 }
@@ -81,8 +103,7 @@
     </aside>
 
     <div class="grid grid-rows-[64px_1fr]">
-        <header class="flex items-center gap-3 px-5 bg-white" style="border-bottom: 1px solid #E0E0E0;">
-            <button class="bg-transparent border-none text-xl cursor-pointer text-yinmn-blue transition-all duration-200 ease-in-out hover:opacity-70" @onclick="ToggleSidebar" aria-label="Toggle menu">≡</button>
+        <header class="flex items-center gap-3 px-5 bg-white" style="border-bottom: 1px solid #E0E0E0; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 100;">
             <div class="flex-1"></div>
             <div class="relative flex items-center gap-2.5" @onclick="ToggleProfileMenu">
                 <div class="w-9 h-9 rounded-full bg-gradient-to-br from-uranian-blue to-white text-yinmn-blue flex items-center justify-center font-extrabold">@GetInitials()</div>
@@ -119,6 +140,7 @@
 
 @code {
     private bool userMgmtOpen = false;
+    private bool reportsOpen = false;
     private bool profileOpen;
     private bool sidebarCollapsed = false;
     private string currentUri = string.Empty;
@@ -126,22 +148,26 @@
     protected override void OnInitialized()
     {
         currentUri = Nav.Uri;
-        CheckUserMgmtExpansion();
+        CheckMenuExpansions();
         Nav.LocationChanged += OnLocationChanged;
     }
 
     private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {
         currentUri = e.Location;
-        CheckUserMgmtExpansion();
+        CheckMenuExpansions();
         InvokeAsync(StateHasChanged);
     }
 
-    private void CheckUserMgmtExpansion()
+    private void CheckMenuExpansions()
     {
         if (IsActive("/admin/Admin_Record") || IsActive("/admin/Seller_Record") || IsActive("/admin/Permission_Requests"))
         {
             userMgmtOpen = true;
+        }
+        if (IsActive("/admin/fee-summary") || IsActive("/admin/seller-fees") || IsActive("/admin/monthly-collection") || IsActive("/admin/audit-logs"))
+        {
+            reportsOpen = true;
         }
     }
 
@@ -182,6 +208,22 @@
     private bool IsUserMgmtActive()
     {
         return IsActive("/admin/Admin_Record") || IsActive("/admin/Seller_Record") || IsActive("/admin/Permission_Requests");
+    }
+
+    private bool IsReportsActive()
+    {
+        return IsActive("/admin/fee-summary") || IsActive("/admin/seller-fees") || IsActive("/admin/monthly-collection") || IsActive("/admin/audit-logs");
+    }
+
+    private string GetReportsButtonClass()
+    {
+        var baseClass = "relative w-full text-left cursor-pointer py-2.5 px-3 rounded-lg no-underline flex items-center gap-3 transition-all duration-200 ease-in-out";
+        
+        if (IsReportsActive())
+        {
+            return $"{baseClass} bg-uranian-blue text-yinmn-blue";
+        }
+        return $"{baseClass} bg-transparent text-gray-800 hover:bg-uranian-blue hover:bg-opacity-30";
     }
 
     private string GetUserMgmtButtonClass()
@@ -232,10 +274,11 @@
         if (sidebarCollapsed)
         {
             userMgmtOpen = false;
+            reportsOpen = false;
         }
         else
         {
-            CheckUserMgmtExpansion();
+            CheckMenuExpansions();
         }
     }
 

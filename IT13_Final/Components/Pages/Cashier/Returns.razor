@@ -9,19 +9,29 @@
 @using Microsoft.AspNetCore.Components.Forms
 @implements IDisposable
 
-<h1 class="page-title">Returns</h1>
-
-<div class="activity-log-container">
-    <div class="search-filters-row">
-        <div class="search-wrapper">
-            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"></circle>
-                <path d="m21 21-4.35-4.35"></path>
-            </svg>
-            <input type="text" class="search-input" placeholder="@(showPendingReturns ? "Search by return number or sale number..." : "Search by sale number...")" value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
-        </div>
-        <button class="view-pending-btn @(showPendingReturns ? "active" : "")" @onclick="TogglePendingReturnsView" title="View Pending Returns">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Transaction Returns</h1>
+        <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintReport" disabled="@isGeneratingPDF" title="Print Report">
+            @if (isGeneratingPDF)
+            {
+                <span>Generating...</span>
+            }
+            else
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 9V2h12v7"></path>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+            }
+        </button>
+        <button class="action-btn toggle-view-btn @(showPendingReturns ? "active" : "")" @onclick="TogglePendingReturnsView" title="@(showPendingReturns ? "View Sales" : "View Pending Returns")">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M9 12l2 2 4-4"></path>
                 <path d="M21 12c-1 0-3-1-3-3s2-3 3-3 3 1 3 3-2 3-3 3"></path>
                 <path d="M3 12c1 0 3-1 3-3s-2-3-3-3-3 1-3 3 2 3 3 3"></path>
@@ -31,161 +41,185 @@
             <span>@(showPendingReturns ? "View Sales" : "View Pending Returns")</span>
         </button>
     </div>
+</div>
 
-    <div class="filters-section">
-        <div class="filter-content">
-            <div class="date-filters">
-                <div class="date-range-dropdown">
-                    <label>Quick Range</label>
-                    <select class="date-range-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
-                        <option value="">Custom</option>
-                        <option value="today">Today</option>
-                        <option value="yesterday">Yesterday</option>
-                        <option value="lastweek">Last Week</option>
-                        <option value="thismonth">This Month</option>
-                        <option value="thisyear">This Year</option>
-                    </select>
-                </div>
-                <div class="date-filter">
-                    <label>From</label>
-                    <input type="date" class="date-input" value="@(startDate?.ToString("yyyy-MM-dd"))" max="@(endDate?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd"))" @onchange="HandleFromDateChange" />
-                </div>
-                <div class="date-filter">
-                    <label>To</label>
-                    <input type="date" class="date-input" value="@(endDate?.ToString("yyyy-MM-dd"))" min="@(startDate?.ToString("yyyy-MM-dd"))" max="@DateTime.Today.ToString("yyyy-MM-dd")" @onchange="HandleToDateChange" />
-                </div>
-                <button class="clear-filter-btn" @onclick="ClearDateFilter" title="Clear Date Filter">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                    <span>Clear</span>
-                </button>
-            </div>
+@* Search and Date Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.3-4.3"></path>
+        </svg>
+        <input type="text" 
+               id="returns-search-input"
+               class="search-input" 
+               placeholder="@(showPendingReturns ? "Search by return number or sale number..." : "Search by sale number...")" 
+               @bind="searchTerm" 
+               @bind:event="oninput" 
+               @bind:after="HandleSearchInput"
+               @onkeypress="HandleSearchKeyPress" />
+        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            <button class="clear-search-btn" @onclick="HandleClearSearch" title="Clear search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date"
+               class="date-input"
+               value="@(startDate?.ToString("yyyy-MM-dd"))"
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleStartDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date"
+               class="date-input"
+               value="@(endDate?.ToString("yyyy-MM-dd"))"
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleEndDateChange" />
+        <button class="filter-btn" @onclick="ApplyFilters">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            Apply
+        </button>
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
+
+@* Content Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">@(showPendingReturns ? "Pending Returns" : "Completed Sales")</h3>
+            <span class="card-subtitle">@totalCount @(showPendingReturns ? "pending returns" : "sales") found</span>
         </div>
     </div>
-
-    <div class="table-container">
-        @if (showPendingReturns)
-        {
-            <table class="activity-table">
-                <thead>
-                    <tr>
+    
+    <div class="card-body">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    @if (showPendingReturns)
+                    {
                         <th>Return Number</th>
                         <th>Sale Number</th>
-                        <th>Status</th>
                         <th>Date</th>
-                        <th>Cashier</th>
+                        <th>Status</th>
                         <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @if (isLoading)
-                    {
-                        <tr>
-                            <td colspan="6" class="loading-cell">Loading pending returns...</td>
-                        </tr>
-                    }
-                    else if (pendingReturns.Count == 0)
-                    {
-                        <tr>
-                            <td colspan="6" class="empty-cell">No pending returns found</td>
-                        </tr>
                     }
                     else
                     {
-                        @foreach (var returnItem in pendingReturns)
-                        {
-                            <tr class="clickable-row" @onclick="() => HandleReturnClick(returnItem.Id)">
-                                <td class="return-number">@returnItem.ReturnNumber</td>
-                                <td class="sale-number">@returnItem.SaleNumber</td>
-                                <td>
-                                    <span class="status-badge status-@returnItem.Status.ToLower()">@returnItem.Status</span>
-                                </td>
-                                <td>
-                                    <div class="timestamp-info">
-                                        <div class="timestamp-date">@returnItem.Timestamps.ToString("MMM dd, yyyy")</div>
-                                        <div class="timestamp-time">@returnItem.Timestamps.ToString("HH:mm:ss")</div>
-                                    </div>
-                                </td>
-                                <td>@returnItem.CashierName</td>
-                                <td class="actions-cell" @onclick:stopPropagation="true">
-                                    @if (returnItem.Status == "Pending" && IsCashier())
-                                    {
-                                        <button class="action-btn cancel-btn" @onclick='() => HandleCancelReturn(returnItem.Id)' title="Cancel Return">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                                                <line x1="18" y1="6" x2="6" y2="18" stroke="#F59E0B"></line>
-                                                <line x1="6" y1="6" x2="18" y2="18" stroke="#F59E0B"></line>
-                                            </svg>
-                                        </button>
-                                    }
-                                </td>
-                            </tr>
-                        }
-                    }
-                </tbody>
-            </table>
-        }
-        else
-        {
-            <table class="activity-table">
-                <thead>
-                    <tr>
                         <th>Sale Number</th>
                         <th>Amount</th>
                         <th>Payment Method</th>
                         <th>Date</th>
-                        <th>Cashier</th>
                         <th>Actions</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="5" class="loading-cell">Loading @(showPendingReturns ? "pending returns" : "sales")...</td>
                     </tr>
-                </thead>
-                <tbody>
-                    @if (isLoading)
+                }
+                else if ((showPendingReturns && pendingReturns.Count == 0) || (!showPendingReturns && sales.Count == 0))
+                {
+                    <tr>
+                        <td colspan="5" class="empty-cell">No @(showPendingReturns ? "pending returns" : "completed sales") found</td>
+                    </tr>
+                }
+                else if (showPendingReturns)
+                {
+                    @foreach (var returnItem in pendingReturns)
                     {
-                        <tr>
-                            <td colspan="6" class="loading-cell">Loading sales...</td>
-                        </tr>
-                    }
-                    else if (sales.Count == 0)
-                    {
-                        <tr>
-                            <td colspan="6" class="empty-cell">No completed sales found</td>
-                        </tr>
-                    }
-                    else
-                    {
-                        @foreach (var sale in sales)
-                        {
-                            <tr class="clickable-row" @onclick="() => HandleSaleClick(sale.Id)">
-                                <td class="sale-number">@sale.SaleNumber</td>
-                                <td>₱@sale.Amount.ToString("N2")</td>
-                                <td>@sale.PaymentMethod</td>
-                                <td>@sale.Timestamps.ToString("MMM dd, yyyy HH:mm")</td>
-                                <td>@sale.CashierName</td>
-                                <td class="actions-cell" @onclick:stopPropagation="true">
-                                    <button class="return-btn" @onclick="() => HandleCreateReturnForSale(sale.Id)" @onclick:stopPropagation="true" title="Create Return">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
-                                            <path d="M21 3v5h-5"></path>
-                                            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
-                                            <path d="M3 21v-5h5"></path>
+                        <tr class="clickable-row" @onclick="() => HandleReturnClick(returnItem.Id)">
+                            <td class="return-number">@returnItem.ReturnNumber</td>
+                            <td class="sale-number">@returnItem.SaleNumber</td>
+                            <td>
+                                <div class="timestamp-info">
+                                    <div class="timestamp-date">@returnItem.Timestamps.ToString("MMM dd, yyyy")</div>
+                                    <div class="timestamp-time">@returnItem.Timestamps.ToString("HH:mm:ss")</div>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="status-text status-text-@returnItem.Status.ToLower()">@returnItem.Status</span>
+                            </td>
+                            <td class="actions-cell" @onclick:stopPropagation="true">
+                                @if (returnItem.Status == "Pending" && IsCashier())
+                                {
+                                    <button class="action-btn cancel-btn" @onclick='() => HandleCancelReturn(returnItem.Id)' title="Cancel Return">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M18 6 6 18"></path>
+                                            <path d="m6 6 12 12"></path>
                                         </svg>
                                     </button>
-                                </td>
-                            </tr>
-                        }
+                                }
+                            </td>
+                        </tr>
                     }
-                </tbody>
-            </table>
-        }
+                }
+                else
+                {
+                    @foreach (var sale in sales)
+                    {
+                        <tr class="clickable-row" @onclick="() => HandleSaleClick(sale.Id)">
+                            <td class="sale-number">@sale.SaleNumber</td>
+                            <td>₱@sale.Amount.ToString("N2")</td>
+                            <td>@sale.PaymentMethod</td>
+                            <td>
+                                <div class="timestamp-info">
+                                    <div class="timestamp-date">@sale.Timestamps.ToString("MMM dd, yyyy")</div>
+                                    <div class="timestamp-time">@sale.Timestamps.ToString("HH:mm:ss")</div>
+                                </div>
+                            </td>
+                            <td class="actions-cell" @onclick:stopPropagation="true">
+                                <button class="action-btn return-btn" @onclick="() => HandleCreateReturnForSale(sale.Id)" title="Create Return">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+                                        <path d="M21 3v5h-5"></path>
+                                        <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+                                        <path d="M3 21v-5h5"></path>
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
     </div>
 
     @if (totalPages > 1)
     {
         <div class="pagination">
-            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="15 18 9 12 15 6"></polyline>
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)" title="Previous page">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m15 18-6-6 6-6"></path>
                 </svg>
             </button>
 
@@ -204,9 +238,9 @@
                 }
             }
 
-            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="9 18 15 12 9 6"></polyline>
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)" title="Next page">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m9 18 6-6-6-6"></path>
                 </svg>
             </button>
         </div>
@@ -217,13 +251,13 @@
 @if (showSaleDetailsModal && selectedSale != null)
 {
     <div class="modal-overlay" @onclick="CloseSaleDetailsModal">
-        <div class="modal-content" @onclick:stopPropagation>
+        <div class="add-admin-modal" @onclick:stopPropagation>
             <div class="modal-header">
-                <h3>Sale Details - @selectedSale.SaleNumber</h3>
-                <button class="modal-close" @onclick="CloseSaleDetailsModal">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                <h2 class="modal-title-text">Sale Details - @selectedSale.SaleNumber</h2>
+                <button class="modal-close-btn" @onclick="CloseSaleDetailsModal" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
                     </svg>
                 </button>
             </div>
@@ -289,10 +323,104 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn-secondary" @onclick="CloseSaleDetailsModal">Close</button>
-                <button class="btn-primary" @onclick="() => HandleCreateReturnForSale(selectedSale.Id)">
-                    Create Return
+                <button class="cancel-btn" @onclick="CloseSaleDetailsModal">Close</button>
+                <button class="save-admin-btn" @onclick="() => HandleCreateReturnForSale(selectedSale.Id)">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                        <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                        <polyline points="7 3 7 8 15 8"></polyline>
+                    </svg>
+                    <span>Create Return</span>
                 </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Return Details Modal -->
+@if (showReturnDetailsModal && selectedReturn != null)
+{
+    <div class="modal-overlay" @onclick="CloseReturnDetailsModal">
+        <div class="add-admin-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Return Details - @selectedReturn.ReturnNumber</h2>
+                <button class="modal-close-btn" @onclick="CloseReturnDetailsModal" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="sale-info">
+                    <div class="info-row">
+                        <span class="info-label">Return Number:</span>
+                        <span class="info-value">@selectedReturn.ReturnNumber</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Sale Number:</span>
+                        <span class="info-value">@selectedReturn.SaleNumber</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Status:</span>
+                        <span class="info-value">@selectedReturn.Status</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Date:</span>
+                        <span class="info-value">@selectedReturn.Timestamps.ToString("MMM dd, yyyy HH:mm")</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Cashier:</span>
+                        <span class="info-value">@selectedReturn.CashierName</span>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(selectedReturn.Reason))
+                    {
+                        <div class="info-row">
+                            <span class="info-label">Reason:</span>
+                            <span class="info-value">@selectedReturn.Reason</span>
+                        </div>
+                    }
+                </div>
+
+                <div class="items-section">
+                    <h4>Items</h4>
+                    @if (returnDetailsItems.Count == 0)
+                    {
+                        <div class="empty-items">No items found</div>
+                    }
+                    else
+                    {
+                        <div class="items-list">
+                            @foreach (var item in returnDetailsItems)
+                            {
+                                <div class="item-card">
+                                    <div class="item-info">
+                                        <div class="item-name">@item.ProductName - @item.VariantName</div>
+                                        @if (!string.IsNullOrEmpty(item.SizeName))
+                                        {
+                                            <div class="item-attr">Size: @item.SizeName</div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(item.ColorName))
+                                        {
+                                            <div class="item-attr">
+                                                Color: 
+                                                @if (!string.IsNullOrEmpty(item.ColorHexValue))
+                                                {
+                                                    <span class="color-dot-small" style="background-color: @item.ColorHexValue;"></span>
+                                                }
+                                                @item.ColorName
+                                            </div>
+                                        }
+                                        <div class="item-price">Quantity: @item.Quantity | Condition: @item.Condition</div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="cancel-btn" @onclick="CloseReturnDetailsModal">Close</button>
             </div>
         </div>
     </div>
@@ -302,13 +430,13 @@
 @if (showCreateReturnModal && selectedSaleForReturn != null)
 {
     <div class="modal-overlay" @onclick="CloseCreateReturnModal">
-        <div class="modal-content return-modal" @onclick:stopPropagation>
+        <div class="add-admin-modal" @onclick:stopPropagation>
             <div class="modal-header">
-                <h3>Create Return - @selectedSaleForReturn.SaleNumber</h3>
-                <button class="modal-close" @onclick="CloseCreateReturnModal">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                <h2 class="modal-title-text">Create Return - @selectedSaleForReturn.SaleNumber</h2>
+                <button class="modal-close-btn" @onclick="CloseCreateReturnModal" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
                     </svg>
                 </button>
             </div>
@@ -381,14 +509,19 @@
                 </div>
 
                 <div class="return-reason-section">
-                    <label>Return Reason <span class="required">*</span></label>
-                    <textarea class="reason-textarea" @bind="returnReason" placeholder="Enter reason for return..." rows="3"></textarea>
+                    <label class="field-label">Return Reason <span class="required-asterisk">*</span></label>
+                    <textarea id="return-reason-textarea" class="reason-textarea form-input" @bind="returnReason" @bind:event="oninput" @bind:after="HandleReturnReasonInput" placeholder="Enter reason for return..." rows="3"></textarea>
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn-secondary" @onclick="CloseCreateReturnModal">Cancel</button>
-                <button class="btn-primary" @onclick="ProcessReturn" disabled="@(returnItems.Count == 0 || string.IsNullOrWhiteSpace(returnReason))">
-                    Process Return
+                <button class="cancel-btn" @onclick="CloseCreateReturnModal">Cancel</button>
+                <button class="save-admin-btn" @onclick="ProcessReturn" disabled="@(returnItems.Count == 0 || string.IsNullOrWhiteSpace(returnReason))">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                        <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                        <polyline points="7 3 7 8 15 8"></polyline>
+                    </svg>
+                    <span>Process Return</span>
                 </button>
             </div>
         </div>
@@ -398,8 +531,11 @@
 @code {
     private List<IT13_Final.Services.Data.SaleModel> sales = new();
     private List<IT13_Final.Services.Data.ReturnReportModel> pendingReturns = new();
+    private List<IT13_Final.Services.Data.SaleModel> allSalesForPrint = new();
+    private List<IT13_Final.Services.Data.ReturnReportModel> allReturnsForPrint = new();
     private string searchTerm = string.Empty;
     private bool isLoading = true;
+    private bool isGeneratingPDF = false;
     private bool showPendingReturns = false;
     private int currentPage = 1;
     private int pageSize = 10;
@@ -410,10 +546,17 @@
     private DateTime? endDate = null;
     private string selectedDateRange = string.Empty;
 
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue;
+
     // Sale Details Modal
     private bool showSaleDetailsModal = false;
     private IT13_Final.Services.Data.SaleModel? selectedSale = null;
     private List<IT13_Final.Services.Data.ReturnSaleItemModel> saleItems = new();
+
+    // Return Details Modal
+    private bool showReturnDetailsModal = false;
+    private IT13_Final.Services.Data.ReturnReportModel? selectedReturn = null;
+    private List<IT13_Final.Services.Data.ReturnReportItemModel> returnDetailsItems = new();
 
     // Create Return Modal
     private bool showCreateReturnModal = false;
@@ -461,6 +604,15 @@
         else
         {
             await LoadSales();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JSRuntime.InvokeVoidAsync("setupSearchInputFilter", "returns-search-input");
+            await JSRuntime.InvokeVoidAsync("setupTextareaFilter", "return-reason-textarea");
         }
     }
 
@@ -590,121 +742,72 @@
         }
     }
 
-    private async Task HandleFromDateChange(ChangeEventArgs e)
+    private async void HandleStartDateChange(ChangeEventArgs e)
     {
-        selectedDateRange = string.Empty; // Reset dropdown when manually changing dates
-        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
         {
-            startDate = date.Date;
-            // If toDate is before fromDate, reset toDate
-            if (endDate.HasValue && endDate.Value < startDate.Value)
-            {
-                endDate = null;
-            }
-            
-            // Log filter change
-            try
-            {
-                if (AuthState.CurrentUser != null)
-                {
-                    await HistoryService.LogAsync(
-                        AuthState.CurrentUser.Id,
-                        "filter",
-                        "Returns",
-                        $"Changed from date filter to: {date.Date:MMM dd, yyyy}"
-                    );
-                }
-            }
-            catch { }
+            startDate = date;
+            selectedDateRange = "";
         }
-        else
+        else if (string.IsNullOrWhiteSpace(value))
         {
             startDate = null;
+            selectedDateRange = "";
         }
         await ApplyFilters();
     }
 
-    private async Task HandleToDateChange(ChangeEventArgs e)
+    private async void HandleEndDateChange(ChangeEventArgs e)
     {
-        selectedDateRange = string.Empty; // Reset dropdown when manually changing dates
-        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
         {
-            var dateValue = date.Date;
-            // Ensure toDate is not before fromDate
-            if (startDate.HasValue && dateValue < startDate.Value)
-            {
-                // Don't allow toDate to be set before fromDate
-                return;
-            }
-            endDate = dateValue;
-            
-            // Log filter change
-            try
-            {
-                if (AuthState.CurrentUser != null)
-                {
-                    await HistoryService.LogAsync(
-                        AuthState.CurrentUser.Id,
-                        "filter",
-                        "Returns",
-                        $"Changed to date filter to: {dateValue:MMM dd, yyyy}"
-                    );
-                }
-            }
-            catch { }
+            endDate = date;
+            selectedDateRange = "";
         }
-        else
+        else if (string.IsNullOrWhiteSpace(value))
         {
             endDate = null;
+            selectedDateRange = "";
         }
         await ApplyFilters();
     }
 
     private async Task HandleDateRangeChange()
     {
-        var today = DateTime.Today;
-        
+        var now = DateTime.Now;
         switch (selectedDateRange)
         {
+            case "":
+                startDate = null;
+                endDate = null;
+                break;
             case "today":
-                startDate = today;
-                endDate = today;
+                startDate = now.Date;
+                endDate = now.Date;
                 break;
             case "yesterday":
-                startDate = today.AddDays(-1);
-                endDate = today.AddDays(-1);
+                startDate = now.Date.AddDays(-1);
+                endDate = now.Date.AddDays(-1);
                 break;
-            case "lastweek":
-                startDate = today.AddDays(-7);
-                endDate = today;
+            case "last7days":
+                startDate = now.Date.AddDays(-6);
+                endDate = now.Date;
+                break;
+            case "last30days":
+                startDate = now.Date.AddDays(-29);
+                endDate = now.Date;
                 break;
             case "thismonth":
-                startDate = new DateTime(today.Year, today.Month, 1);
-                endDate = today;
+                startDate = new DateTime(now.Year, now.Month, 1);
+                endDate = now.Date;
                 break;
             case "thisyear":
-                startDate = new DateTime(today.Year, 1, 1);
-                endDate = today;
-                break;
-            default:
-                // Custom - don't change dates
+                startDate = new DateTime(now.Year, 1, 1);
+                endDate = now.Date;
                 break;
         }
-        
-        try
-        {
-            if (AuthState.CurrentUser != null && !string.IsNullOrEmpty(selectedDateRange))
-            {
-                await HistoryService.LogAsync(
-                    AuthState.CurrentUser.Id,
-                    "filter",
-                    "Returns",
-                    $"Changed date range filter to: {selectedDateRange}"
-                );
-            }
-        }
-        catch { }
-        
         await ApplyFilters();
     }
 
@@ -723,38 +826,22 @@
 
     private async Task ClearDateFilter()
     {
+        selectedDateRange = "";
         startDate = null;
         endDate = null;
-        selectedDateRange = string.Empty;
         currentPage = 1;
-        
-        try
-        {
-            if (AuthState.CurrentUser != null)
-            {
-                await HistoryService.LogAsync(
-                    AuthState.CurrentUser.Id,
-                    "filter",
-                    "Returns",
-                    "Cleared date filters"
-                );
-            }
-        }
-        catch { }
-        
-        if (showPendingReturns)
-        {
-            await LoadPendingReturns();
-        }
-        else
-        {
-            await LoadSales();
-        }
+        await ApplyFilters();
     }
 
-    private void HandleSearchInput(ChangeEventArgs e)
+    private void HandleSearchInput()
     {
-        searchTerm = e.Value?.ToString() ?? string.Empty;
+        // Filter special characters - JavaScript handles this, but we also filter here as backup
+        var filtered = System.Text.RegularExpressions.Regex.Replace(searchTerm, @"[^a-zA-Z0-9\s\-_]", "");
+        if (filtered != searchTerm)
+    {
+            searchTerm = filtered;
+        }
+        
         _searchTimer?.Dispose();
         _searchTimer = new System.Threading.Timer(async _ =>
         {
@@ -784,6 +871,32 @@
                 }
             });
         }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task HandleClearSearch()
+    {
+        searchTerm = string.Empty;
+        currentPage = 1;
+        if (showPendingReturns)
+        {
+            await LoadPendingReturns();
+        }
+        else
+        {
+            await LoadSales();
+        }
+        StateHasChanged();
+    }
+
+    private void HandleReturnReasonInput()
+    {
+        // Filter special characters - JavaScript handles this, but we also filter here as backup
+        var filtered = System.Text.RegularExpressions.Regex.Replace(returnReason, @"[^a-zA-Z0-9\s\-_.,!?]", "");
+        if (filtered != returnReason)
+        {
+            returnReason = filtered;
+            StateHasChanged();
+        }
     }
 
     private async Task HandleSearchKeyPress(KeyboardEventArgs e)
@@ -825,17 +938,44 @@
             var cashierUserId = AuthState.CurrentUser?.Id ?? 0;
             if (cashierUserId > 0)
             {
-                var returnModel = await ReturnsService.GetReturnForReportAsync(returnId, cashierUserId);
-                if (returnModel != null)
+                selectedReturn = await ReturnsService.GetReturnForReportAsync(returnId, cashierUserId);
+                if (selectedReturn != null)
                 {
-                    await JSRuntime.InvokeVoidAsync("alert", $"Return Number: {returnModel.ReturnNumber}\nSale Number: {returnModel.SaleNumber}\nStatus: {returnModel.Status}\nReason: {returnModel.Reason ?? "N/A"}");
+                    returnDetailsItems = await ReturnsService.GetReturnItemsForReportAsync(returnId);
+                    showReturnDetailsModal = true;
+                    
+                    // Log view action
+                    try
+                    {
+                        if (AuthState.CurrentUser != null)
+                        {
+                            await HistoryService.LogAsync(
+                                AuthState.CurrentUser.Id,
+                                "view",
+                                "Returns",
+                                $"Viewed return details: {selectedReturn.ReturnNumber}"
+                            );
+                        }
+                    }
+                    catch { }
+                    
+                    StateHasChanged();
                 }
             }
         }
         catch (Exception ex)
         {
             await JSRuntime.InvokeVoidAsync("console.error", $"Error loading return details: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to load return details. Please try again.");
         }
+    }
+
+    private void CloseReturnDetailsModal()
+    {
+        showReturnDetailsModal = false;
+        selectedReturn = null;
+        returnDetailsItems.Clear();
+        StateHasChanged();
     }
 
     private bool IsCashier()
@@ -1077,6 +1217,114 @@
                 await JSRuntime.InvokeVoidAsync("console.error", $"Inner exception: {ex.InnerException.Message}");
             }
             await JSRuntime.InvokeVoidAsync("alert", $"Error processing return: {ex.Message}\n\nCheck the browser console for more details.");
+        }
+    }
+
+    private string GetDateRangeText()
+    {
+        if (startDate.HasValue && endDate.HasValue)
+        {
+            return $"{startDate.Value:MM/dd/yyyy} - {endDate.Value:MM/dd/yyyy}";
+        }
+        else if (startDate.HasValue)
+        {
+            return $"From {startDate.Value:MM/dd/yyyy}";
+        }
+        else if (endDate.HasValue)
+        {
+            return $"Until {endDate.Value:MM/dd/yyyy}";
+        }
+        return "All Time";
+    }
+
+    private async Task PrintReport()
+    {
+        try
+        {
+            isGeneratingPDF = true;
+            StateHasChanged();
+
+            var cashierUserId = AuthState.CurrentUser?.Id ?? 0;
+            if (cashierUserId > 0)
+            {
+                if (showPendingReturns)
+                {
+                    // Generate PDF for Pending Returns
+                    var allReturns = await ReturnsService.GetReturnsForReportsAsync(cashierUserId, searchTerm, startDate, endDate, 1, 10000);
+                    allReturnsForPrint = allReturns.Where(r => r.Status == "Pending").ToList();
+
+                    var reportData = new
+                    {
+                        title = "Pending Returns Report",
+                        printedBy = AuthState.CurrentUser?.FullName ?? "Cashier",
+                        printedAt = DateTime.Now.ToString("MMMM dd, yyyy hh:mm tt"),
+                        dateRange = GetDateRangeText(),
+                        totalCount = allReturnsForPrint.Count,
+                        totalReturnsAmount = "0.00", // Pending returns don't have amounts yet
+                        pendingReturnsCount = allReturnsForPrint.Count,
+                        completedReturnsCount = 0,
+                        records = allReturnsForPrint.Select(r => new
+                        {
+                            returnNumber = r.ReturnNumber,
+                            saleNumber = r.SaleNumber,
+                            status = r.Status,
+                            cashierName = r.CashierName,
+                            date = r.Timestamps.ToString("MMM dd, yyyy"),
+                            time = r.Timestamps.ToString("HH:mm:ss"),
+                            reason = r.Reason ?? string.Empty
+                        }).ToList()
+                    };
+
+                    await JSRuntime.InvokeVoidAsync("generateAndPrintReturnsReport", reportData, "Cashier Portal");
+                }
+                else
+                {
+                    // Generate PDF for Sales
+                    allSalesForPrint = await ReturnsService.GetSalesAsync(cashierUserId, searchTerm, startDate, endDate, 1, 10000);
+
+                    var salesData = allSalesForPrint.Select(sale => new
+                    {
+                        saleNumber = sale.SaleNumber,
+                        amount = sale.Amount,
+                        paymentMethod = sale.PaymentMethod,
+                        date = sale.Timestamps.ToString("MMM dd, yyyy"),
+                        time = sale.Timestamps.ToString("HH:mm:ss"),
+                        cashierName = sale.CashierName ?? AuthState.CurrentUser?.FullName ?? "Cashier"
+                    }).ToArray();
+
+                    await JSRuntime.InvokeVoidAsync("generateAndPrintSalesReport",
+                        salesData,
+                        AuthState.CurrentUser?.FullName ?? "Cashier",
+                        startDate?.ToString("MMM dd, yyyy") ?? "All Time",
+                        endDate?.ToString("MMM dd, yyyy") ?? "Today",
+                        "Transaction Sales Report"
+                    );
+                }
+
+                try
+                {
+                    if (AuthState.CurrentUser != null)
+                    {
+                        await HistoryService.LogAsync(
+                            AuthState.CurrentUser.Id,
+                            "print",
+                            "Returns",
+                            $"Printed {(showPendingReturns ? "pending returns" : "sales")} report - {totalCount} records from {startDate?.ToString("MMM dd, yyyy") ?? "All Time"} to {endDate?.ToString("MMM dd, yyyy") ?? "Today"}"
+                        );
+                    }
+                }
+                catch { }
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error generating report: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to generate PDF. Please try again.");
+        }
+        finally
+        {
+            isGeneratingPDF = false;
+            StateHasChanged();
         }
     }
 

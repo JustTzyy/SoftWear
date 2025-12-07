@@ -32,12 +32,20 @@ namespace IT13_Final.Services.Data
         public string? ColorHexValue { get; set; }
     }
 
+    public class DailyStockOutData
+    {
+        public DateTime Date { get; set; }
+        public int Count { get; set; }
+        public int Quantity { get; set; }
+    }
+
     public interface IStockOutService
     {
-        Task<List<StockOutModel>> GetStockOutsAsync(int userId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
-        Task<int> GetStockOutsCountAsync(int userId, string? searchTerm = null, CancellationToken ct = default);
+        Task<List<StockOutModel>> GetStockOutsAsync(int userId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
+        Task<int> GetStockOutsCountAsync(int userId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, CancellationToken ct = default);
         Task<StockOutDetailsModel?> GetStockOutDetailsAsync(int stockOutId, int userId, CancellationToken ct = default);
         Task<int?> CreateStockOutAsync(int userId, int variantId, int sizeId, int colorId, int quantityRemoved, string? reason, CancellationToken ct = default);
+        Task<List<DailyStockOutData>> GetDailyStockOutDataAsync(int userId, int days = 30, CancellationToken ct = default);
     }
 
     public class StockOutService : IStockOutService
@@ -45,7 +53,7 @@ namespace IT13_Final.Services.Data
         private readonly string _connectionString =
             "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
 
-        public async Task<List<StockOutModel>> GetStockOutsAsync(int userId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
+        public async Task<List<StockOutModel>> GetStockOutsAsync(int userId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
         {
             var stockOuts = new List<StockOutModel>();
             var offset = (page - 1) * pageSize;
@@ -60,9 +68,24 @@ namespace IT13_Final.Services.Data
                 INNER JOIN dbo.tbl_variants v ON so.variant_id = v.id
                 INNER JOIN dbo.tbl_products p ON v.product_id = p.id
                 INNER JOIN dbo.tbl_users u ON so.user_id = u.id
-                WHERE so.archives IS NULL AND so.user_id = @UserId
-                " + (string.IsNullOrWhiteSpace(searchTerm) ? "" : "AND (v.name LIKE @SearchTerm OR p.name LIKE @SearchTerm OR so.reason LIKE @SearchTerm)") + @"
-                ORDER BY so.timestamps DESC
+                WHERE so.archives IS NULL AND so.user_id = @UserId";
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                sql += " AND (v.name LIKE @SearchTerm OR p.name LIKE @SearchTerm OR so.reason LIKE @SearchTerm)";
+            }
+
+            if (startDate.HasValue)
+            {
+                sql += " AND CAST(so.timestamps AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                sql += " AND CAST(so.timestamps AS DATE) <= @EndDate";
+            }
+
+            sql += @" ORDER BY so.timestamps DESC
                 OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
 
             using var cmd = new SqlCommand(sql, conn);
@@ -70,6 +93,14 @@ namespace IT13_Final.Services.Data
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
+            }
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
             }
             cmd.Parameters.AddWithValue("@Offset", offset);
             cmd.Parameters.AddWithValue("@PageSize", pageSize);
@@ -93,7 +124,7 @@ namespace IT13_Final.Services.Data
             return stockOuts;
         }
 
-        public async Task<int> GetStockOutsCountAsync(int userId, string? searchTerm = null, CancellationToken ct = default)
+        public async Task<int> GetStockOutsCountAsync(int userId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -103,14 +134,36 @@ namespace IT13_Final.Services.Data
                 FROM dbo.tbl_stock_out so
                 INNER JOIN dbo.tbl_variants v ON so.variant_id = v.id
                 INNER JOIN dbo.tbl_products p ON v.product_id = p.id
-                WHERE so.archives IS NULL AND so.user_id = @UserId
-                " + (string.IsNullOrWhiteSpace(searchTerm) ? "" : "AND (v.name LIKE @SearchTerm OR p.name LIKE @SearchTerm OR so.reason LIKE @SearchTerm)");
+                WHERE so.archives IS NULL AND so.user_id = @UserId";
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                sql += " AND (v.name LIKE @SearchTerm OR p.name LIKE @SearchTerm OR so.reason LIKE @SearchTerm)";
+            }
+
+            if (startDate.HasValue)
+            {
+                sql += " AND CAST(so.timestamps AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                sql += " AND CAST(so.timestamps AS DATE) <= @EndDate";
+            }
 
             using var cmd = new SqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@UserId", userId);
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
+            }
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
             }
 
             var count = await cmd.ExecuteScalarAsync(ct);
@@ -132,7 +185,9 @@ namespace IT13_Final.Services.Data
                 INNER JOIN dbo.tbl_users u ON so.user_id = u.id
                 LEFT JOIN dbo.tbl_sizes sz ON so.size_id = sz.id
                 LEFT JOIN dbo.tbl_colors c ON so.color_id = c.id
-                WHERE so.id = @StockOutId AND so.user_id = @UserId AND so.archives IS NULL";
+                WHERE so.id = @StockOutId
+                AND (@UserId = 0 OR so.user_id = @UserId)
+                AND so.archives IS NULL";
 
             using var cmd = new SqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@StockOutId", stockOutId);
@@ -189,6 +244,50 @@ namespace IT13_Final.Services.Data
             {
                 return null;
             }
+        }
+
+        public async Task<List<DailyStockOutData>> GetDailyStockOutDataAsync(int userId, int days = 30, CancellationToken ct = default)
+        {
+            var data = new List<DailyStockOutData>();
+            var startDate = DateTime.Today.AddDays(-days);
+
+            using var conn = new SqlConnection(_connectionString);
+            await conn.OpenAsync(ct);
+
+            var sql = @"
+                SELECT CAST(so.timestamps AS DATE) as date, COUNT(*) as count, COALESCE(SUM(so.quantity_removed), 0) as quantity
+                FROM dbo.tbl_stock_out so
+                INNER JOIN dbo.tbl_variants v ON so.variant_id = v.id
+                WHERE so.archives IS NULL AND v.user_id = @UserId
+                    AND CAST(so.timestamps AS DATE) >= @StartDate
+                GROUP BY CAST(so.timestamps AS DATE)
+                ORDER BY date";
+
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
+            cmd.Parameters.AddWithValue("@StartDate", startDate);
+
+            using var reader = await cmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                data.Add(new DailyStockOutData
+                {
+                    Date = reader.GetDateTime(0),
+                    Count = reader.GetInt32(1),
+                    Quantity = reader.GetInt32(2)
+                });
+            }
+
+            // Fill in missing dates with zero values
+            var allDates = new List<DailyStockOutData>();
+            for (int i = 0; i < days; i++)
+            {
+                var date = startDate.AddDays(i);
+                var existing = data.FirstOrDefault(d => d.Date.Date == date.Date);
+                allDates.Add(existing ?? new DailyStockOutData { Date = date, Count = 0, Quantity = 0 });
+            }
+
+            return allDates;
         }
     }
 }

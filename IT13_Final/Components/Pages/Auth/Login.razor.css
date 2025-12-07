@@ -9,12 +9,13 @@
 
 /* Blazor validation message styling */
 .validation-message {
-    color: #b04a4a;
+    color: #b91c1c;
     font-size: 12px;
     margin-top: 6px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-weight: 500;
 }
 
 

@@ -2,6 +2,7 @@
 @layout IT13_Final.Components.Layout.Admin.Admin
 @inject IT13_Final.Services.Data.IUserService UserService
 @inject IT13_Final.Services.Data.IAddressService AddressService
+@inject IT13_Final.Services.Audit.IHistoryService HistoryService
 @inject IT13_Final.Services.Auth.AuthState AuthState
 @inject IJSRuntime JSRuntime
 @inject NavigationManager Nav
@@ -9,38 +10,109 @@
 @using System.Text.Json
 @implements IDisposable
 
-<h1 class="page-title">Permission Requests</h1>
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Permission Requests</h1>
+        <p class="welcome-date">Review and manage user requests • @totalCount pending</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintPermissionRequests" title="Print records">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 9V2h12v7"></path>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                <rect x="6" y="14" width="12" height="8"></rect>
+            </svg>
+        </button>
+    </div>
+</div>
+
+@* Search and Date Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.3-4.3"></path>
+        </svg>
+        <input type="text" class="search-input" placeholder="Search by name or email..." @bind="searchTerm" @bind:event="oninput" @bind:after="OnSearchInput" />
+        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            <button class="clear-search-btn" @onclick="ClearSearch" title="Clear search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date" 
+               class="date-input" 
+               value="@(filterStartDate?.ToString("yyyy-MM-dd"))" 
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleStartDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date" 
+               class="date-input" 
+               value="@(filterEndDate?.ToString("yyyy-MM-dd"))" 
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleEndDateChange" />
+        <button class="filter-btn" @onclick="ApplyDateFilter">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            Apply
+        </button>
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
 
 @if (showSuccessMessage && !string.IsNullOrEmpty(successMessageText))
 {
     <div class="success-banner">
-        <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="20 6 9 17 4 12"></polyline>
+        <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
         </svg>
         <span>@successMessageText</span>
     </div>
 }
 
-<div class="admin-records-container">
-    <div class="search-actions-row">
-        <div class="search-wrapper">
-            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"></circle>
-                <path d="m21 21-4.35-4.35"></path>
-            </svg>
-            <input type="text" class="search-input" placeholder="Search requests" value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+@* Permission Requests Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Pending Requests</h3>
+            <span class="card-subtitle">@totalCount requests awaiting review</span>
         </div>
     </div>
-
-    <div class="table-container">
-        <div class="table-header">Pending</div>
+    
+    
+    <div class="card-body">
         <table class="admin-table">
             <thead>
                 <tr>
                     <th>User</th>
                     <th>Request Type</th>
-                    <th>Current Data</th>
-                    <th>Requested Changes</th>
                     <th>Requested Date</th>
                     <th>Actions</th>
                 </tr>
@@ -49,13 +121,13 @@
                 @if (isLoading)
                 {
                     <tr>
-                        <td colspan="6" class="loading-cell">Loading...</td>
+                        <td colspan="4" class="loading-cell">Loading...</td>
                     </tr>
                 }
                 else if (permissionRequests.Count == 0)
                 {
                     <tr>
-                        <td colspan="6" class="empty-cell">No pending permission requests</td>
+                        <td colspan="4" class="empty-cell">No pending permission requests</td>
                     </tr>
                 }
                 else
@@ -72,23 +144,17 @@
                             <td>
                                 <span class="request-type-badge">@GetRequestTypeDisplay(request.RequestType)</span>
                             </td>
-                            <td>
-                                <span class="data-preview">Click row to view</span>
-                            </td>
-                            <td>
-                                <span class="data-preview">Click row to view</span>
-                            </td>
                             <td>@request.RequestedDate.ToString("MMM dd, yyyy")</td>
                             <td class="actions-cell" @onclick:stopPropagation>
-                                <button class="action-btn approve-btn" @onclick="() => HandleApprove(request.UserId)" title="Approve">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <button class="action-btn approve-btn" @onclick="() => HandleApprove(request.UserId)" title="Approve request">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <polyline points="20 6 9 17 4 12"></polyline>
                                     </svg>
                                 </button>
-                                <button class="action-btn reject-btn" @onclick="() => HandleReject(request.UserId)" title="Reject">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                <button class="action-btn reject-btn" @onclick="() => HandleReject(request.UserId)" title="Reject request">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M18 6 6 18"></path>
+                                        <path d="m6 6 12 12"></path>
                                     </svg>
                                 </button>
                             </td>
@@ -339,6 +405,16 @@
     private bool isLoadingDetails = false;
     private IT13_Final.Services.Data.AddressModel? currentAddress = null;
 
+    // Date filter variables
+    private string selectedDateRange = "";
+    private DateTime? filterStartDate;
+    private DateTime? filterEndDate;
+
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || filterStartDate.HasValue || filterEndDate.HasValue;
+
+    // Store all filtered requests for PDF generation
+    private List<IT13_Final.Services.Data.PermissionRequestModel> allFilteredRequests = new();
+
     protected override async Task OnInitializedAsync()
     {
         await LoadPermissionRequestsAsync();
@@ -352,12 +428,50 @@
         try
         {
             var adminId = AuthState.CurrentUser?.Id ?? 0;
-            totalCount = await UserService.GetPermissionRequestsCountAsync(adminId, searchTerm);
-            permissionRequests = await UserService.GetPermissionRequestsAsync(adminId, searchTerm, currentPage, pageSize);
+            
+            // Get all requests matching search term first
+            var allRequests = await UserService.GetPermissionRequestsAsync(adminId, searchTerm, 1, 10000);
+            
+            // Apply date filter client-side
+            if (filterStartDate.HasValue || filterEndDate.HasValue)
+            {
+                allFilteredRequests = allRequests.Where(r =>
+                {
+                    var requestedDate = r.RequestedDate.Date;
+                    
+                    if (filterStartDate.HasValue && filterEndDate.HasValue)
+                    {
+                        return requestedDate >= filterStartDate.Value.Date && requestedDate <= filterEndDate.Value.Date;
+                    }
+                    else if (filterStartDate.HasValue)
+                    {
+                        return requestedDate >= filterStartDate.Value.Date;
+                    }
+                    else if (filterEndDate.HasValue)
+                    {
+                        return requestedDate <= filterEndDate.Value.Date;
+                    }
+                    return true;
+                }).ToList();
+            }
+            else
+            {
+                allFilteredRequests = allRequests;
+            }
+            
+            // Update total count based on filtered results
+            totalCount = allFilteredRequests.Count;
+            
+            // Apply pagination to filtered results
+            permissionRequests = allFilteredRequests
+                .Skip((currentPage - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
         }
         catch (Exception)
         {
             permissionRequests = new List<IT13_Final.Services.Data.PermissionRequestModel>();
+            allFilteredRequests = new List<IT13_Final.Services.Data.PermissionRequestModel>();
             totalCount = 0;
         }
         finally
@@ -367,18 +481,16 @@
         }
     }
 
-    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    // Debounce search to avoid too many queries
+    private void OnSearchInput()
     {
-        if (e.Key == "Enter")
+        // Filter out special characters
+        var filtered = System.Text.RegularExpressions.Regex.Replace(searchTerm, @"[^a-zA-Z0-9\s\-_]", "");
+        if (filtered != searchTerm)
         {
-            currentPage = 1;
-            await LoadPermissionRequestsAsync();
+            searchTerm = filtered;
         }
-    }
-
-    private void HandleSearchInput(ChangeEventArgs e)
-    {
-        searchTerm = e.Value?.ToString() ?? string.Empty;
+        
         _searchTimer?.Dispose();
         _searchTimer = new System.Threading.Timer(async _ =>
         {
@@ -387,7 +499,14 @@
             {
                 await LoadPermissionRequestsAsync();
             });
-        }, null, 500, Timeout.Infinite);
+        }, null, 400, Timeout.Infinite);
+    }
+
+    private async Task ClearSearch()
+    {
+        searchTerm = string.Empty;
+        currentPage = 1;
+        await LoadPermissionRequestsAsync();
     }
 
     private async Task GoToPage(int page)
@@ -475,6 +594,21 @@
             {
                 await LoadPermissionRequestsAsync();
                 
+                // Log history
+                if (AuthState.CurrentUser != null)
+                {
+                    try
+                    {
+                        await HistoryService.LogAsync(
+                            AuthState.CurrentUser.Id,
+                            "approve",
+                            "User Management",
+                            $"Approved permission request from {userName} (ID: {userId})"
+                        );
+                    }
+                    catch { }
+                }
+                
                 successMessageText = "Permission request approved successfully!";
                 showSuccessMessage = true;
                 
@@ -518,6 +652,21 @@
             {
                 await LoadPermissionRequestsAsync();
                 
+                // Log history
+                if (AuthState.CurrentUser != null)
+                {
+                    try
+                    {
+                        await HistoryService.LogAsync(
+                            AuthState.CurrentUser.Id,
+                            "reject",
+                            "User Management",
+                            $"Rejected permission request from {userName} (ID: {userId})"
+                        );
+                    }
+                    catch { }
+                }
+                
                 successMessageText = "Permission request rejected successfully!";
                 showSuccessMessage = true;
                 
@@ -545,6 +694,139 @@
     {
         _searchTimer?.Dispose();
         _successBannerTimer?.Dispose();
+    }
+
+    // Date filter methods
+    private void HandleStartDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            filterStartDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            filterStartDate = null;
+            selectedDateRange = "";
+        }
+    }
+
+    private void HandleEndDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            filterEndDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            filterEndDate = null;
+            selectedDateRange = "";
+        }
+    }
+
+    private void HandleDateRangeChange()
+    {
+        var now = DateTime.Now;
+        switch (selectedDateRange)
+        {
+            case "":
+                filterStartDate = null;
+                filterEndDate = null;
+                break;
+            case "today":
+                filterStartDate = now.Date;
+                filterEndDate = now.Date;
+                break;
+            case "yesterday":
+                filterStartDate = now.Date.AddDays(-1);
+                filterEndDate = now.Date.AddDays(-1);
+                break;
+            case "last7days":
+                filterStartDate = now.Date.AddDays(-6);
+                filterEndDate = now.Date;
+                break;
+            case "last30days":
+                filterStartDate = now.Date.AddDays(-29);
+                filterEndDate = now.Date;
+                break;
+            case "thismonth":
+                filterStartDate = new DateTime(now.Year, now.Month, 1);
+                filterEndDate = now.Date;
+                break;
+            case "thisyear":
+                filterStartDate = new DateTime(now.Year, 1, 1);
+                filterEndDate = now.Date;
+                break;
+        }
+        _ = LoadPermissionRequestsAsync();
+    }
+
+    private async Task ApplyDateFilter()
+    {
+        currentPage = 1;
+        await LoadPermissionRequestsAsync();
+    }
+
+    private async Task ClearDateFilter()
+    {
+        selectedDateRange = "";
+        filterStartDate = null;
+        filterEndDate = null;
+        currentPage = 1;
+        await LoadPermissionRequestsAsync();
+    }
+
+    private string GetDateRangeText()
+    {
+        if (filterStartDate.HasValue && filterEndDate.HasValue)
+            return $"{filterStartDate.Value:MMM dd, yyyy} - {filterEndDate.Value:MMM dd, yyyy}";
+        if (filterStartDate.HasValue)
+            return $"From {filterStartDate.Value:MMM dd, yyyy}";
+        if (filterEndDate.HasValue)
+            return $"Until {filterEndDate.Value:MMM dd, yyyy}";
+        return "All Time";
+    }
+
+    private async Task PrintPermissionRequests()
+    {
+        // Use all filtered requests for the PDF, not just the current page
+        var recordsForPrint = allFilteredRequests.Any() ? allFilteredRequests : permissionRequests;
+        
+        var reportData = new
+        {
+            title = "Permission Requests Report",
+            printedBy = AuthState.CurrentUser?.FullName ?? "Administrator",
+            printedAt = DateTime.Now.ToString("MMMM dd, yyyy hh:mm tt"),
+            dateRange = GetDateRangeText(),
+            totalCount = recordsForPrint.Count,
+            records = recordsForPrint.Select(r => new
+            {
+                user = r.UserName,
+                email = r.UserEmail,
+                requestType = GetRequestTypeDisplay(r.RequestType),
+                requestedDate = r.RequestedDate.ToString("MMM dd, yyyy")
+            }).ToList()
+        };
+
+        await JSRuntime.InvokeVoidAsync("printPermissionRequests", reportData);
+        
+        // Log history
+        if (AuthState.CurrentUser != null)
+        {
+            try
+            {
+                await HistoryService.LogAsync(
+                    AuthState.CurrentUser.Id,
+                    "print",
+                    "User Management",
+                    $"Printed permission requests report ({recordsForPrint.Count} records)"
+                );
+            }
+            catch { }
+        }
     }
 }
 

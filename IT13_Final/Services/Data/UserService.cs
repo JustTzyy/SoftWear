@@ -899,7 +899,7 @@ namespace IT13_Final.Services.Data
                                u.created_at
                         FROM dbo.tbl_users u
                         JOIN dbo.tbl_roles r ON r.id = u.role_id
-                        WHERE LOWER(r.name) = 'seller' AND u.archived_at IS NULL AND u.user_id = @AdminId";
+                        WHERE LOWER(r.name) = 'seller' AND u.archived_at IS NULL";
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -909,7 +909,6 @@ namespace IT13_Final.Services.Data
             sql += " ORDER BY u.created_at DESC OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY";
 
             await using var cmd = new SqlCommand(sql, conn) { CommandType = CommandType.Text };
-            cmd.Parameters.AddWithValue("@AdminId", adminId);
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -944,7 +943,7 @@ namespace IT13_Final.Services.Data
             var sql = @"SELECT COUNT(*)
                         FROM dbo.tbl_users u
                         JOIN dbo.tbl_roles r ON r.id = u.role_id
-                        WHERE LOWER(r.name) = 'seller' AND u.archived_at IS NULL AND u.user_id = @AdminId";
+                        WHERE LOWER(r.name) = 'seller' AND u.archived_at IS NULL";
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -952,7 +951,6 @@ namespace IT13_Final.Services.Data
             }
 
             await using var cmd = new SqlCommand(sql, conn) { CommandType = CommandType.Text };
-            cmd.Parameters.AddWithValue("@AdminId", adminId);
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -1134,7 +1132,7 @@ namespace IT13_Final.Services.Data
                                u.archived_at
                         FROM dbo.tbl_users u
                         JOIN dbo.tbl_roles r ON r.id = u.role_id
-                        WHERE LOWER(r.name) = 'seller' AND u.archived_at IS NOT NULL AND u.user_id = @AdminId";
+                        WHERE LOWER(r.name) = 'seller' AND u.archived_at IS NOT NULL";
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -1144,7 +1142,6 @@ namespace IT13_Final.Services.Data
             sql += " ORDER BY u.archived_at DESC OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY";
 
             await using var cmd = new SqlCommand(sql, conn) { CommandType = CommandType.Text };
-            cmd.Parameters.AddWithValue("@AdminId", adminId);
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -1179,7 +1176,7 @@ namespace IT13_Final.Services.Data
             var sql = @"SELECT COUNT(*)
                         FROM dbo.tbl_users u
                         JOIN dbo.tbl_roles r ON r.id = u.role_id
-                        WHERE LOWER(r.name) = 'seller' AND u.archived_at IS NOT NULL AND u.user_id = @AdminId";
+                        WHERE LOWER(r.name) = 'seller' AND u.archived_at IS NOT NULL";
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -1187,7 +1184,6 @@ namespace IT13_Final.Services.Data
             }
 
             await using var cmd = new SqlCommand(sql, conn) { CommandType = CommandType.Text };
-            cmd.Parameters.AddWithValue("@AdminId", adminId);
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -2316,8 +2312,7 @@ namespace IT13_Final.Services.Data
                         JOIN dbo.tbl_roles r ON r.id = u.role_id
                         WHERE LOWER(r.name) = 'seller' 
                         AND u.permission_request_status = 'pending'
-                        AND u.archived_at IS NULL
-                        AND u.user_id = @AdminId";
+                        AND u.archived_at IS NULL";
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -2327,7 +2322,6 @@ namespace IT13_Final.Services.Data
             sql += " ORDER BY u.permission_request_date DESC OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY";
 
             await using var cmd = new SqlCommand(sql, conn) { CommandType = CommandType.Text };
-            cmd.Parameters.AddWithValue("@AdminId", adminId);
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -2365,8 +2359,7 @@ namespace IT13_Final.Services.Data
                         JOIN dbo.tbl_roles r ON r.id = u.role_id
                         WHERE LOWER(r.name) = 'seller' 
                         AND u.permission_request_status = 'pending'
-                        AND u.archived_at IS NULL
-                        AND u.user_id = @AdminId";
+                        AND u.archived_at IS NULL";
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -2374,7 +2367,6 @@ namespace IT13_Final.Services.Data
             }
 
             await using var cmd = new SqlCommand(sql, conn) { CommandType = CommandType.Text };
-            cmd.Parameters.AddWithValue("@AdminId", adminId);
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {

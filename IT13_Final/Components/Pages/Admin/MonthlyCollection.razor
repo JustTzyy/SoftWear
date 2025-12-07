@@ -1,0 +1,397 @@
+@page "/admin/monthly-collection"
+@layout IT13_Final.Components.Layout.Admin.Admin
+@inject IT13_Final.Services.Audit.IHistoryService HistoryService
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject NavigationManager Nav
+@inject IJSRuntime JSRuntime
+@using Microsoft.Data.SqlClient
+
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Monthly Fee Collection</h1>
+        <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintReport" title="Print Report">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                <rect x="6" y="14" width="12" height="8"></rect>
+            </svg>
+        </button>
+    </div>
+</div>
+
+@* Year Filter *@
+<div class="dashboard-filters">
+    <div class="filter-label">Select Year:</div>
+    <div class="year-filters">
+        @for (int y = DateTime.Now.Year; y >= DateTime.Now.Year - 4; y--)
+        {
+            var year = y;
+            <button class="year-btn @(selectedYear == year ? "active" : "")" @onclick="() => SelectYear(year)">
+                @year
+            </button>
+        }
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="loading-state">
+        <div class="loading-spinner"></div>
+        <p>Loading monthly data...</p>
+    </div>
+}
+else
+{
+    @* Annual KPIs *@
+    <div class="kpi-row">
+        <div class="kpi-card kpi-primary">
+            <div class="kpi-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="1" x2="12" y2="23"></line>
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                </svg>
+            </div>
+            <div class="kpi-content">
+                <span class="kpi-label">Annual Admin Fees</span>
+                <span class="kpi-value">₱@annualFees.ToString("N2")</span>
+                <span class="kpi-trend trend-up">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                    <span>@selectedYear total</span>
+                </span>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-success">
+            <div class="kpi-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                    <line x1="1" y1="10" x2="23" y2="10"></line>
+                </svg>
+            </div>
+            <div class="kpi-content">
+                <span class="kpi-label">Annual Revenue</span>
+                <span class="kpi-value">₱@annualRevenue.ToString("N2")</span>
+                <span class="kpi-trend">
+                    <span>Gross sales</span>
+                </span>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-info">
+            <div class="kpi-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                </svg>
+            </div>
+            <div class="kpi-content">
+                <span class="kpi-label">Avg Monthly Fee</span>
+                <span class="kpi-value">₱@avgMonthlyFee.ToString("N2")</span>
+                <span class="kpi-trend">
+                    <span>Per month</span>
+                </span>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-warning">
+            <div class="kpi-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+            </div>
+            <div class="kpi-content">
+                <span class="kpi-label">Active Months</span>
+                <span class="kpi-value">@activeMonths</span>
+                <span class="kpi-trend">
+                    <span>With sales</span>
+                </span>
+            </div>
+        </div>
+    </div>
+
+    @* Monthly Chart Visualization *@
+    <div class="section-header">
+        <h2 class="section-title">Monthly Breakdown - @selectedYear</h2>
+        <span class="section-subtitle">@activeMonths of 12 months</span>
+    </div>
+
+    <div class="chart-card">
+        <div class="bar-chart">
+            @foreach (var month in monthlyData)
+            {
+                var percentage = maxMonthFee > 0 ? (month.AdminFee / maxMonthFee) * 100 : 0;
+                <div class="bar-column">
+                    <div class="bar-value">₱@month.AdminFee.ToString("N0")</div>
+                    <div class="bar-wrapper">
+                        <div class="bar @(month.AdminFee > 0 ? "active" : "")" style="height: @percentage%"></div>
+                    </div>
+                    <div class="bar-label">@month.MonthName.Substring(0, 3)</div>
+                </div>
+            }
+        </div>
+    </div>
+
+    @* Monthly Cards *@
+    <div class="month-grid">
+        @foreach (var month in monthlyData)
+        {
+            <div class="month-card @(month.AdminFee > 0 ? "has-data" : "no-data")">
+                <div class="month-card-header">
+                    <span class="month-name">@month.MonthName</span>
+                    <span class="month-year">@selectedYear</span>
+                </div>
+                <div class="month-card-body">
+                    <div class="month-metric main">
+                        <span class="month-fee">₱@month.AdminFee.ToString("N2")</span>
+                        <span class="month-fee-label">Admin Fee</span>
+                    </div>
+                    <div class="month-metrics-row">
+                        <div class="month-metric">
+                            <span class="metric-value-sm">₱@month.Revenue.ToString("N0")</span>
+                            <span class="metric-label-sm">Revenue</span>
+                        </div>
+                        <div class="month-metric">
+                            <span class="metric-value-sm">@month.Transactions</span>
+                            <span class="metric-label-sm">Sales</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    @* Detailed Table *@
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Monthly Collection Details</h3>
+            <span class="record-count">@selectedYear Annual Report</span>
+        </div>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th class="th-month">Month</th>
+                        <th class="th-revenue">Gross Revenue</th>
+                        <th class="th-fee">Admin Fee (2%)</th>
+                        <th class="th-transactions">Transactions</th>
+                        <th class="th-avg">Avg/Transaction</th>
+                        <th class="th-growth">vs Prev Month</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var (month, idx) in monthlyData.Select((m, i) => (m, i)))
+                    {
+                        var prevMonth = idx > 0 ? monthlyData[idx - 1].AdminFee : 0;
+                        var growth = prevMonth > 0 ? ((month.AdminFee - prevMonth) / prevMonth) * 100 : 0;
+                        var avgPerTx = month.Transactions > 0 ? month.AdminFee / month.Transactions : 0;
+                        
+                        <tr class="@(month.AdminFee == 0 ? "row-empty" : "")">
+                            <td class="td-month">
+                                <div class="month-cell">
+                                    <span class="month-badge">@(idx + 1)</span>
+                                    <span>@month.MonthName</span>
+                                </div>
+                            </td>
+                            <td class="td-revenue">₱@month.Revenue.ToString("N2")</td>
+                            <td class="td-fee">₱@month.AdminFee.ToString("N2")</td>
+                            <td class="td-transactions">@month.Transactions</td>
+                            <td class="td-avg">₱@avgPerTx.ToString("N2")</td>
+                            <td class="td-growth">
+                                @if (idx > 0 && prevMonth > 0)
+                                {
+                                    <span class="growth-badge @(growth >= 0 ? "positive" : "negative")">
+                                        @if (growth >= 0)
+                                        {
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                                        }
+                                        else
+                                        {
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                                        }
+                                        @Math.Abs(growth).ToString("N1")%
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="growth-badge neutral">—</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr class="total-row">
+                        <td class="td-month"><strong>TOTAL</strong></td>
+                        <td class="td-revenue"><strong>₱@annualRevenue.ToString("N2")</strong></td>
+                        <td class="td-fee"><strong>₱@annualFees.ToString("N2")</strong></td>
+                        <td class="td-transactions"><strong>@monthlyData.Sum(m => m.Transactions)</strong></td>
+                        <td class="td-avg">—</td>
+                        <td class="td-growth">—</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private int selectedYear = DateTime.Now.Year;
+
+    // Annual KPIs
+    private decimal annualFees = 0;
+    private decimal annualRevenue = 0;
+    private decimal avgMonthlyFee = 0;
+    private int activeMonths = 0;
+    private decimal maxMonthFee = 0;
+
+    private List<MonthData> monthlyData = new();
+
+    private class MonthData
+    {
+        public int Month { get; set; }
+        public string MonthName { get; set; } = "";
+        public decimal Revenue { get; set; }
+        public decimal AdminFee => Revenue * 0.02m;
+        public int Transactions { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadReportData();
+    }
+
+    private async Task SelectYear(int year)
+    {
+        selectedYear = year;
+        await LoadReportData();
+    }
+
+    private async Task LoadReportData()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+            using var conn = new SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            // Initialize all 12 months
+            monthlyData = Enumerable.Range(1, 12)
+                .Select(m => new MonthData 
+                { 
+                    Month = m, 
+                    MonthName = new DateTime(selectedYear, m, 1).ToString("MMMM") 
+                })
+                .ToList();
+
+            // Only show sales that have been approved in Daily Sales Verification
+            var sql = @"
+                SELECT 
+                    MONTH(s.timestamps) as month,
+                    SUM(si.subtotal) as revenue,
+                    COUNT(DISTINCT s.id) as transactions
+                FROM dbo.tbl_sales_items si
+                INNER JOIN dbo.tbl_sales s ON si.sale_id = s.id
+                INNER JOIN dbo.tbl_variants v ON si.variant_id = v.id
+                INNER JOIN dbo.tbl_products p ON v.product_id = p.id
+                WHERE s.archives IS NULL
+                AND si.archives IS NULL
+                AND s.status = 'Completed'
+                AND YEAR(s.timestamps) = @Year
+                AND EXISTS (
+                    SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
+                    WHERE dsv.cashier_user_id = s.user_id
+                    AND dsv.sale_date = CAST(s.timestamps AS DATE)
+                    AND dsv.seller_user_id = p.user_id
+                    AND dsv.status = 'Approved'
+                    AND dsv.archived_at IS NULL
+                )
+                GROUP BY MONTH(s.timestamps)
+                ORDER BY MONTH(s.timestamps)";
+
+            using (var cmd = new SqlCommand(sql, conn))
+            {
+                cmd.Parameters.AddWithValue("@Year", selectedYear);
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    var month = reader.GetInt32(0);
+                    var data = monthlyData.FirstOrDefault(m => m.Month == month);
+                    if (data != null)
+                    {
+                        data.Revenue = reader.IsDBNull(1) ? 0 : reader.GetDecimal(1);
+                        data.Transactions = reader.IsDBNull(2) ? 0 : reader.GetInt32(2);
+                    }
+                }
+            }
+
+            // Calculate KPIs
+            annualRevenue = monthlyData.Sum(m => m.Revenue);
+            annualFees = annualRevenue * 0.02m;
+            activeMonths = monthlyData.Count(m => m.Revenue > 0);
+            avgMonthlyFee = activeMonths > 0 ? annualFees / activeMonths : 0;
+            maxMonthFee = monthlyData.Max(m => m.AdminFee);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void GoBack() => Nav.NavigateTo("/admin/dashboard");
+
+    private async Task PrintReport()
+    {
+        var reportData = new
+        {
+            title = "Monthly Fee Collection Report",
+            printedBy = AuthState.CurrentUser?.FullName ?? "Admin",
+            printedAt = DateTime.Now.ToString("MMMM dd, yyyy hh:mm tt"),
+            year = selectedYear,
+            annualFees = annualFees.ToString("N2"),
+            annualRevenue = annualRevenue.ToString("N2"),
+            avgMonthlyFee = avgMonthlyFee.ToString("N2"),
+            activeMonths = activeMonths.ToString(),
+            totalTransactions = monthlyData.Sum(m => m.Transactions).ToString("N0"),
+            
+            months = monthlyData.Select(m => new
+            {
+                name = m.MonthName,
+                revenue = m.Revenue.ToString("N2"),
+                adminFee = m.AdminFee.ToString("N2"),
+                transactions = m.Transactions.ToString()
+            }).ToList()
+        };
+
+        await JSRuntime.InvokeVoidAsync("printMonthlyCollection", reportData);
+        
+        // Log history
+        if (AuthState.CurrentUser != null)
+        {
+            try
+            {
+                await HistoryService.LogAsync(
+                    AuthState.CurrentUser.Id,
+                    "print",
+                    "Reports",
+                    $"Printed monthly collection report for {selectedYear}"
+                );
+            }
+            catch { }
+        }
+    }
+}

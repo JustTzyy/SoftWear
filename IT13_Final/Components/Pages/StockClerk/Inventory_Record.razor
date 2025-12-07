@@ -1,6 +1,12 @@
 @page "/stockclerk/Inventory"
 @layout IT13_Final.Components.Layout.StockClerk.StockClerk
 @inject IT13_Final.Services.Data.IInventoryService InventoryService
+@inject IT13_Final.Services.Data.IStockInService StockInService
+@inject IT13_Final.Services.Data.IStockOutService StockOutService
+@inject IT13_Final.Services.Data.IStockAdjustmentService StockAdjustmentService
+@inject IT13_Final.Services.Data.IVariantService VariantService
+@inject IT13_Final.Services.Data.ISupplierService SupplierService
+@inject IT13_Final.Services.Data.ICategoryService CategoryService
 @inject IT13_Final.Services.Auth.AuthState AuthState
 @inject IJSRuntime JSRuntime
 @inject NavigationManager Nav
@@ -8,22 +14,141 @@
 @using System.ComponentModel.DataAnnotations
 @implements IDisposable
 
-<h1 class="page-title">Inventory Records</h1>
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Inventory Management</h1>
+        <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintReport" disabled="@isGeneratingPDF" title="Print records">
+            @if (isGeneratingPDF)
+            {
+                <span>Generating...</span>
+            }
+            else
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 9V2h12v7"></path>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+            }
+        </button>
+    </div>
+</div>
 
-<div class="colors-container">
-    <div class="search-actions-row">
-        <div class="search-wrapper">
-            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"></circle>
-                <path d="m21 21-4.35-4.35"></path>
+@* Search and Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.3-4.3"></path>
+        </svg>
+        <input type="text" 
+               id="inventory-search-input"
+               class="search-input" 
+               placeholder="Search inventory..." 
+               value="@searchTerm" 
+               @oninput="HandleSearchInput" 
+               @onkeypress="HandleSearchKeyPress" />
+        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            <button class="clear-search-btn" @onclick="HandleClearSearch" title="Clear search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedCategory" @bind:after="HandleCategoryChange">
+            <option value="0">All Categories</option>
+            @foreach (var category in categories)
+            {
+                <option value="@category.Id">@category.Name</option>
+            }
+        </select>
+        <select class="date-select" @bind="selectedStockStatus" @bind:after="HandleStockStatusChange">
+            <option value="all">All Stock Status</option>
+            <option value="in-stock">In Stock</option>
+            <option value="low-stock">Low Stock</option>
+        </select>
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date"
+               class="date-input"
+               value="@(startDate?.ToString("yyyy-MM-dd"))"
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleStartDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date"
+               class="date-input"
+               value="@(endDate?.ToString("yyyy-MM-dd"))"
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleEndDateChange" />
+        <button class="filter-btn" @onclick="ApplyFilters">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
             </svg>
-            <input type="text" class="search-input" placeholder="Search inventory" value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+            Apply
+        </button>
+        @if (HasActiveFilters)
+        {
+            <button class="clear-btn" @onclick="ClearFilters" title="Clear filters">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
+
+@* Inventory List Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Inventory List</h3>
+            <span class="card-subtitle">@totalCount total items</span>
+        </div>
+        <div class="card-actions">
+            <button class="card-action-btn primary" @onclick="HandleAddStockIn" title="Add Stock In">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="16"></line>
+                    <line x1="8" y1="12" x2="16" y2="12"></line>
+                </svg>
+                <span>Stock In</span>
+            </button>
+            <button class="card-action-btn primary" @onclick="HandleAddStockOut" title="Add Stock Out">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="16"></line>
+                </svg>
+                <span>Stock Out</span>
+            </button>
+            <button class="card-action-btn primary" @onclick="HandleAddAdjustment" title="Add Adjustment">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                </svg>
+                <span>Adjustment</span>
+            </button>
         </div>
     </div>
-
-    <div class="table-container">
-        <div class="table-header">List</div>
-        <table class="suppliers-table">
+    
+    <div class="card-body">
+        <table class="admin-table">
             <thead>
                 <tr>
                     <th>Product</th>
@@ -41,13 +166,13 @@
                 @if (isLoading)
                 {
                     <tr>
-                        <td colspan="9" class="loading-cell">Loading...</td>
+                        <td colspan="9" class="loading-cell">Loading inventory...</td>
                     </tr>
                 }
                 else if (inventories.Count == 0)
                 {
                     <tr>
-                        <td colspan="9" class="empty-cell">No inventory records found</td>
+                        <td colspan="9" class="empty-cell">No inventory records found for this filter.</td>
                     </tr>
                 }
                 else
@@ -55,7 +180,7 @@
                     @foreach (var inventory in inventories)
                     {
                         <tr class="clickable-row" @onclick="() => HandleRowClick(inventory.VariantId, inventory.SizeId, inventory.ColorId)">
-                            <td class="supplier-name">@inventory.ProductName</td>
+                            <td class="sale-number">@inventory.ProductName</td>
                             <td>@inventory.VariantName</td>
                             <td>@(string.IsNullOrEmpty(inventory.SizeName) ? "N/A" : inventory.SizeName)</td>
                             <td>
@@ -81,17 +206,22 @@
                             <td>
                                 @if (inventory.CurrentStock <= inventory.ReorderLevel)
                                 {
-                                    <span class="status-badge inactive">Low Stock</span>
+                                    <span class="status-text status-text-cancelled">Low Stock</span>
                                 }
                                 else
                                 {
-                                    <span class="status-badge active">In Stock</span>
+                                    <span class="status-text status-text-approved">In Stock</span>
                                 }
                             </td>
-                            <td>@inventory.LastUpdated.ToString("MMM dd, yyyy")</td>
-                            <td class="actions-cell" @onclick:stopPropagation>
+                            <td>
+                                <div class="timestamp-info">
+                                    <div class="timestamp-date">@inventory.LastUpdated.ToString("MMM dd, yyyy")</div>
+                                    <div class="timestamp-time">@inventory.LastUpdated.ToString("HH:mm:ss")</div>
+                                </div>
+                            </td>
+                            <td class="actions-cell" @onclick:stopPropagation="true">
                                 <button class="action-btn edit-btn" @onclick="() => HandleEditReorderLevel(inventory.VariantId, inventory.ReorderLevel, inventory.ProductName, inventory.VariantName, inventory.CurrentStock, inventory.SizeId, inventory.ColorId)" title="Edit Reorder Level">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                                     </svg>
@@ -107,9 +237,9 @@
     @if (totalPages > 1)
     {
         <div class="pagination">
-            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="15 18 9 12 15 6"></polyline>
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)" title="Previous page">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m15 18-6-6 6-6"></path>
                 </svg>
             </button>
 
@@ -128,9 +258,9 @@
                 }
             }
 
-            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="9 18 15 12 9 6"></polyline>
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)" title="Next page">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m9 18 6-6-6-6"></path>
                 </svg>
             </button>
         </div>
@@ -141,40 +271,33 @@
 @if (showInventoryDetails && inventoryDetails != null)
 {
     <div class="modal-overlay" @onclick="CloseInventoryDetails">
-        <div class="modal-container" @onclick:stopPropagation>
+        <div class="add-admin-modal" @onclick:stopPropagation>
             <div class="modal-header">
-                <div class="modal-title">
-                    <svg class="modal-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                <h2 class="modal-title-text">Inventory Details</h2>
+                <button class="modal-close-btn" @onclick="CloseInventoryDetails" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
                     </svg>
-                    <span>Inventory Details</span>
-                </div>
-                <button class="modal-close" @onclick="CloseInventoryDetails" title="Close">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                    <span class="modal-close-text">Close</span>
                 </button>
             </div>
-
-            <div class="modal-content">
-                <div class="details-list">
-                    <div class="detail-item">
-                        <span class="detail-label">PRODUCT:</span>
-                        <span class="detail-value">@inventoryDetails.ProductName</span>
+            <div class="modal-body">
+                <div class="po-info">
+                    <div class="info-row">
+                        <span class="info-label">Product:</span>
+                        <span class="info-value">@inventoryDetails.ProductName</span>
                     </div>
-                    <div class="detail-item">
-                        <span class="detail-label">VARIANT:</span>
-                        <span class="detail-value">@inventoryDetails.VariantName</span>
+                    <div class="info-row">
+                        <span class="info-label">Variant:</span>
+                        <span class="info-value">@inventoryDetails.VariantName</span>
                     </div>
-                    <div class="detail-item">
-                        <span class="detail-label">SIZE:</span>
-                        <span class="detail-value">@(string.IsNullOrEmpty(inventoryDetails.SizeName) ? "N/A" : inventoryDetails.SizeName)</span>
+                    <div class="info-row">
+                        <span class="info-label">Size:</span>
+                        <span class="info-value">@(string.IsNullOrEmpty(inventoryDetails.SizeName) ? "N/A" : inventoryDetails.SizeName)</span>
                     </div>
-                    <div class="detail-item">
-                        <span class="detail-label">COLOR:</span>
-                        <span class="detail-value">
+                    <div class="info-row">
+                        <span class="info-label">Color:</span>
+                        <span class="info-value">
                             @if (!string.IsNullOrEmpty(inventoryDetails.ColorName))
                             {
                                 <div style="display: flex; align-items: center; gap: 8px;">
@@ -191,39 +314,42 @@
                             }
                         </span>
                     </div>
-                    <div class="detail-item">
-                        <span class="detail-label">CURRENT STOCK:</span>
-                        <span class="detail-value @(inventoryDetails.CurrentStock <= inventoryDetails.ReorderLevel ? "low-stock" : "")">@inventoryDetails.CurrentStock</span>
+                    <div class="info-row">
+                        <span class="info-label">Current Stock:</span>
+                        <span class="info-value @(inventoryDetails.CurrentStock <= inventoryDetails.ReorderLevel ? "low-stock" : "")">@inventoryDetails.CurrentStock</span>
                     </div>
-                    <div class="detail-item">
-                        <span class="detail-label">REORDER LEVEL:</span>
-                        <span class="detail-value">@inventoryDetails.ReorderLevel</span>
+                    <div class="info-row">
+                        <span class="info-label">Reorder Level:</span>
+                        <span class="info-value">@inventoryDetails.ReorderLevel</span>
                     </div>
-                    <div class="detail-item">
-                        <span class="detail-label">STATUS:</span>
-                        <span class="detail-value">
+                    <div class="info-row">
+                        <span class="info-label">Status:</span>
+                        <span class="info-value">
                             @if (inventoryDetails.CurrentStock <= inventoryDetails.ReorderLevel)
                             {
-                                <span class="status-badge inactive">Low Stock</span>
+                                <span class="status-text status-text-cancelled">Low Stock</span>
                             }
                             else
                             {
-                                <span class="status-badge active">In Stock</span>
+                                <span class="status-text status-text-approved">In Stock</span>
                             }
                         </span>
                     </div>
-                    <div class="detail-item">
-                        <span class="detail-label">LAST UPDATED:</span>
-                        <span class="detail-value">@inventoryDetails.LastUpdated.ToString("MMMM dd, yyyy 'at' HH:mm")</span>
+                    <div class="info-row">
+                        <span class="info-label">Last Updated:</span>
+                        <span class="info-value">@inventoryDetails.LastUpdated.ToString("MMM dd, yyyy HH:mm:ss")</span>
                     </div>
                     @if (!string.IsNullOrEmpty(inventoryDetails.UserName))
                     {
-                        <div class="detail-item">
-                            <span class="detail-label">UPDATED BY:</span>
-                            <span class="detail-value">@inventoryDetails.UserName</span>
+                        <div class="info-row">
+                            <span class="info-label">Updated By:</span>
+                            <span class="info-value">@inventoryDetails.UserName</span>
                         </div>
                     }
                 </div>
+            </div>
+            <div class="modal-footer">
+                <button class="cancel-btn" @onclick="CloseInventoryDetails">Close</button>
             </div>
         </div>
     </div>
@@ -233,13 +359,13 @@
 @if (showEditReorderLevelModal)
 {
     <div class="modal-overlay" @onclick="CloseEditReorderLevelModal">
-        <div class="add-supplier-modal" @onclick:stopPropagation>
+        <div class="add-admin-modal" @onclick:stopPropagation>
             <div class="modal-header">
                 <h2 class="modal-title-text">Edit Reorder Level</h2>
-                <button class="modal-close-btn" @onclick="CloseEditReorderLevelModal">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                <button class="modal-close-btn" @onclick="CloseEditReorderLevelModal" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
                     </svg>
                 </button>
             </div>
@@ -262,7 +388,7 @@
                             <input type="number" class="form-input" value="@_editReorderLevelCurrentStock" readonly />
                         </div>
                         <div class="form-field">
-                            <label class="field-label">Reorder Level <span class="required">*</span></label>
+                            <label class="field-label">Reorder Level <span class="required-asterisk">*</span></label>
                             <InputNumber class="form-input" @bind-Value="_editReorderLevelModel.ReorderLevel" placeholder="Enter reorder level" />
                             <ValidationMessage For="@(() => _editReorderLevelModel.ReorderLevel)" />
                             <small class="field-hint">Set the minimum stock quantity at which you should reorder. When current stock ≤ reorder level, the status will show "Low Stock".</small>
@@ -271,8 +397,8 @@
 
                     <div class="modal-footer">
                         <button type="button" class="cancel-btn" @onclick="CloseEditReorderLevelModal">Cancel</button>
-                        <button type="submit" class="save-supplier-btn">
-                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <button type="submit" class="save-admin-btn">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
                                 <polyline points="17 21 17 13 7 13 7 21"></polyline>
                                 <polyline points="7 3 7 8 15 8"></polyline>
@@ -286,15 +412,344 @@
     </div>
 }
 
+@* Add Stock In Modal *@
+@if (showAddStockInModal)
+{
+    <div class="modal-overlay" @onclick="CloseAddStockInModal">
+        <div class="add-admin-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Add Stock In</h2>
+                <button class="modal-close-btn" @onclick="CloseAddStockInModal" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <EditForm EditContext="@_addStockInEditContext" OnValidSubmit="SaveStockInAsync">
+                    <DataAnnotationsValidator />
+                    
+                    <div class="form-grid">
+                        <div class="form-field full-width">
+                            <label class="field-label">Variant <span class="required-asterisk">*</span></label>
+                            <InputSelect class="form-input" @bind-Value="_addStockInModel.VariantId" @bind-Value:after="OnStockInVariantSelectedAsync">
+                                <option value="0">Select Variant</option>
+                                @foreach (var variant in availableVariants)
+                                {
+                                    <option value="@variant.Id">@GetVariantDisplayName(variant)</option>
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => _addStockInModel.VariantId)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Size <span class="required-asterisk">*</span></label>
+                            <InputSelect class="form-input" @bind-Value="_addStockInModel.SizeId" disabled="@(stockInVariantDetails == null || stockInVariantDetails.SizeIds.Count == 0)">
+                                <option value="0">Select Size</option>
+                                @if (stockInVariantDetails != null && stockInVariantDetails.SizeIds.Count > 0)
+                                {
+                                    @for (int i = 0; i < stockInVariantDetails.SizeIds.Count; i++)
+                                    {
+                                        <option value="@stockInVariantDetails.SizeIds[i]">@stockInVariantDetails.SizeNames[i]</option>
+                                    }
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => _addStockInModel.SizeId)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Color <span class="required-asterisk">*</span></label>
+                            <InputSelect class="form-input" @bind-Value="_addStockInModel.ColorId" disabled="@(stockInVariantDetails == null || stockInVariantDetails.ColorIds.Count == 0)">
+                                <option value="0">Select Color</option>
+                                @if (stockInVariantDetails != null && stockInVariantDetails.ColorIds.Count > 0)
+                                {
+                                    @for (int i = 0; i < stockInVariantDetails.ColorIds.Count; i++)
+                                    {
+                                        <option value="@stockInVariantDetails.ColorIds[i]">@stockInVariantDetails.ColorNames[i]</option>
+                                    }
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => _addStockInModel.ColorId)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Quantity <span class="required-asterisk">*</span></label>
+                            <InputNumber class="form-input" @bind-Value="_addStockInModel.QuantityAdded" @bind-Value:after="OnStockInQuantityChanged" placeholder="Enter quantity" />
+                            <ValidationMessage For="@(() => _addStockInModel.QuantityAdded)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Cost Price <span class="required-asterisk">*</span></label>
+                            <InputNumber class="form-input" @bind-Value="_addStockInModel.CostPrice" placeholder="Auto-calculated" step="0.01" readonly />
+                            <ValidationMessage For="@(() => _addStockInModel.CostPrice)" />
+                            @if (stockInVariantDetails != null)
+                            {
+                                <small class="field-hint">Price per unit: @stockInVariantDetails.Price.ToString("N2")</small>
+                            }
+                        </div>
+                        <div class="form-field full-width">
+                            <label class="field-label">Supplier (Optional)</label>
+                            <InputSelect class="form-input" @bind-Value="_addStockInModel.SupplierId">
+                                <option value="">Select Supplier (Optional)</option>
+                                @foreach (var supplier in availableSuppliers)
+                                {
+                                    <option value="@supplier.Id">@supplier.CompanyName</option>
+                                }
+                            </InputSelect>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-btn" @onclick="CloseAddStockInModal">Cancel</button>
+                        <button type="submit" class="save-admin-btn">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                <polyline points="7 3 7 8 15 8"></polyline>
+                            </svg>
+                            <span>Save Stock In</span>
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@* Add Stock Out Modal *@
+@if (showAddStockOutModal)
+{
+    <div class="modal-overlay" @onclick="CloseAddStockOutModal">
+        <div class="add-admin-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Add Stock Out</h2>
+                <button class="modal-close-btn" @onclick="CloseAddStockOutModal" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <EditForm EditContext="@_addStockOutEditContext" OnValidSubmit="SaveStockOutAsync">
+                    <DataAnnotationsValidator />
+                    
+                    <div class="form-grid">
+                        <div class="form-field full-width">
+                            <label class="field-label">Variant <span class="required-asterisk">*</span></label>
+                            <InputSelect class="form-input" @bind-Value="_addStockOutModel.VariantId" @bind-Value:after="OnStockOutVariantSelectedAsync">
+                                <option value="0">Select Variant</option>
+                                @foreach (var variant in availableVariants)
+                                {
+                                    <option value="@variant.Id">@GetVariantDisplayName(variant)</option>
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => _addStockOutModel.VariantId)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Size <span class="required-asterisk">*</span></label>
+                            <InputSelect class="form-input" @bind-Value="_addStockOutModel.SizeId" disabled="@(stockOutVariantDetails == null || stockOutVariantDetails.SizeIds.Count == 0)">
+                                <option value="0">Select Size</option>
+                                @if (stockOutVariantDetails != null && stockOutVariantDetails.SizeIds.Count > 0)
+                                {
+                                    @for (int i = 0; i < stockOutVariantDetails.SizeIds.Count; i++)
+                                    {
+                                        <option value="@stockOutVariantDetails.SizeIds[i]">@stockOutVariantDetails.SizeNames[i]</option>
+                                    }
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => _addStockOutModel.SizeId)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Color <span class="required-asterisk">*</span></label>
+                            <InputSelect class="form-input" @bind-Value="_addStockOutModel.ColorId" disabled="@(stockOutVariantDetails == null || stockOutVariantDetails.ColorIds.Count == 0)">
+                                <option value="0">Select Color</option>
+                                @if (stockOutVariantDetails != null && stockOutVariantDetails.ColorIds.Count > 0)
+                                {
+                                    @for (int i = 0; i < stockOutVariantDetails.ColorIds.Count; i++)
+                                    {
+                                        <option value="@stockOutVariantDetails.ColorIds[i]">@stockOutVariantDetails.ColorNames[i]</option>
+                                    }
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => _addStockOutModel.ColorId)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Quantity <span class="required-asterisk">*</span></label>
+                            <InputNumber class="form-input" @bind-Value="_addStockOutModel.QuantityRemoved" placeholder="Enter quantity" />
+                            <ValidationMessage For="@(() => _addStockOutModel.QuantityRemoved)" />
+                        </div>
+                        <div class="form-field full-width">
+                            <label class="field-label">Reason (Optional)</label>
+                            <InputTextArea class="form-input" @bind-Value="_addStockOutModel.Reason" placeholder="Enter reason for stock out" rows="3" />
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-btn" @onclick="CloseAddStockOutModal">Cancel</button>
+                        <button type="submit" class="save-admin-btn">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                <polyline points="7 3 7 8 15 8"></polyline>
+                            </svg>
+                            <span>Save Stock Out</span>
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@* Add Stock Adjustment Modal *@
+@if (showAddStockAdjustmentModal)
+{
+    <div class="modal-overlay" @onclick="CloseAddStockAdjustmentModal">
+        <div class="add-admin-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Add Stock Adjustment</h2>
+                <button class="modal-close-btn" @onclick="CloseAddStockAdjustmentModal" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <EditForm EditContext="@_addStockAdjustmentEditContext" OnValidSubmit="SaveStockAdjustmentAsync">
+                    <DataAnnotationsValidator />
+                    
+                    <div class="form-grid">
+                        <div class="form-field full-width">
+                            <label class="field-label">Variant <span class="required-asterisk">*</span></label>
+                            <InputSelect class="form-input" @bind-Value="_addStockAdjustmentModel.VariantId" @bind-Value:after="OnAdjustmentVariantSelectedAsync">
+                                <option value="0">Select Variant</option>
+                                @foreach (var variant in availableVariants)
+                                {
+                                    <option value="@variant.Id">@GetVariantDisplayName(variant)</option>
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => _addStockAdjustmentModel.VariantId)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Size <span class="required-asterisk">*</span></label>
+                            <InputSelect class="form-input" @bind-Value="_addStockAdjustmentModel.SizeId" @bind-Value:after="OnSizeOrColorChanged" disabled="@(adjustmentVariantDetails == null || adjustmentVariantDetails.SizeIds.Count == 0)">
+                                <option value="0">Select Size</option>
+                                @if (adjustmentVariantDetails != null && adjustmentVariantDetails.SizeIds.Count > 0)
+                                {
+                                    @for (int i = 0; i < adjustmentVariantDetails.SizeIds.Count; i++)
+                                    {
+                                        <option value="@adjustmentVariantDetails.SizeIds[i]">@adjustmentVariantDetails.SizeNames[i]</option>
+                                    }
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => _addStockAdjustmentModel.SizeId)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Color <span class="required-asterisk">*</span></label>
+                            <InputSelect class="form-input" @bind-Value="_addStockAdjustmentModel.ColorId" @bind-Value:after="OnSizeOrColorChanged" disabled="@(adjustmentVariantDetails == null || adjustmentVariantDetails.ColorIds.Count == 0)">
+                                <option value="0">Select Color</option>
+                                @if (adjustmentVariantDetails != null && adjustmentVariantDetails.ColorIds.Count > 0)
+                                {
+                                    @for (int i = 0; i < adjustmentVariantDetails.ColorIds.Count; i++)
+                                    {
+                                        <option value="@adjustmentVariantDetails.ColorIds[i]">@adjustmentVariantDetails.ColorNames[i]</option>
+                                    }
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => _addStockAdjustmentModel.ColorId)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Adjustment Type <span class="required-asterisk">*</span></label>
+                            <InputSelect class="form-input" @bind-Value="_addStockAdjustmentModel.AdjustmentType" @bind-Value:after="OnAdjustmentTypeChanged">
+                                <option value="">Select Type</option>
+                                <option value="Increase">Increase</option>
+                                <option value="Decrease">Decrease</option>
+                            </InputSelect>
+                            <ValidationMessage For="@(() => _addStockAdjustmentModel.AdjustmentType)" />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">Quantity <span class="required-asterisk">*</span></label>
+                            <InputNumber class="form-input" @bind-Value="_addStockAdjustmentModel.QuantityAdjusted" placeholder="Enter quantity" />
+                            <ValidationMessage For="@(() => _addStockAdjustmentModel.QuantityAdjusted)" />
+                        </div>
+                        <div class="form-field full-width">
+                            <label class="field-label">Reason</label>
+                            <InputSelect class="form-input" @bind-Value="_addStockAdjustmentModel.Reason" @bind-Value:after="OnReasonChanged" disabled="@(string.IsNullOrEmpty(_addStockAdjustmentModel.AdjustmentType))">
+                                <option value="">Select Reason (Optional)</option>
+                                @if (_addStockAdjustmentModel.AdjustmentType == "Increase")
+                                {
+                                    <option value="Miscount">Miscount</option>
+                                    <option value="Human Error">Human Error</option>
+                                    <option value="System Mismatch">System Mismatch</option>
+                                    <option value="Found">Found</option>
+                                    <option value="Returned">Returned</option>
+                                    <option value="Other">Other</option>
+                                }
+                                else if (_addStockAdjustmentModel.AdjustmentType == "Decrease")
+                                {
+                                    <option value="Miscount">Miscount</option>
+                                    <option value="Theft">Theft</option>
+                                    <option value="Human Error">Human Error</option>
+                                    <option value="System Mismatch">System Mismatch</option>
+                                    <option value="Damage">Damage</option>
+                                    <option value="Expired">Expired</option>
+                                    <option value="Lost">Lost</option>
+                                    <option value="Other">Other</option>
+                                }
+                            </InputSelect>
+                            @if (_addStockAdjustmentModel.Reason == "Other")
+                            {
+                                <InputTextArea class="form-input" @bind-Value="_addStockAdjustmentModel.CustomReason" placeholder="Enter custom reason" rows="2" style="margin-top: 8px;" />
+                            }
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="cancel-btn" @onclick="CloseAddStockAdjustmentModal">Cancel</button>
+                        <button type="submit" class="save-admin-btn">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                <polyline points="7 3 7 8 15 8"></polyline>
+                            </svg>
+                            <span>Save Adjustment</span>
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private bool isLoading = false;
+    private bool isGeneratingPDF = false;
     private string searchTerm = string.Empty;
     private int currentPage = 1;
     private int pageSize = 10;
     private int totalCount = 0;
     private int totalPages => (int)Math.Ceiling(totalCount / (double)pageSize);
     private List<IT13_Final.Services.Data.InventoryModel> inventories = new();
+    private List<IT13_Final.Services.Data.InventoryModel> allInventories = new(); // Store all inventories for client-side filtering
+    private List<IT13_Final.Services.Data.InventoryModel> allInventoriesForPrint = new();
     private int sellerUserId = 0;
+    
+    // Filter variables
+    private int selectedCategory = 0; // 0 = All Categories
+    private string selectedStockStatus = "all"; // "all", "in-stock", "low-stock"
+    private DateTime? startDate;
+    private DateTime? endDate;
+    private string selectedDateRange = string.Empty;
+    private List<IT13_Final.Services.Data.CategoryModel> categories = new();
+
+    private bool HasActiveFilters => selectedCategory > 0 || selectedStockStatus != "all" || !string.IsNullOrWhiteSpace(searchTerm) || !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue;
+
+    // Summary statistics
+    private int inStockCount = 0;
+    private int lowStockCount = 0;
+    private decimal totalStockValue = 0m;
 
     private bool showInventoryDetails = false;
     private IT13_Final.Services.Data.InventoryModel? inventoryDetails = null;
@@ -307,6 +762,28 @@
     private string _editReorderLevelVariantName = string.Empty;
     private int _editReorderLevelCurrentStock = 0;
 
+    // Stock In Modal
+    private bool showAddStockInModal = false;
+    private AddStockInModel _addStockInModel = new();
+    private EditContext? _addStockInEditContext;
+    private IT13_Final.Services.Data.VariantDetailsModel? stockInVariantDetails = null;
+
+    // Stock Out Modal
+    private bool showAddStockOutModal = false;
+    private AddStockOutModel _addStockOutModel = new();
+    private EditContext? _addStockOutEditContext;
+    private IT13_Final.Services.Data.VariantDetailsModel? stockOutVariantDetails = null;
+
+    // Stock Adjustment Modal
+    private bool showAddStockAdjustmentModal = false;
+    private AddStockAdjustmentModel _addStockAdjustmentModel = new();
+    private EditContext? _addStockAdjustmentEditContext;
+    private IT13_Final.Services.Data.VariantDetailsModel? adjustmentVariantDetails = null;
+
+    // Shared data
+    private List<IT13_Final.Services.Data.VariantModel> availableVariants = new();
+    private List<IT13_Final.Services.Data.SupplierModel> availableSuppliers = new();
+
     public class EditReorderLevelModel
     {
         [Required(ErrorMessage = "Reorder level is required")]
@@ -314,11 +791,89 @@
         public int ReorderLevel { get; set; }
     }
 
+    public class AddStockInModel
+    {
+        [Required(ErrorMessage = "Variant is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Please select a variant")]
+        public int VariantId { get; set; }
+
+        [Required(ErrorMessage = "Size is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Please select a size")]
+        public int SizeId { get; set; }
+
+        [Required(ErrorMessage = "Color is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Please select a color")]
+        public int ColorId { get; set; }
+
+        [Required(ErrorMessage = "Quantity is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Quantity must be greater than 0")]
+        public int QuantityAdded { get; set; }
+
+        [Required(ErrorMessage = "Cost price is required")]
+        [Range(0.01, double.MaxValue, ErrorMessage = "Cost price must be greater than 0")]
+        public decimal CostPrice { get; set; } = 0;
+
+        public int? SupplierId { get; set; }
+    }
+
+    public class AddStockOutModel
+    {
+        [Required(ErrorMessage = "Variant is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Please select a variant")]
+        public int VariantId { get; set; }
+
+        [Required(ErrorMessage = "Size is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Please select a size")]
+        public int SizeId { get; set; }
+
+        [Required(ErrorMessage = "Color is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Please select a color")]
+        public int ColorId { get; set; }
+
+        [Required(ErrorMessage = "Quantity is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Quantity must be greater than 0")]
+        public int QuantityRemoved { get; set; }
+
+        public string? Reason { get; set; }
+    }
+
+    public class AddStockAdjustmentModel
+    {
+        [Required(ErrorMessage = "Variant is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Please select a variant")]
+        public int VariantId { get; set; }
+
+        [Required(ErrorMessage = "Size is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Please select a size")]
+        public int? SizeId { get; set; }
+
+        [Required(ErrorMessage = "Color is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Please select a color")]
+        public int? ColorId { get; set; }
+
+        [Required(ErrorMessage = "Adjustment type is required")]
+        public string AdjustmentType { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Quantity is required")]
+        [Range(1, int.MaxValue, ErrorMessage = "Quantity must be greater than 0")]
+        public int QuantityAdjusted { get; set; }
+
+        public string? Reason { get; set; }
+
+        public string? CustomReason { get; set; }
+    }
+
     protected override async Task OnInitializedAsync()
     {
+        _addStockInEditContext = new EditContext(_addStockInModel);
+        _addStockOutEditContext = new EditContext(_addStockOutModel);
+        _addStockAdjustmentEditContext = new EditContext(_addStockAdjustmentModel);
         await LoadSellerUserId();
         if (sellerUserId > 0)
         {
+            await LoadCategories();
+            await LoadVariantsAsync();
+            await LoadSuppliersAsync();
             await LoadInventoriesAsync();
         }
     }
@@ -359,14 +914,32 @@
         {
             if (sellerUserId > 0)
             {
-                totalCount = await InventoryService.GetInventoriesCountAsync(sellerUserId, searchTerm);
-                inventories = await InventoryService.GetInventoriesAsync(sellerUserId, searchTerm, currentPage, pageSize);
+                // Load all inventories (we'll filter client-side for category and stock status)
+                var allInventoriesList = await InventoryService.GetInventoriesAsync(sellerUserId, searchTerm, 1, 10000);
+                allInventories = allInventoriesList;
+                
+                // Apply filters
+                var filtered = ApplyFilters(allInventories);
+                
+                // Apply pagination
+                totalCount = filtered.Count;
+                inventories = filtered.Skip((currentPage - 1) * pageSize).Take(pageSize).ToList();
+
+                // Calculate summary statistics
+                inStockCount = filtered.Count(i => i.CurrentStock > i.ReorderLevel);
+                lowStockCount = filtered.Count(i => i.CurrentStock <= i.ReorderLevel);
+                // Calculate total stock value using Price property
+                totalStockValue = filtered.Sum(i => i.CurrentStock * i.Price);
             }
         }
         catch (Exception)
         {
             inventories = new List<IT13_Final.Services.Data.InventoryModel>();
+            allInventories = new List<IT13_Final.Services.Data.InventoryModel>();
             totalCount = 0;
+            inStockCount = 0;
+            lowStockCount = 0;
+            totalStockValue = 0;
         }
         finally
         {
@@ -374,17 +947,157 @@
             StateHasChanged();
         }
     }
+    
+    private List<IT13_Final.Services.Data.InventoryModel> ApplyFilters(List<IT13_Final.Services.Data.InventoryModel> items)
+    {
+        var filtered = items.ToList();
+        
+        // Apply category filter
+        if (selectedCategory > 0)
+        {
+            filtered = filtered.Where(i => i.CategoryId == selectedCategory).ToList();
+        }
+        
+        // Apply stock status filter
+        if (selectedStockStatus == "in-stock")
+        {
+            filtered = filtered.Where(i => i.CurrentStock > i.ReorderLevel).ToList();
+        }
+        else if (selectedStockStatus == "low-stock")
+        {
+            filtered = filtered.Where(i => i.CurrentStock <= i.ReorderLevel).ToList();
+        }
+        
+        // Apply date filter (filter by LastUpdated date)
+        if (startDate.HasValue || endDate.HasValue)
+        {
+            filtered = filtered.Where(i => 
+                (!startDate.HasValue || i.LastUpdated.Date >= startDate.Value.Date) &&
+                (!endDate.HasValue || i.LastUpdated.Date <= endDate.Value.Date)
+            ).ToList();
+        }
+        
+        return filtered;
+    }
+    
+    private async Task LoadCategories()
+    {
+        try
+        {
+            if (sellerUserId > 0)
+            {
+                categories = await CategoryService.GetCategoriesAsync(sellerUserId, null, 1, 1000);
+            }
+        }
+        catch
+        {
+            categories = new List<IT13_Final.Services.Data.CategoryModel>();
+        }
+    }
+    
+    private async Task HandleCategoryChange()
+    {
+        currentPage = 1;
+        await LoadInventoriesAsync();
+    }
+    
+    private async Task HandleStockStatusChange()
+    {
+        currentPage = 1;
+        await LoadInventoriesAsync();
+    }
+
+    private void HandleStartDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            startDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            startDate = null;
+            selectedDateRange = "";
+        }
+    }
+
+    private void HandleEndDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            endDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            endDate = null;
+            selectedDateRange = "";
+        }
+    }
+
+    private void HandleDateRangeChange()
+    {
+        var now = DateTime.Now;
+        switch (selectedDateRange)
+        {
+            case "":
+                startDate = null;
+                endDate = null;
+                break;
+            case "today":
+                startDate = now.Date;
+                endDate = now.Date;
+                break;
+            case "yesterday":
+                startDate = now.Date.AddDays(-1);
+                endDate = now.Date.AddDays(-1);
+                break;
+            case "last7days":
+                startDate = now.Date.AddDays(-6);
+                endDate = now.Date;
+                break;
+            case "last30days":
+                startDate = now.Date.AddDays(-29);
+                endDate = now.Date;
+                break;
+            case "thismonth":
+                startDate = new DateTime(now.Year, now.Month, 1);
+                endDate = now.Date;
+                break;
+            case "thisyear":
+                startDate = new DateTime(now.Year, 1, 1);
+                endDate = now.Date;
+                break;
+        }
+    }
+
+    private async Task ApplyFilters()
+    {
+        currentPage = 1;
+        await LoadInventoriesAsync();
+    }
 
     private System.Threading.Timer? _searchTimer;
     private void HandleSearchInput(ChangeEventArgs e)
     {
-        searchTerm = e.Value?.ToString() ?? string.Empty;
+        var filtered = System.Text.RegularExpressions.Regex.Replace(e.Value?.ToString() ?? "", @"[^a-zA-Z0-9\s\-_]", "");
+        searchTerm = filtered;
         _searchTimer?.Dispose();
         _searchTimer = new System.Threading.Timer(async _ =>
         {
             currentPage = 1;
             await InvokeAsync(async () => await LoadInventoriesAsync());
         }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task HandleClearSearch()
+    {
+        searchTerm = string.Empty;
+        currentPage = 1;
+        await LoadInventoriesAsync();
+        StateHasChanged();
     }
 
     private async Task HandleSearchKeyPress(KeyboardEventArgs e)
@@ -394,6 +1107,79 @@
             _searchTimer?.Dispose();
             currentPage = 1;
             await LoadInventoriesAsync();
+        }
+    }
+
+    private async Task ClearFilters()
+    {
+        selectedCategory = 0;
+        selectedStockStatus = "all";
+        selectedDateRange = "";
+        startDate = null;
+        endDate = null;
+        searchTerm = string.Empty;
+        currentPage = 1;
+        await LoadInventoriesAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("setupSearchInputFilter", "inventory-search-input");
+            }
+            catch (Exception)
+            {
+                // JavaScript function might not be available yet, ignore
+            }
+        }
+    }
+
+    private async Task PrintReport()
+    {
+        try
+        {
+            isGeneratingPDF = true;
+            StateHasChanged();
+
+            if (sellerUserId > 0)
+            {
+                // Get all inventories matching current filters for print
+                var filtered = ApplyFilters(allInventories);
+                allInventoriesForPrint = filtered;
+
+                // Create a simple inventory report data structure
+                var inventoryData = allInventoriesForPrint.Select(inv => new {
+                    productName = inv.ProductName,
+                    variantName = inv.VariantName,
+                    sizeName = inv.SizeName ?? "N/A",
+                    colorName = inv.ColorName ?? "N/A",
+                    currentStock = inv.CurrentStock,
+                    reorderLevel = inv.ReorderLevel,
+                    status = inv.CurrentStock <= inv.ReorderLevel ? "Low Stock" : "In Stock",
+                    lastUpdated = inv.LastUpdated.ToString("MMM dd, yyyy"),
+                    categoryName = inv.CategoryName ?? "N/A"
+                }).ToArray();
+
+                // Use a simple inventory report function (we'll need to create this in index.html)
+                await JSRuntime.InvokeVoidAsync("generateAndPrintInventoryReport",
+                    inventoryData,
+                    AuthState.CurrentUser?.FullName ?? "Stock Clerk",
+                    DateTime.Now.ToString("MMM dd, yyyy")
+                );
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error generating report: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to generate PDF. Please try again.");
+        }
+        finally
+        {
+            isGeneratingPDF = false;
+            StateHasChanged();
         }
     }
 
@@ -488,6 +1274,382 @@
         {
             await JSRuntime.InvokeVoidAsync("alert", $"Error updating reorder level: {ex.Message}");
         }
+    }
+
+    private async Task LoadVariantsAsync()
+    {
+        try
+        {
+            if (sellerUserId > 0)
+            {
+                availableVariants = await VariantService.GetVariantsAsync(sellerUserId, null, 1, 1000);
+            }
+        }
+        catch (Exception)
+        {
+            availableVariants = new List<IT13_Final.Services.Data.VariantModel>();
+        }
+    }
+
+    private async Task LoadSuppliersAsync()
+    {
+        try
+        {
+            if (sellerUserId > 0)
+            {
+                availableSuppliers = await SupplierService.GetSuppliersAsync(sellerUserId, null, null, null, 1, 1000);
+            }
+        }
+        catch (Exception)
+        {
+            availableSuppliers = new List<IT13_Final.Services.Data.SupplierModel>();
+        }
+    }
+
+    // Stock In Modal Methods
+    private async Task HandleAddStockIn()
+    {
+        _addStockInModel = new AddStockInModel();
+        _addStockInEditContext = new EditContext(_addStockInModel);
+        stockInVariantDetails = null;
+        await LoadVariantsAsync();
+        await LoadSuppliersAsync();
+        showAddStockInModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseAddStockInModal()
+    {
+        showAddStockInModal = false;
+        _addStockInModel = new AddStockInModel();
+        _addStockInEditContext = new EditContext(_addStockInModel);
+        stockInVariantDetails = null;
+    }
+
+    private async Task OnStockInVariantSelectedAsync()
+    {
+        if (_addStockInModel.VariantId > 0 && sellerUserId > 0)
+        {
+            stockInVariantDetails = await VariantService.GetVariantDetailsAsync(_addStockInModel.VariantId, sellerUserId);
+            _addStockInModel.SizeId = 0;
+            _addStockInModel.ColorId = 0;
+            _addStockInModel.CostPrice = 0;
+            StateHasChanged();
+        }
+        else
+        {
+            stockInVariantDetails = null;
+        }
+    }
+
+    private void OnStockInQuantityChanged()
+    {
+        if (stockInVariantDetails != null && _addStockInModel.QuantityAdded > 0)
+        {
+            _addStockInModel.CostPrice = stockInVariantDetails.Price * _addStockInModel.QuantityAdded;
+        }
+        else
+        {
+            _addStockInModel.CostPrice = 0;
+        }
+    }
+
+    private async Task SaveStockInAsync()
+    {
+        try
+        {
+            var stockClerkUserId = AuthState.CurrentUser?.Id ?? 0;
+            if (stockClerkUserId == 0)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Unable to determine user ID. Please refresh the page.");
+                return;
+            }
+
+            if (sellerUserId > 0)
+            {
+                // Use stock clerk's ID so "Recorded By" shows the correct person
+                var stockInId = await StockInService.CreateStockInAsync(
+                    stockClerkUserId,
+                    _addStockInModel.VariantId,
+                    _addStockInModel.SizeId,
+                    _addStockInModel.ColorId,
+                    _addStockInModel.QuantityAdded,
+                    _addStockInModel.CostPrice,
+                    _addStockInModel.SupplierId
+                );
+
+                if (stockInId.HasValue)
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", "Stock in record created successfully!");
+                    CloseAddStockInModal();
+                    await LoadInventoriesAsync();
+                }
+                else
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", "Failed to create stock in record. Please try again.");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error creating stock in record: {ex.Message}");
+        }
+    }
+
+    // Stock Out Modal Methods
+    private async Task HandleAddStockOut()
+    {
+        _addStockOutModel = new AddStockOutModel();
+        _addStockOutEditContext = new EditContext(_addStockOutModel);
+        stockOutVariantDetails = null;
+        await LoadVariantsAsync();
+        showAddStockOutModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseAddStockOutModal()
+    {
+        showAddStockOutModal = false;
+        _addStockOutModel = new AddStockOutModel();
+        _addStockOutEditContext = new EditContext(_addStockOutModel);
+        stockOutVariantDetails = null;
+    }
+
+    private async Task OnStockOutVariantSelectedAsync()
+    {
+        if (_addStockOutModel.VariantId > 0 && sellerUserId > 0)
+        {
+            stockOutVariantDetails = await VariantService.GetVariantDetailsAsync(_addStockOutModel.VariantId, sellerUserId);
+            _addStockOutModel.SizeId = 0;
+            _addStockOutModel.ColorId = 0;
+            StateHasChanged();
+        }
+        else
+        {
+            stockOutVariantDetails = null;
+        }
+    }
+
+    private async Task SaveStockOutAsync()
+    {
+        try
+        {
+            var stockClerkUserId = AuthState.CurrentUser?.Id ?? 0;
+            if (stockClerkUserId == 0)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Unable to determine user ID. Please refresh the page.");
+                return;
+            }
+
+            if (sellerUserId > 0)
+            {
+                // Validate that there's enough stock available
+                var inventory = await InventoryService.GetInventoryDetailsAsync(
+                    _addStockOutModel.VariantId,
+                    _addStockOutModel.SizeId > 0 ? _addStockOutModel.SizeId : null,
+                    _addStockOutModel.ColorId > 0 ? _addStockOutModel.ColorId : null,
+                    sellerUserId
+                );
+
+                if (inventory == null || inventory.CurrentStock < _addStockOutModel.QuantityRemoved)
+                {
+                    var availableStock = inventory?.CurrentStock ?? 0;
+                    await JSRuntime.InvokeVoidAsync("alert", $"Insufficient stock! Available stock: {availableStock}, Requested: {_addStockOutModel.QuantityRemoved}");
+                    return;
+                }
+
+                // Use stock clerk's ID so "Recorded By" shows the correct person
+                var stockOutId = await StockOutService.CreateStockOutAsync(
+                    stockClerkUserId,
+                    _addStockOutModel.VariantId,
+                    _addStockOutModel.SizeId,
+                    _addStockOutModel.ColorId,
+                    _addStockOutModel.QuantityRemoved,
+                    _addStockOutModel.Reason
+                );
+
+                if (stockOutId.HasValue)
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", "Stock out record created successfully!");
+                    CloseAddStockOutModal();
+                    await LoadInventoriesAsync();
+                }
+                else
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", "Failed to create stock out record. Please try again.");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error creating stock out record: {ex.Message}");
+        }
+    }
+
+    // Stock Adjustment Modal Methods
+    private async Task HandleAddAdjustment()
+    {
+        _addStockAdjustmentModel = new AddStockAdjustmentModel();
+        _addStockAdjustmentEditContext = new EditContext(_addStockAdjustmentModel);
+        adjustmentVariantDetails = null;
+        await LoadVariantsAsync();
+        showAddStockAdjustmentModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseAddStockAdjustmentModal()
+    {
+        showAddStockAdjustmentModal = false;
+        _addStockAdjustmentModel = new AddStockAdjustmentModel();
+        _addStockAdjustmentEditContext = new EditContext(_addStockAdjustmentModel);
+        adjustmentVariantDetails = null;
+    }
+
+    private async Task OnAdjustmentVariantSelectedAsync()
+    {
+        if (_addStockAdjustmentModel.VariantId > 0 && sellerUserId > 0)
+        {
+            adjustmentVariantDetails = await VariantService.GetVariantDetailsAsync(_addStockAdjustmentModel.VariantId, sellerUserId);
+            _addStockAdjustmentModel.SizeId = null;
+            _addStockAdjustmentModel.ColorId = null;
+            StateHasChanged();
+        }
+        else
+        {
+            adjustmentVariantDetails = null;
+        }
+    }
+
+    private void OnReasonChanged()
+    {
+        if (_addStockAdjustmentModel.Reason != "Other")
+        {
+            _addStockAdjustmentModel.CustomReason = null;
+        }
+    }
+
+    private void OnAdjustmentTypeChanged()
+    {
+        // Clear reason when adjustment type changes so user must select appropriate reason
+        _addStockAdjustmentModel.Reason = null;
+        _addStockAdjustmentModel.CustomReason = null;
+        StateHasChanged();
+    }
+
+    private void OnSizeOrColorChanged()
+    {
+        // Trigger validation update
+        _addStockAdjustmentEditContext?.NotifyValidationStateChanged();
+        StateHasChanged();
+    }
+
+    private async Task SaveStockAdjustmentAsync()
+    {
+        try
+        {
+            if (sellerUserId > 0 && AuthState.CurrentUser != null)
+            {
+                // Validate size and color are selected
+                if (!_addStockAdjustmentModel.SizeId.HasValue || _addStockAdjustmentModel.SizeId.Value <= 0)
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", "Please select a size.");
+                    return;
+                }
+
+                if (!_addStockAdjustmentModel.ColorId.HasValue || _addStockAdjustmentModel.ColorId.Value <= 0)
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", "Please select a color.");
+                    return;
+                }
+
+                // Validate that there's enough stock available for decrease adjustments
+                if (_addStockAdjustmentModel.AdjustmentType == "Decrease")
+                {
+                    var inventory = await InventoryService.GetInventoryDetailsAsync(
+                        _addStockAdjustmentModel.VariantId,
+                        _addStockAdjustmentModel.SizeId.Value,
+                        _addStockAdjustmentModel.ColorId.Value,
+                        sellerUserId
+                    );
+
+                    if (inventory == null || inventory.CurrentStock < _addStockAdjustmentModel.QuantityAdjusted)
+                    {
+                        var availableStock = inventory?.CurrentStock ?? 0;
+                        await JSRuntime.InvokeVoidAsync("alert", $"Insufficient stock for decrease adjustment! Available stock: {availableStock}, Requested decrease: {_addStockAdjustmentModel.QuantityAdjusted}");
+                        return;
+                    }
+                }
+
+                // Use custom reason if "Other" is selected
+                string finalReason = _addStockAdjustmentModel.Reason == "Other" 
+                    ? _addStockAdjustmentModel.CustomReason 
+                    : _addStockAdjustmentModel.Reason;
+
+                var adjustmentId = await StockAdjustmentService.CreateStockAdjustmentAsync(
+                    sellerUserId,
+                    AuthState.CurrentUser.Id,
+                    _addStockAdjustmentModel.VariantId,
+                    _addStockAdjustmentModel.SizeId.Value,
+                    _addStockAdjustmentModel.ColorId.Value,
+                    _addStockAdjustmentModel.AdjustmentType,
+                    _addStockAdjustmentModel.QuantityAdjusted,
+                    finalReason
+                );
+
+                if (adjustmentId.HasValue)
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", $"Stock adjustment ({_addStockAdjustmentModel.AdjustmentType}) created successfully!");
+                    CloseAddStockAdjustmentModal();
+                    await LoadInventoriesAsync();
+                }
+                else
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", "Failed to create stock adjustment. Please try again.");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error creating stock adjustment: {ex.Message}");
+        }
+    }
+
+    private string GetVariantDisplayName(IT13_Final.Services.Data.VariantModel variant)
+    {
+        // Extract just the base variant name, removing size and color if they're appended
+        // Pattern: "VariantName - Size - Color" -> "VariantName"
+        // Also handles: "ProductName - VariantName - Size - Color" -> "VariantName"
+        var name = variant.Name;
+        
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return name;
+        }
+        
+        // Check if the name contains " - " which might indicate size/color are appended
+        if (name.Contains(" - "))
+        {
+            // Split by " - " 
+            var parts = name.Split(new[] { " - " }, StringSplitOptions.RemoveEmptyEntries);
+            
+            if (parts.Length > 0)
+            {
+                // If we have multiple parts, the first part(s) might be ProductName - VariantName
+                // or just VariantName. We want to return just the variant name part.
+                // Typically: "ProductName - VariantName - Size - Color"
+                // Or: "VariantName - Size - Color"
+                
+                // If parts length is 2 or more, likely format is "VariantName - Size" or "VariantName - Size - Color"
+                // If parts length is 3 or more, might be "ProductName - VariantName - Size" or "VariantName - Size - Color"
+                // We'll take the first part that doesn't match common size/color patterns
+                
+                // For now, let's take the first part as the base variant name
+                // This handles: "Classic Cotton T-Shirt - XXXL - Burgundy" -> "Classic Cotton T-Shirt"
+                return parts[0].Trim();
+            }
+        }
+        
+        return name;
     }
 
     public void Dispose()

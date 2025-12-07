@@ -1,0 +1,352 @@
+/* Income Breakdown Page - Accounting */
+.page-title {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    margin: 6px 0 24px 0;
+    color: #1a1a1a;
+}
+
+.activity-log-container {
+    background: #FFFFFF;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+/* Top row (for future search + print button) */
+.search-filters-row {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.search-wrapper {
+    flex: 1;
+    min-width: 300px;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.refresh-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 40px;
+    padding: 0 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    border: none;
+    background: #A2B9CD;
+    color: #304D6D;
+    box-shadow: 0 2px 8px rgba(167, 204, 237, 0.25);
+    transition: all 0.2s;
+}
+
+.refresh-btn:hover {
+    background: #82A0BC;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(167, 204, 237, 0.35);
+}
+
+.refresh-btn svg {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+}
+
+/* Filters Section */
+.filters-section {
+    margin-bottom: 24px;
+}
+
+.filter-content {
+    padding: 0;
+}
+
+.date-filters {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+}
+
+.date-range-dropdown {
+    min-width: 180px;
+}
+
+.date-range-dropdown label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #2d2d2d;
+}
+
+.date-range-select {
+    width: 100%;
+    height: 40px;
+    padding: 0 12px;
+    border: 1px solid #82A0BC;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #2d2d2d;
+    background: #FFFFFF;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    cursor: pointer;
+}
+
+.date-range-select:focus {
+    outline: none;
+    border-color: #304D6D;
+    box-shadow: 0 0 0 3px rgba(48, 77, 109, 0.15);
+}
+
+.date-filter {
+    flex: 1;
+    min-width: 200px;
+}
+
+.date-filter label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #2d2d2d;
+}
+
+.date-filter input[type="checkbox"] {
+    margin-right: 8px;
+    cursor: pointer;
+}
+
+.date-input {
+    width: 100%;
+    height: 40px;
+    padding: 0 12px;
+    border: 1px solid #82A0BC;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #2d2d2d;
+    background: #FFFFFF;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.date-input:focus {
+    outline: none;
+    border-color: #304D6D;
+    box-shadow: 0 0 0 3px rgba(48, 77, 109, 0.15);
+}
+
+.clear-filter-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 40px;
+    padding: 0 16px;
+    border: 1px solid #E0E0E0;
+    border-radius: 8px;
+    background: #FFFFFF;
+    color: #6b6b6b;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.clear-filter-btn:hover {
+    background: #F5F5F5;
+    border-color: #A2B9CD;
+    color: #304D6D;
+}
+
+.clear-filter-btn svg {
+    width: 16px;
+    height: 16px;
+    stroke: currentColor;
+}
+
+/* Card Styles */
+.card {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+    border: 1px solid #e5e7eb;
+}
+
+.card-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #111827;
+}
+
+.card-subtext {
+    font-size: 13px;
+    color: #6b7280;
+    margin-bottom: 12px;
+}
+
+/* Income Summary Styles */
+.income-summary-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 12px 0 16px;
+}
+
+.summary-box {
+    flex: 1 1 220px;
+    border-radius: 10px;
+    border: 1px solid #e5e7eb;
+    padding: 10px 14px;
+    background: #f9fafb;
+}
+
+.summary-label {
+    font-size: 12px;
+    color: #6b7280;
+    margin-bottom: 2px;
+}
+
+.summary-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: #111827;
+}
+
+.summary-value.highlight {
+    color: #059669;
+    font-size: 16px;
+}
+
+/* Income Columns Layout */
+.income-columns {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 18px;
+    margin-top: 20px;
+}
+
+.income-column {
+    background: #FFFFFF;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    border: 1px solid #e5e7eb;
+}
+
+.income-column h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: #111827;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e5e7eb;
+}
+
+/* Income Table */
+.income-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-top: 8px;
+}
+
+.income-table th,
+.income-table td {
+    border: 1px solid #e5e7eb;
+    padding: 8px 12px;
+    text-align: left;
+}
+
+.income-table th {
+    background: #f3f4f6;
+    font-weight: 600;
+    font-size: 12px;
+    color: #4b5563;
+}
+
+.income-table tbody tr:hover {
+    background: #f9fafb;
+}
+
+/* Simple List */
+.simple-list {
+    list-style: disc;
+    padding-left: 18px;
+    font-size: 13px;
+    color: #374151;
+    margin-bottom: 10px;
+}
+
+.simple-list li {
+    margin-bottom: 6px;
+    line-height: 1.5;
+}
+
+/* Note Box */
+.note-box {
+    margin-top: 10px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    font-size: 13px;
+    color: #1f2937;
+}
+
+.note-title {
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #1e40af;
+}
+
+/* Loading and Empty States */
+.loading-cell,
+.empty-cell {
+    text-align: center;
+    padding: 48px 16px;
+    color: #6b6b6b;
+    font-size: 14px;
+}
+
+.loading-cell {
+    color: #304D6D;
+    font-weight: 600;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .date-filters {
+        flex-direction: column;
+    }
+
+    .date-filter {
+        width: 100%;
+    }
+
+    .income-columns {
+        grid-template-columns: 1fr;
+    }
+
+    .income-summary-row {
+        flex-direction: column;
+    }
+
+    .summary-box {
+        flex: 1 1 100%;
+    }
+}
