@@ -1,0 +1,622 @@
+@page "/seller/AccountingIncomeBreakdown"
+@layout IT13_Final.Components.Layout.Seller.Seller
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IT13_Final.Services.Data.IIncomeBreakdownService IncomeBreakdownService
+@inject IT13_Final.Services.Audit.IHistoryService HistoryService
+@inject IJSRuntime JSRuntime
+@using Microsoft.Data.SqlClient
+@using System.Linq
+@implements IDisposable
+
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Income Breakdown</h1>
+        <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintIncome" disabled="@isGeneratingPDF" title="Print Report">
+            @if (isGeneratingPDF)
+            {
+                <span>Generating...</span>
+            }
+            else
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 9V2h12v7"></path>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+            }
+        </button>
+    </div>
+</div>
+
+@* Search and Date Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper" style="flex: 1;">
+        <!-- Reserved space to align with other pages -->
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date" 
+               class="date-input" 
+               value="@(startDate?.ToString("yyyy-MM-dd"))" 
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@(endDate?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd"))" 
+               @onchange="HandleFromDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date" 
+               class="date-input" 
+               value="@(endDate?.ToString("yyyy-MM-dd"))" 
+               min="@(startDate?.ToString("yyyy-MM-dd"))" 
+               max="@DateTime.Today.ToString("yyyy-MM-dd")" 
+               @onchange="HandleToDateChange" />
+        <button class="filter-btn" @onclick="LoadIncomeData">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            Apply
+        </button>
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
+
+@* Summary Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Income Summary</h3>
+            <span class="card-subtitle">@GetDateRangeText()</span>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <div class="summary-grid">
+            <div class="summary-box">
+                <div class="summary-label">Total Gross Sales</div>
+                <div class="summary-value">₱@(incomeData?.TotalGrossSales.ToString("N2") ?? "0.00")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Net Income</div>
+                <div class="summary-value">₱@(incomeData?.NetIncome.ToString("N2") ?? "0.00")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Total Transactions</div>
+                <div class="summary-value">@(incomeData?.TotalTransactions ?? 0)</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Total Returns</div>
+                <div class="summary-value" style="color: #dc3545;">₱@(incomeData?.TotalReturns.ToString("N2") ?? "0.00")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">VAT (12%)</div>
+                <div class="summary-value">₱@vatAmount.ToString("N2")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Admin Fee (2%)</div>
+                <div class="summary-value">₱@adminFeeAmount.ToString("N2")</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="content-card">
+        <div class="card-body">
+            <div class="loading-cell">Loading income breakdown...</div>
+        </div>
+    </div>
+}
+else if (incomeData == null)
+{
+    <div class="content-card">
+        <div class="card-header">
+            <div class="card-title-section">
+                <h3 class="card-title">Income Breakdown</h3>
+            </div>
+        </div>
+        <div class="card-body">
+            <div style="text-align: center; padding: 40px; color: #6b7280;">
+                <p>No data available for the selected date range.</p>
+                <p style="margin-top: 12px; font-size: 0.9em; color: #9ca3af;">
+                    Try adjusting the date filters or check if there are any completed sales in the system.
+                </p>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    @* By Category Card *@
+    <div class="content-card">
+        <div class="card-header">
+            <div class="card-title-section">
+                <h3 class="card-title">By Category</h3>
+                <span class="card-subtitle">@incomeData.ByCategory.Count categories</span>
+            </div>
+        </div>
+        <div class="card-body">
+            @if (incomeData.ByCategory.Count == 0)
+            {
+                <div class="empty-cell">No category data available</div>
+            }
+            else
+            {
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Category</th>
+                            <th>Amount</th>
+                            <th>Items</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var category in incomeData.ByCategory)
+                        {
+                            <tr>
+                                <td>@category.CategoryName</td>
+                                <td style="text-align: right; font-weight: 600;">₱@category.TotalIncome.ToString("N2")</td>
+                                <td style="text-align: right;">@category.ItemCount</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+
+    @* By Seller Card *@
+    <div class="content-card">
+        <div class="card-header">
+            <div class="card-title-section">
+                <h3 class="card-title">By Seller</h3>
+                <span class="card-subtitle">@incomeData.BySeller.Count sellers</span>
+            </div>
+        </div>
+        <div class="card-body">
+            @if (incomeData.BySeller.Count == 0)
+            {
+                <div class="empty-cell">No seller data available</div>
+            }
+            else
+            {
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Seller</th>
+                            <th>Amount</th>
+                            <th>Transactions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var seller in incomeData.BySeller)
+                        {
+                            <tr>
+                                <td>@seller.SellerName</td>
+                                <td style="text-align: right; font-weight: 600;">₱@seller.TotalIncome.ToString("N2")</td>
+                                <td style="text-align: right;">@seller.TransactionCount</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+
+    @* By Payment Method Card *@
+    <div class="content-card">
+        <div class="card-header">
+            <div class="card-title-section">
+                <h3 class="card-title">By Payment Method</h3>
+                <span class="card-subtitle">@incomeData.ByPaymentMethod.Count payment methods</span>
+            </div>
+        </div>
+        <div class="card-body">
+            @if (incomeData.ByPaymentMethod.Count == 0)
+            {
+                <div class="empty-cell">No payment method data available</div>
+            }
+            else
+            {
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Payment Method</th>
+                            <th>Amount</th>
+                            <th>Percentage</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var method in incomeData.ByPaymentMethod)
+                        {
+                            <tr>
+                                <td>@method.PaymentMethod</td>
+                                <td style="text-align: right; font-weight: 600;">₱@method.TotalIncome.ToString("N2")</td>
+                                <td style="text-align: right;">@method.Percentage.ToString("F1")%</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+
+    @* Returns & Refunds Card *@
+    <div class="content-card">
+        <div class="card-header">
+            <div class="card-title-section">
+                <h3 class="card-title">Returns & Refunds</h3>
+                <span class="card-subtitle">Summary</span>
+            </div>
+        </div>
+        <div class="card-body">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Total Returns</td>
+                        <td style="text-align: right; font-weight: 600; color: #dc3545;">₱@incomeData.TotalReturns.ToString("N2")</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private IT13_Final.Services.Data.IncomeSummaryModel? incomeData = null;
+    private bool isLoading = false;
+    private int sellerUserId = 0;
+    private DateTime? startDate;
+    private DateTime? endDate;
+    // Default to Custom (no quick range selected), same as other accounting pages
+    private string selectedDateRange = string.Empty;
+    private bool onlyApprovedDays = true; // Default to only show approved daily sales verification
+
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue || onlyApprovedDays;
+    private bool isGeneratingPDF = false;
+    private decimal vatAmount = 0m;
+    private decimal adminFeeAmount = 0m;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // For seller, use their own user id (tbl_users.id) as sellerUserId
+            sellerUserId = AuthState.CurrentUser?.Id ?? 0;
+            
+            if (sellerUserId > 0)
+            {
+                // No quick range by default: show all-time data until user filters
+                startDate = null;
+                endDate = null;
+                await LoadIncomeData();
+            }
+            else
+            {
+                isLoading = false;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error initializing Income Breakdown: {ex.Message}");
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadIncomeData()
+    {
+        if (sellerUserId <= 0)
+        {
+            sellerUserId = AuthState.CurrentUser?.Id ?? 0;
+        }
+
+        if (sellerUserId <= 0)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", "Seller User ID not found.");
+            isLoading = false;
+            StateHasChanged();
+            return;
+        }
+
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            incomeData = await IncomeBreakdownService.GetIncomeBreakdownAsync(
+                sellerUserId,
+                startDate,
+                endDate,
+                onlyApprovedDays
+            );
+
+            // Calculate VAT (12% on total gross sales)
+            vatAmount = incomeData?.TotalGrossSales * 0.12m ?? 0m;
+
+            // Calculate Admin Fee (2% per product)
+            await CalculateAdminFee();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading income data: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading income data: {ex.Message}");
+            incomeData = null;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleDateRangeChange()
+    {
+        var today = DateTime.Today;
+        switch (selectedDateRange)
+        {
+            case "":
+                // Custom selected again – clear dates so inputs show mm/dd/yyyy
+                startDate = null;
+                endDate = null;
+                break;
+            case "today":
+                startDate = today;
+                endDate = today;
+                break;
+            case "yesterday":
+                startDate = today.AddDays(-1);
+                endDate = today.AddDays(-1);
+                break;
+            case "last7days":
+                startDate = today.AddDays(-7);
+                endDate = today;
+                break;
+            case "last30days":
+                startDate = today.AddDays(-30);
+                endDate = today;
+                break;
+            case "thismonth":
+                startDate = new DateTime(today.Year, today.Month, 1);
+                endDate = today;
+                break;
+            case "thisyear":
+                startDate = new DateTime(today.Year, 1, 1);
+                endDate = today;
+                break;
+            default:
+                break;
+        }
+        await LoadIncomeData();
+    }
+
+    private async Task HandleFromDateChange(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        {
+            startDate = date;
+            selectedDateRange = string.Empty;
+            await LoadIncomeData();
+        }
+    }
+
+    private async Task HandleToDateChange(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        {
+            endDate = date;
+            selectedDateRange = string.Empty;
+            await LoadIncomeData();
+        }
+    }
+
+    private async Task HandleApprovedDaysChange()
+    {
+        await LoadIncomeData();
+    }
+
+    private async Task ClearDateFilter()
+    {
+        startDate = null;
+        endDate = null;
+        selectedDateRange = string.Empty;
+        onlyApprovedDays = true; // Keep default to only show approved daily sales verification
+        await LoadIncomeData();
+    }
+
+    private async Task CalculateAdminFee()
+    {
+        try
+        {
+            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+            using var conn = new SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            var sql = @"
+                SELECT SUM(si.subtotal) as total_revenue
+                FROM dbo.tbl_sales_items si
+                INNER JOIN dbo.tbl_sales s ON si.sale_id = s.id
+                INNER JOIN dbo.tbl_users u ON s.user_id = u.id
+                WHERE s.archives IS NULL
+                AND si.archives IS NULL
+                AND s.status = 'Completed'
+                AND u.archived_at IS NULL";
+
+            if (sellerUserId > 0)
+            {
+                sql += " AND u.user_id = @SellerUserId";
+            }
+
+            if (startDate.HasValue)
+            {
+                sql += " AND CAST(s.timestamps AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                sql += " AND CAST(s.timestamps AS DATE) <= @EndDate";
+            }
+
+            if (onlyApprovedDays)
+            {
+                sql += @"
+                    AND EXISTS (
+                        SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
+                        WHERE dsv.cashier_user_id = s.user_id
+                        AND dsv.sale_date = CAST(s.timestamps AS DATE)
+                        AND dsv.status = 'Approved'
+                        AND dsv.archived_at IS NULL";
+                if (sellerUserId > 0)
+                {
+                    sql += " AND dsv.seller_user_id = @SellerUserId";
+                }
+                sql += ")";
+            }
+
+            using var cmd = new SqlCommand(sql, conn);
+            if (sellerUserId > 0)
+            {
+                cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+            }
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+            }
+
+            var result = await cmd.ExecuteScalarAsync();
+            var totalRevenue = result != null && result != DBNull.Value ? Convert.ToDecimal(result) : 0m;
+            adminFeeAmount = totalRevenue * 0.02m;
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error calculating admin fee: {ex.Message}");
+            adminFeeAmount = 0m;
+        }
+    }
+
+    private string GetDateRangeText()
+    {
+        if (!startDate.HasValue && !endDate.HasValue)
+            return "All Time";
+        if (startDate.HasValue && endDate.HasValue)
+            return $"{startDate.Value:MMM d} - {endDate.Value:MMM d, yyyy}";
+        return "Custom Range";
+    }
+
+    private async Task PrintIncome()
+    {
+        if (incomeData == null) return;
+
+        try
+        {
+            isGeneratingPDF = true;
+            StateHasChanged();
+
+            var userName = AuthState.CurrentUser?.FullName ?? "User";
+            var rangeTextFrom = startDate?.ToString("MMM dd, yyyy") ?? "All Time";
+            var rangeTextTo = endDate?.ToString("MMM dd, yyyy") ?? "Today";
+
+            // Prepare data for PDF
+            var summary = new
+            {
+                totalGrossSales = incomeData.TotalGrossSales.ToString("N2"),
+                totalReturns = incomeData.TotalReturns.ToString("N2"),
+                netIncome = incomeData.NetIncome.ToString("N2"),
+                totalTransactions = incomeData.TotalTransactions.ToString(),
+                vat = vatAmount.ToString("N2"),
+                adminFee = adminFeeAmount.ToString("N2")
+            };
+
+            var categories = incomeData.ByCategory.Select(c => new
+            {
+                category = c.CategoryName,
+                amount = c.TotalIncome.ToString("N2"),
+                items = c.ItemCount.ToString()
+            }).ToArray();
+
+            var sellers = incomeData.BySeller.Select(s => new
+            {
+                seller = s.SellerName,
+                amount = s.TotalIncome.ToString("N2"),
+                transactions = s.TransactionCount.ToString()
+            }).ToArray();
+
+            var payments = incomeData.ByPaymentMethod.Select(p => new
+            {
+                method = p.PaymentMethod,
+                amount = p.TotalIncome.ToString("N2"),
+                percentage = $"{p.Percentage:F1}%"
+            }).ToArray();
+
+            await JSRuntime.InvokeVoidAsync(
+                "generateAndPrintIncomePDF",
+                summary,
+                categories,
+                sellers,
+                payments,
+                userName,
+                rangeTextFrom,
+                rangeTextTo
+            );
+
+            // Log print action
+            try
+            {
+                if (AuthState.CurrentUser != null)
+                {
+                    await HistoryService.LogAsync(
+                        AuthState.CurrentUser.Id,
+                        "print",
+                        "Income Breakdown",
+                        $"Printed income breakdown report (Range: {rangeTextFrom} - {rangeTextTo})"
+                    );
+                }
+            }
+            catch { }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error printing income breakdown: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to generate PDF. Please try again.");
+        }
+        finally
+        {
+            isGeneratingPDF = false;
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        // Cleanup if needed
+    }
+}

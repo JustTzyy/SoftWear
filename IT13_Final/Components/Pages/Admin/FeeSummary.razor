@@ -1,0 +1,586 @@
+@page "/admin/fee-summary"
+@layout IT13_Final.Components.Layout.Admin.Admin
+@inject IT13_Final.Services.Audit.IHistoryService HistoryService
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject NavigationManager Nav
+@inject IJSRuntime JSRuntime
+@using Microsoft.Data.SqlClient
+
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Admin Fee Summary</h1>
+        <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintReport" title="Print Report">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                <rect x="6" y="14" width="12" height="8"></rect>
+            </svg>
+        </button>
+    </div>
+</div>
+
+@* Search and Date Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.35-4.35"></path>
+        </svg>
+        <input type="text" class="search-input" placeholder="Search sellers..." @bind="searchTerm" @bind:event="oninput" @bind:after="HandleSearchInput" />
+        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            <button class="clear-search-btn" @onclick="ClearSearch" title="Clear">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        }
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date" 
+               class="date-input" 
+               value="@(startDate?.ToString("yyyy-MM-dd"))" 
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleStartDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date" 
+               class="date-input" 
+               value="@(endDate?.ToString("yyyy-MM-dd"))" 
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleEndDateChange" />
+        <button class="filter-btn" @onclick="LoadReportData">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            Filter
+        </button>
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="loading-state">
+        <div class="loading-spinner"></div>
+        <p>Loading report...</p>
+    </div>
+}
+else
+{
+    @* KPI Summary *@
+    <div class="kpi-row">
+        <div class="kpi-card kpi-primary">
+            <div class="kpi-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="1" x2="12" y2="23"></line>
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                </svg>
+            </div>
+            <div class="kpi-content">
+                <span class="kpi-label">Total Admin Fees</span>
+                <span class="kpi-value">₱@totalAdminFees.ToString("N2")</span>
+                <span class="kpi-trend trend-up">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                    <span>2% of revenue</span>
+                </span>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-success">
+            <div class="kpi-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                    <line x1="1" y1="10" x2="23" y2="10"></line>
+                </svg>
+            </div>
+            <div class="kpi-content">
+                <span class="kpi-label">Gross Revenue</span>
+                <span class="kpi-value">₱@grossRevenue.ToString("N2")</span>
+                <span class="kpi-trend">
+                    <span>Total sales</span>
+                </span>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-info">
+            <div class="kpi-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+            </div>
+            <div class="kpi-content">
+                <span class="kpi-label">Active Sellers</span>
+                <span class="kpi-value">@activeSellers</span>
+                <span class="kpi-trend">
+                    <span>With revenue</span>
+                </span>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-warning">
+            <div class="kpi-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <path d="M16 10a4 4 0 0 1-8 0"></path>
+                </svg>
+            </div>
+            <div class="kpi-content">
+                <span class="kpi-label">Total Transactions</span>
+                <span class="kpi-value">@totalTransactions.ToString("N0")</span>
+                <span class="kpi-trend">
+                    <span>Completed sales</span>
+                </span>
+            </div>
+        </div>
+    </div>
+
+    @* Period Breakdown *@
+    <div class="section-header">
+        <h2 class="section-title">Period Breakdown</h2>
+        <span class="section-subtitle">@GetDateRangeText()</span>
+    </div>
+
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="stat-icon blue">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                </svg>
+            </div>
+            <div class="stat-content">
+                <span class="stat-value">₱@avgFeePerTransaction.ToString("N2")</span>
+                <span class="stat-label">Avg Fee/Transaction</span>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon green">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+            </div>
+            <div class="stat-content">
+                <span class="stat-value">₱@avgDailyFee.ToString("N2")</span>
+                <span class="stat-label">Avg Daily Fee</span>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon purple">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+            </div>
+            <div class="stat-content">
+                <span class="stat-value">@periodDays</span>
+                <span class="stat-label">Days in Period</span>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon orange">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                </svg>
+            </div>
+            <div class="stat-content">
+                <span class="stat-value">₱@avgRevenuePerSeller.ToString("N0")</span>
+                <span class="stat-label">Avg Revenue/Seller</span>
+            </div>
+        </div>
+    </div>
+
+    @* Seller Breakdown Table *@
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Seller Fee Breakdown</h3>
+            <span class="record-count">@filteredData.Count records</span>
+        </div>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th class="th-rank">#</th>
+                        <th class="th-seller">Seller</th>
+                        <th class="th-revenue">Gross Revenue</th>
+                        <th class="th-fee">Admin Fee (2%)</th>
+                        <th class="th-transactions">Transactions</th>
+                        <th class="th-net">Net to Seller</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (filteredData.Any())
+                    {
+                        @foreach (var (item, idx) in filteredData.Select((x, i) => (x, i)))
+                        {
+                            <tr>
+                                <td class="td-rank">
+                                    <span class="rank-badge rank-@(idx + 1)">@(idx + 1)</span>
+                                </td>
+                                <td class="td-seller">
+                                    <div class="seller-cell">
+                                        <div class="seller-avatar">@GetInitials(item.SellerName)</div>
+                                        <div class="seller-details">
+                                            <span class="seller-name">@item.SellerName</span>
+                                            <span class="seller-email">@item.Email</span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="td-revenue">₱@item.Revenue.ToString("N2")</td>
+                                <td class="td-fee">₱@item.AdminFee.ToString("N2")</td>
+                                <td class="td-transactions">@item.Transactions</td>
+                                <td class="td-net">₱@item.NetToSeller.ToString("N2")</td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="6" class="empty-cell">
+                                <div class="empty-state">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                        <circle cx="9" cy="7" r="4"></circle>
+                                    </svg>
+                                    <span>No data found for the selected period</span>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private string searchTerm = "";
+    private string selectedDateRange = "";
+    private DateTime? startDate;
+    private DateTime? endDate;
+
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue;
+
+    // KPIs
+    private decimal totalAdminFees = 0;
+    private decimal grossRevenue = 0;
+    private int activeSellers = 0;
+    private int totalTransactions = 0;
+
+    // Stats
+    private decimal avgFeePerTransaction = 0;
+    private decimal avgDailyFee = 0;
+    private int periodDays = 0;
+    private decimal avgRevenuePerSeller = 0;
+
+    private List<SellerFeeData> allData = new();
+    private List<SellerFeeData> filteredData => string.IsNullOrWhiteSpace(searchTerm) 
+        ? allData 
+        : allData.Where(x => x.SellerName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) || 
+                             x.Email.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    private class SellerFeeData
+    {
+        public string SellerName { get; set; } = "";
+        public string Email { get; set; } = "";
+        public decimal Revenue { get; set; }
+        public decimal AdminFee => Revenue * 0.02m;
+        public decimal NetToSeller => Revenue - AdminFee;
+        public int Transactions { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadReportData();
+    }
+
+    private void HandleStartDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            startDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            startDate = null;
+            selectedDateRange = "";
+        }
+    }
+
+    private void HandleEndDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            endDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            endDate = null;
+            selectedDateRange = "";
+        }
+    }
+
+    private void HandleDateRangeChange()
+    {
+        var now = DateTime.Now;
+        switch (selectedDateRange)
+        {
+            case "":
+                startDate = null;
+                endDate = null;
+                break;
+            case "today":
+                startDate = now.Date;
+                endDate = now.Date;
+                break;
+            case "yesterday":
+                startDate = now.Date.AddDays(-1);
+                endDate = now.Date.AddDays(-1);
+                break;
+            case "last7days":
+                startDate = now.Date.AddDays(-6);
+                endDate = now.Date;
+                break;
+            case "last30days":
+                startDate = now.Date.AddDays(-29);
+                endDate = now.Date;
+                break;
+            case "thismonth":
+                startDate = new DateTime(now.Year, now.Month, 1);
+                endDate = now.Date;
+                break;
+            case "thisyear":
+                startDate = new DateTime(now.Year, 1, 1);
+                endDate = now.Date;
+                break;
+        }
+        _ = LoadReportData();
+    }
+
+    private void ClearDateFilter()
+    {
+        selectedDateRange = "";
+        startDate = null;
+        endDate = null;
+        _ = LoadReportData();
+    }
+
+    private void HandleSearchInput()
+    {
+        // Filter out special characters
+        var filtered = System.Text.RegularExpressions.Regex.Replace(searchTerm, @"[^a-zA-Z0-9\s\-_]", "");
+        if (filtered != searchTerm)
+        {
+            searchTerm = filtered;
+        }
+    }
+
+    private void ClearSearch() => searchTerm = "";
+
+    private async Task LoadReportData()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+            using var conn = new SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            // Build date filter
+            var dateFilter = "";
+            if (startDate.HasValue)
+                dateFilter += " AND CAST(s.timestamps AS DATE) >= @StartDate";
+            if (endDate.HasValue)
+                dateFilter += " AND CAST(s.timestamps AS DATE) <= @EndDate";
+
+            // Get sales grouped by product owner (seller)
+            // Products are owned by sellers through tbl_products.user_id
+            // Only show sales that have been approved in Daily Sales Verification
+            var salesSql = $@"
+                SELECT 
+                    p.user_id as seller_id,
+                    COALESCE(u.name, CONCAT(u.fname, ' ', u.lname), u.email, 'Unknown') as seller_name,
+                    u.email,
+                    ISNULL(SUM(si.subtotal), 0) as revenue,
+                    COUNT(DISTINCT s.id) as transactions
+                FROM dbo.tbl_sales s
+                INNER JOIN dbo.tbl_sales_items si ON si.sale_id = s.id
+                INNER JOIN dbo.tbl_variants v ON si.variant_id = v.id
+                INNER JOIN dbo.tbl_products p ON v.product_id = p.id
+                LEFT JOIN dbo.tbl_users u ON p.user_id = u.id
+                WHERE s.archives IS NULL
+                AND si.archives IS NULL
+                AND s.status = 'Completed'
+                AND EXISTS (
+                    SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
+                    WHERE dsv.cashier_user_id = s.user_id
+                    AND dsv.sale_date = CAST(s.timestamps AS DATE)
+                    AND dsv.seller_user_id = p.user_id
+                    AND dsv.status = 'Approved'
+                    AND dsv.archived_at IS NULL
+                )
+                {dateFilter}
+                GROUP BY p.user_id, u.name, u.fname, u.lname, u.email
+                ORDER BY revenue DESC";
+
+            allData = new List<SellerFeeData>();
+
+            using (var cmd = new SqlCommand(salesSql, conn))
+            {
+                if (startDate.HasValue)
+                    cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+                if (endDate.HasValue)
+                    cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    var sellerId = reader.IsDBNull(0) ? (int?)null : reader.GetInt32(0);
+                    var sellerName = reader.IsDBNull(1) ? "Unassigned" : reader.GetString(1);
+                    var email = reader.IsDBNull(2) ? "" : reader.GetString(2);
+                    var revenue = reader.IsDBNull(3) ? 0 : reader.GetDecimal(3);
+                    var transactions = reader.IsDBNull(4) ? 0 : reader.GetInt32(4);
+
+                    // If no seller assigned, label as unassigned
+                    if (!sellerId.HasValue)
+                    {
+                        sellerName = "Products (No Seller Assigned)";
+                        email = "";
+                    }
+
+                    allData.Add(new SellerFeeData
+                    {
+                        SellerName = sellerName,
+                        Email = email,
+                        Revenue = revenue,
+                        Transactions = transactions
+                    });
+                }
+            }
+
+            // Calculate KPIs
+            grossRevenue = allData.Sum(x => x.Revenue);
+            totalAdminFees = grossRevenue * 0.02m;
+            activeSellers = allData.Count(x => x.SellerName != "Products (No Seller Assigned)");
+            totalTransactions = allData.Sum(x => x.Transactions);
+
+            // Calculate stats
+            avgFeePerTransaction = totalTransactions > 0 ? totalAdminFees / totalTransactions : 0;
+            periodDays = Math.Max(1, (endDate ?? DateTime.Now.Date).Subtract(startDate ?? DateTime.Now.Date).Days + 1);
+            if (!startDate.HasValue && !endDate.HasValue) periodDays = 0; // All time - don't show daily avg
+            avgDailyFee = periodDays > 0 ? totalAdminFees / periodDays : 0;
+            avgRevenuePerSeller = activeSellers > 0 ? grossRevenue / activeSellers : 0;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private string GetDateRangeText()
+    {
+        if (!startDate.HasValue && !endDate.HasValue)
+            return "All Time";
+        if (startDate.HasValue && endDate.HasValue)
+            return $"{startDate.Value:MMM d} - {endDate.Value:MMM d, yyyy}";
+        return "Custom Range";
+    }
+
+    private string GetInitials(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return "?";
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2) return (parts[0][0].ToString() + parts[1][0]).ToUpperInvariant();
+        return name[0].ToString().ToUpperInvariant();
+    }
+
+    private void GoBack() => Nav.NavigateTo("/admin/dashboard");
+
+    private async Task PrintReport()
+    {
+        var reportData = new
+        {
+            title = "Admin Fee Summary Report",
+            printedBy = AuthState.CurrentUser?.FullName ?? "Admin",
+            printedAt = DateTime.Now.ToString("MMMM dd, yyyy hh:mm tt"),
+            dateRange = startDate.HasValue && endDate.HasValue 
+                ? $"{startDate?.ToString("MM/dd/yyyy")} - {endDate?.ToString("MM/dd/yyyy")}" 
+                : "All Time",
+            
+            kpi = new
+            {
+                totalAdminFees = totalAdminFees.ToString("N2"),
+                grossRevenue = grossRevenue.ToString("N2"),
+                activeSellers = activeSellers.ToString(),
+                totalTransactions = totalTransactions.ToString("N0")
+            },
+
+            sellers = filteredData.Select(s => new
+            {
+                name = s.SellerName,
+                revenue = s.Revenue.ToString("N2"),
+                adminFee = s.AdminFee.ToString("N2"),
+                transactions = s.Transactions.ToString(),
+                netToSeller = s.NetToSeller.ToString("N2")
+            }).ToList()
+        };
+
+        await JSRuntime.InvokeVoidAsync("printAdminFeeSummary", reportData);
+        
+        // Log history
+        if (AuthState.CurrentUser != null)
+        {
+            try
+            {
+                await HistoryService.LogAsync(
+                    AuthState.CurrentUser.Id,
+                    "print",
+                    "Reports",
+                    "Printed admin fee summary report"
+                );
+            }
+            catch { }
+        }
+    }
+}

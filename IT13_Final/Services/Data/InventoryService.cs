@@ -22,6 +22,32 @@ namespace IT13_Final.Services.Data
         public decimal? CostPrice { get; set; } // Added for POS cost price
         public string? ProductImageBase64 { get; set; } // Added for POS image display
         public string? ImageContentType { get; set; } // Added for image content type
+        public int CategoryId { get; set; } // Added for category filtering
+        public string CategoryName { get; set; } = string.Empty; // Added for category filtering
+    }
+
+    public class InventoryDashboardStatsModel
+    {
+        public int TotalStockIn { get; set; }
+        public int TotalStockOut { get; set; }
+        public int TotalAdjustments { get; set; }
+        public int TodayStockIn { get; set; }
+        public int TodayStockOut { get; set; }
+        public int TodayAdjustments { get; set; }
+        public int LowStockItems { get; set; }
+        public int TotalInventoryValue { get; set; }
+        public int TotalProducts { get; set; }
+    }
+
+    public class LowStockItemModel
+    {
+        public int VariantId { get; set; }
+        public string ProductName { get; set; } = string.Empty;
+        public string VariantName { get; set; } = string.Empty;
+        public string? SizeName { get; set; }
+        public string? ColorName { get; set; }
+        public int CurrentStock { get; set; }
+        public int ReorderLevel { get; set; }
     }
 
     public interface IInventoryService
@@ -30,6 +56,8 @@ namespace IT13_Final.Services.Data
         Task<int> GetInventoriesCountAsync(int userId, string? searchTerm = null, CancellationToken ct = default);
         Task<InventoryModel?> GetInventoryDetailsAsync(int variantId, int? sizeId, int? colorId, int userId, CancellationToken ct = default);
         Task<bool> UpdateReorderLevelAsync(int variantId, int? sizeId, int? colorId, int reorderLevel, int sellerUserId, int updatedByUserId, CancellationToken ct = default);
+        Task<InventoryDashboardStatsModel> GetDashboardStatsAsync(int userId, CancellationToken ct = default);
+        Task<List<LowStockItemModel>> GetLowStockItemsAsync(int userId, int topCount = 10, CancellationToken ct = default);
     }
 
     public class InventoryService : IInventoryService
@@ -117,10 +145,13 @@ namespace IT13_Final.Services.Data
                     v.price,
                     v.cost_price,
                     p.image,
-                    p.image_content_type
+                    p.image_content_type,
+                    p.category_id,
+                    cat.name as category_name
                 FROM InventoryCombined ic
                 INNER JOIN dbo.tbl_variants v ON ic.variant_id = v.id
                 INNER JOIN dbo.tbl_products p ON v.product_id = p.id
+                LEFT JOIN dbo.tbl_categories cat ON p.category_id = cat.id
                 LEFT JOIN dbo.tbl_sizes sz ON ic.size_id = sz.id
                 LEFT JOIN dbo.tbl_colors c ON ic.color_id = c.id
                 LEFT JOIN dbo.tbl_inventories i ON ic.variant_id = i.variant_id 
@@ -163,7 +194,9 @@ namespace IT13_Final.Services.Data
                     Price = reader.GetDecimal(13),
                     CostPrice = reader.IsDBNull(14) ? null : reader.GetDecimal(14),
                     ProductImageBase64 = reader.IsDBNull(15) ? null : Convert.ToBase64String((byte[])reader.GetValue(15)),
-                    ImageContentType = reader.IsDBNull(16) ? null : reader.GetString(16)
+                    ImageContentType = reader.IsDBNull(16) ? null : reader.GetString(16),
+                    CategoryId = reader.GetInt32(17),
+                    CategoryName = reader.IsDBNull(18) ? string.Empty : reader.GetString(18)
                 });
             }
 
@@ -319,7 +352,9 @@ namespace IT13_Final.Services.Data
                     v.price,
                     v.cost_price,
                     p.image,
-                    p.image_content_type
+                    p.image_content_type,
+                    p.category_id,
+                    cat.name as category_name
                 FROM StockInAggregated si
                 FULL OUTER JOIN StockOutAggregated so 
                     ON si.variant_id = so.variant_id 
@@ -331,6 +366,7 @@ namespace IT13_Final.Services.Data
                     AND COALESCE(si.color_id, so.color_id) = sa.color_id
                 INNER JOIN dbo.tbl_variants v ON COALESCE(si.variant_id, COALESCE(so.variant_id, sa.variant_id)) = v.id
                 INNER JOIN dbo.tbl_products p ON v.product_id = p.id
+                LEFT JOIN dbo.tbl_categories cat ON p.category_id = cat.id
                 LEFT JOIN dbo.tbl_sizes sz ON COALESCE(si.size_id, so.size_id) = sz.id
                 LEFT JOIN dbo.tbl_colors c ON COALESCE(si.color_id, so.color_id) = c.id
                 LEFT JOIN dbo.tbl_inventories i ON COALESCE(si.variant_id, so.variant_id) = i.variant_id 
@@ -367,7 +403,9 @@ namespace IT13_Final.Services.Data
                     Price = reader.GetDecimal(13),
                     CostPrice = reader.IsDBNull(14) ? null : reader.GetDecimal(14),
                     ProductImageBase64 = reader.IsDBNull(15) ? null : Convert.ToBase64String((byte[])reader.GetValue(15)),
-                    ImageContentType = reader.IsDBNull(16) ? "image/jpeg" : reader.GetString(16)
+                    ImageContentType = reader.IsDBNull(16) ? "image/jpeg" : reader.GetString(16),
+                    CategoryId = reader.GetInt32(17),
+                    CategoryName = reader.IsDBNull(18) ? string.Empty : reader.GetString(18)
                 };
             }
 
@@ -423,6 +461,266 @@ namespace IT13_Final.Services.Data
             {
                 return false;
             }
+        }
+
+        public async Task<InventoryDashboardStatsModel> GetDashboardStatsAsync(int userId, CancellationToken ct = default)
+        {
+            using var conn = new SqlConnection(_connectionString);
+            await conn.OpenAsync(ct);
+
+            var today = DateTime.Today;
+            var stats = new InventoryDashboardStatsModel();
+
+            // Get total stock in count and quantity
+            var totalStockInSql = @"
+                SELECT COUNT(*), COALESCE(SUM(si.quantity_added), 0)
+                FROM dbo.tbl_stock_in si
+                INNER JOIN dbo.tbl_variants v ON si.variant_id = v.id
+                WHERE si.archives IS NULL AND v.user_id = @UserId";
+
+            // Get today's stock in
+            var todayStockInSql = @"
+                SELECT COUNT(*), COALESCE(SUM(si.quantity_added), 0)
+                FROM dbo.tbl_stock_in si
+                INNER JOIN dbo.tbl_variants v ON si.variant_id = v.id
+                WHERE si.archives IS NULL AND v.user_id = @UserId
+                AND CAST(si.timestamps AS DATE) = @Today";
+
+            // Get total stock out count and quantity
+            var totalStockOutSql = @"
+                SELECT COUNT(*), COALESCE(SUM(so.quantity_removed), 0)
+                FROM dbo.tbl_stock_out so
+                INNER JOIN dbo.tbl_variants v ON so.variant_id = v.id
+                WHERE so.archives IS NULL AND v.user_id = @UserId";
+
+            // Get today's stock out
+            var todayStockOutSql = @"
+                SELECT COUNT(*), COALESCE(SUM(so.quantity_removed), 0)
+                FROM dbo.tbl_stock_out so
+                INNER JOIN dbo.tbl_variants v ON so.variant_id = v.id
+                WHERE so.archives IS NULL AND v.user_id = @UserId
+                AND CAST(so.timestamps AS DATE) = @Today";
+
+            // Get total adjustments count
+            var totalAdjustmentsSql = @"
+                SELECT COUNT(*)
+                FROM dbo.tbl_stock_adjustments sa
+                INNER JOIN dbo.tbl_variants v ON sa.variant_id = v.id
+                WHERE sa.archives IS NULL AND v.user_id = @UserId";
+
+            // Get today's adjustments
+            var todayAdjustmentsSql = @"
+                SELECT COUNT(*)
+                FROM dbo.tbl_stock_adjustments sa
+                INNER JOIN dbo.tbl_variants v ON sa.variant_id = v.id
+                WHERE sa.archives IS NULL AND v.user_id = @UserId
+                AND CAST(sa.timestamps AS DATE) = @Today";
+
+            // Get low stock items count
+            var lowStockSql = @"
+                WITH StockInAggregated AS (
+                    SELECT si.variant_id, si.size_id, si.color_id, SUM(si.quantity_added) as total_in
+                    FROM dbo.tbl_stock_in si INNER JOIN dbo.tbl_variants v ON si.variant_id = v.id
+                    WHERE si.archives IS NULL AND v.user_id = @UserId
+                    GROUP BY si.variant_id, si.size_id, si.color_id
+                ),
+                StockOutAggregated AS (
+                    SELECT so.variant_id, so.size_id, so.color_id, SUM(so.quantity_removed) as total_out
+                    FROM dbo.tbl_stock_out so INNER JOIN dbo.tbl_variants v ON so.variant_id = v.id
+                    WHERE so.archives IS NULL AND v.user_id = @UserId
+                    GROUP BY so.variant_id, so.size_id, so.color_id
+                ),
+                StockAdjustmentsAggregated AS (
+                    SELECT sa.variant_id, sa.size_id, sa.color_id,
+                        SUM(CASE WHEN sa.adjustment_type = 'Increase' THEN sa.quantity_adjusted
+                                 WHEN sa.adjustment_type = 'Decrease' THEN -sa.quantity_adjusted ELSE 0 END) as total_adjustment
+                    FROM dbo.tbl_stock_adjustments sa INNER JOIN dbo.tbl_variants v ON sa.variant_id = v.id
+                    WHERE sa.archives IS NULL AND v.user_id = @UserId
+                    GROUP BY sa.variant_id, sa.size_id, sa.color_id
+                ),
+                InventoryCombined AS (
+                    SELECT COALESCE(si.variant_id, COALESCE(so.variant_id, sa.variant_id)) as variant_id,
+                           COALESCE(si.size_id, COALESCE(so.size_id, sa.size_id)) as size_id,
+                           COALESCE(si.color_id, COALESCE(so.color_id, sa.color_id)) as color_id,
+                           COALESCE(si.total_in, 0) - COALESCE(so.total_out, 0) + COALESCE(sa.total_adjustment, 0) as current_stock
+                    FROM StockInAggregated si
+                    FULL OUTER JOIN StockOutAggregated so ON si.variant_id = so.variant_id 
+                        AND (si.size_id = so.size_id OR (si.size_id IS NULL AND so.size_id IS NULL))
+                        AND (si.color_id = so.color_id OR (si.color_id IS NULL AND so.color_id IS NULL))
+                    FULL OUTER JOIN StockAdjustmentsAggregated sa
+                        ON COALESCE(si.variant_id, so.variant_id) = sa.variant_id
+                        AND (COALESCE(si.size_id, so.size_id) = sa.size_id OR (COALESCE(si.size_id, so.size_id) IS NULL AND sa.size_id IS NULL))
+                        AND (COALESCE(si.color_id, so.color_id) = sa.color_id OR (COALESCE(si.color_id, so.color_id) IS NULL AND sa.color_id IS NULL))
+                )
+                SELECT COUNT(DISTINCT CONCAT(ic.variant_id, '-', COALESCE(CAST(ic.size_id AS NVARCHAR), ''), '-', COALESCE(CAST(ic.color_id AS NVARCHAR), '')))
+                FROM InventoryCombined ic
+                INNER JOIN dbo.tbl_variants v ON ic.variant_id = v.id
+                LEFT JOIN dbo.tbl_inventories i ON ic.variant_id = i.variant_id 
+                    AND (ic.size_id = i.size_id OR (ic.size_id IS NULL AND i.size_id IS NULL))
+                    AND (ic.color_id = i.color_id OR (ic.color_id IS NULL AND i.color_id IS NULL))
+                    AND i.archives IS NULL
+                WHERE v.user_id = @UserId AND v.archived_at IS NULL 
+                    AND ic.current_stock <= COALESCE(i.reorder_level, 0)";
+
+            // Get total products count
+            var totalProductsSql = @"
+                SELECT COUNT(DISTINCT v.id)
+                FROM dbo.tbl_variants v
+                WHERE v.user_id = @UserId AND v.archived_at IS NULL";
+
+            // Execute queries
+            using (var cmd = new SqlCommand(totalStockInSql, conn))
+            {
+                cmd.Parameters.AddWithValue("@UserId", userId);
+                using var reader = await cmd.ExecuteReaderAsync(ct);
+                if (await reader.ReadAsync(ct))
+                {
+                    stats.TotalStockIn = reader.GetInt32(0);
+                }
+            }
+
+            using (var cmd = new SqlCommand(todayStockInSql, conn))
+            {
+                cmd.Parameters.AddWithValue("@UserId", userId);
+                cmd.Parameters.AddWithValue("@Today", today);
+                using var reader = await cmd.ExecuteReaderAsync(ct);
+                if (await reader.ReadAsync(ct))
+                {
+                    stats.TodayStockIn = reader.GetInt32(0);
+                }
+            }
+
+            using (var cmd = new SqlCommand(totalStockOutSql, conn))
+            {
+                cmd.Parameters.AddWithValue("@UserId", userId);
+                using var reader = await cmd.ExecuteReaderAsync(ct);
+                if (await reader.ReadAsync(ct))
+                {
+                    stats.TotalStockOut = reader.GetInt32(0);
+                }
+            }
+
+            using (var cmd = new SqlCommand(todayStockOutSql, conn))
+            {
+                cmd.Parameters.AddWithValue("@UserId", userId);
+                cmd.Parameters.AddWithValue("@Today", today);
+                using var reader = await cmd.ExecuteReaderAsync(ct);
+                if (await reader.ReadAsync(ct))
+                {
+                    stats.TodayStockOut = reader.GetInt32(0);
+                }
+            }
+
+            using (var cmd = new SqlCommand(totalAdjustmentsSql, conn))
+            {
+                cmd.Parameters.AddWithValue("@UserId", userId);
+                var result = await cmd.ExecuteScalarAsync(ct);
+                stats.TotalAdjustments = result != null ? Convert.ToInt32(result) : 0;
+            }
+
+            using (var cmd = new SqlCommand(todayAdjustmentsSql, conn))
+            {
+                cmd.Parameters.AddWithValue("@UserId", userId);
+                cmd.Parameters.AddWithValue("@Today", today);
+                var result = await cmd.ExecuteScalarAsync(ct);
+                stats.TodayAdjustments = result != null ? Convert.ToInt32(result) : 0;
+            }
+
+            using (var cmd = new SqlCommand(lowStockSql, conn))
+            {
+                cmd.Parameters.AddWithValue("@UserId", userId);
+                var result = await cmd.ExecuteScalarAsync(ct);
+                stats.LowStockItems = result != null ? Convert.ToInt32(result) : 0;
+            }
+
+            using (var cmd = new SqlCommand(totalProductsSql, conn))
+            {
+                cmd.Parameters.AddWithValue("@UserId", userId);
+                var result = await cmd.ExecuteScalarAsync(ct);
+                stats.TotalProducts = result != null ? Convert.ToInt32(result) : 0;
+            }
+
+            return stats;
+        }
+
+        public async Task<List<LowStockItemModel>> GetLowStockItemsAsync(int userId, int topCount = 10, CancellationToken ct = default)
+        {
+            var items = new List<LowStockItemModel>();
+
+            using var conn = new SqlConnection(_connectionString);
+            await conn.OpenAsync(ct);
+
+            var sql = @"
+                WITH StockInAggregated AS (
+                    SELECT si.variant_id, si.size_id, si.color_id, SUM(si.quantity_added) as total_in
+                    FROM dbo.tbl_stock_in si INNER JOIN dbo.tbl_variants v ON si.variant_id = v.id
+                    WHERE si.archives IS NULL AND v.user_id = @UserId
+                    GROUP BY si.variant_id, si.size_id, si.color_id
+                ),
+                StockOutAggregated AS (
+                    SELECT so.variant_id, so.size_id, so.color_id, SUM(so.quantity_removed) as total_out
+                    FROM dbo.tbl_stock_out so INNER JOIN dbo.tbl_variants v ON so.variant_id = v.id
+                    WHERE so.archives IS NULL AND v.user_id = @UserId
+                    GROUP BY so.variant_id, so.size_id, so.color_id
+                ),
+                StockAdjustmentsAggregated AS (
+                    SELECT sa.variant_id, sa.size_id, sa.color_id,
+                        SUM(CASE WHEN sa.adjustment_type = 'Increase' THEN sa.quantity_adjusted
+                                 WHEN sa.adjustment_type = 'Decrease' THEN -sa.quantity_adjusted ELSE 0 END) as total_adjustment
+                    FROM dbo.tbl_stock_adjustments sa INNER JOIN dbo.tbl_variants v ON sa.variant_id = v.id
+                    WHERE sa.archives IS NULL AND v.user_id = @UserId
+                    GROUP BY sa.variant_id, sa.size_id, sa.color_id
+                ),
+                InventoryCombined AS (
+                    SELECT COALESCE(si.variant_id, COALESCE(so.variant_id, sa.variant_id)) as variant_id,
+                           COALESCE(si.size_id, COALESCE(so.size_id, sa.size_id)) as size_id,
+                           COALESCE(si.color_id, COALESCE(so.color_id, sa.color_id)) as color_id,
+                           COALESCE(si.total_in, 0) - COALESCE(so.total_out, 0) + COALESCE(sa.total_adjustment, 0) as current_stock
+                    FROM StockInAggregated si
+                    FULL OUTER JOIN StockOutAggregated so ON si.variant_id = so.variant_id 
+                        AND (si.size_id = so.size_id OR (si.size_id IS NULL AND so.size_id IS NULL))
+                        AND (si.color_id = so.color_id OR (si.color_id IS NULL AND so.color_id IS NULL))
+                    FULL OUTER JOIN StockAdjustmentsAggregated sa
+                        ON COALESCE(si.variant_id, so.variant_id) = sa.variant_id
+                        AND (COALESCE(si.size_id, so.size_id) = sa.size_id OR (COALESCE(si.size_id, so.size_id) IS NULL AND sa.size_id IS NULL))
+                        AND (COALESCE(si.color_id, so.color_id) = sa.color_id OR (COALESCE(si.color_id, so.color_id) IS NULL AND sa.color_id IS NULL))
+                )
+                SELECT TOP (@TopCount) ic.variant_id, p.name as product_name, v.name as variant_name,
+                       sz.name as size_name, c.name as color_name,
+                       ic.current_stock, COALESCE(i.reorder_level, 0) as reorder_level
+                FROM InventoryCombined ic
+                INNER JOIN dbo.tbl_variants v ON ic.variant_id = v.id
+                INNER JOIN dbo.tbl_products p ON v.product_id = p.id
+                LEFT JOIN dbo.tbl_sizes sz ON ic.size_id = sz.id
+                LEFT JOIN dbo.tbl_colors c ON ic.color_id = c.id
+                LEFT JOIN dbo.tbl_inventories i ON ic.variant_id = i.variant_id 
+                    AND (ic.size_id = i.size_id OR (ic.size_id IS NULL AND i.size_id IS NULL))
+                    AND (ic.color_id = i.color_id OR (ic.color_id IS NULL AND i.color_id IS NULL))
+                    AND i.archives IS NULL
+                WHERE v.user_id = @UserId AND v.archived_at IS NULL 
+                    AND ic.current_stock <= COALESCE(i.reorder_level, 0)
+                ORDER BY ic.current_stock ASC";
+
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
+            cmd.Parameters.AddWithValue("@TopCount", topCount);
+
+            using var reader = await cmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                items.Add(new LowStockItemModel
+                {
+                    VariantId = reader.GetInt32(0),
+                    ProductName = reader.GetString(1),
+                    VariantName = reader.GetString(2),
+                    SizeName = reader.IsDBNull(3) ? null : reader.GetString(3),
+                    ColorName = reader.IsDBNull(4) ? null : reader.GetString(4),
+                    CurrentStock = reader.GetInt32(5),
+                    ReorderLevel = reader.GetInt32(6)
+                });
+            }
+
+            return items;
         }
     }
 }

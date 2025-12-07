@@ -41,12 +41,21 @@ namespace IT13_Final.Services.Data
         public string UserName { get; set; } = string.Empty;
     }
 
+    public class DailyAdjustmentData
+    {
+        public DateTime Date { get; set; }
+        public int Count { get; set; }
+        public int IncreaseCount { get; set; }
+        public int DecreaseCount { get; set; }
+    }
+
     public interface IStockAdjustmentService
     {
-        Task<List<StockAdjustmentModel>> GetStockAdjustmentsAsync(int userId, string? searchTerm = null, string? adjustmentType = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
-        Task<int> GetStockAdjustmentsCountAsync(int userId, string? searchTerm = null, string? adjustmentType = null, CancellationToken ct = default);
+        Task<List<StockAdjustmentModel>> GetStockAdjustmentsAsync(int userId, string? searchTerm = null, string? adjustmentType = null, DateTime? startDate = null, DateTime? endDate = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
+        Task<int> GetStockAdjustmentsCountAsync(int userId, string? searchTerm = null, string? adjustmentType = null, DateTime? startDate = null, DateTime? endDate = null, CancellationToken ct = default);
         Task<StockAdjustmentDetailsModel?> GetStockAdjustmentDetailsAsync(int adjustmentId, int userId, CancellationToken ct = default);
         Task<int?> CreateStockAdjustmentAsync(int sellerUserId, int createdByUserId, int variantId, int? sizeId, int? colorId, string adjustmentType, int quantityAdjusted, string? reason, CancellationToken ct = default);
+        Task<List<DailyAdjustmentData>> GetDailyAdjustmentDataAsync(int userId, int days = 30, CancellationToken ct = default);
     }
 
     public class StockAdjustmentService : IStockAdjustmentService
@@ -54,7 +63,7 @@ namespace IT13_Final.Services.Data
         private readonly string _connectionString =
             "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
 
-        public async Task<List<StockAdjustmentModel>> GetStockAdjustmentsAsync(int userId, string? searchTerm = null, string? adjustmentType = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
+        public async Task<List<StockAdjustmentModel>> GetStockAdjustmentsAsync(int userId, string? searchTerm = null, string? adjustmentType = null, DateTime? startDate = null, DateTime? endDate = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
         {
             var adjustments = new List<StockAdjustmentModel>();
             var offset = (page - 1) * pageSize;
@@ -78,12 +87,22 @@ namespace IT13_Final.Services.Data
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
-                sql += " AND (v.name LIKE @SearchTerm OR p.name LIKE @SearchTerm OR sa.reason LIKE @SearchTerm)";
+                sql += " AND (v.name LIKE @SearchTerm OR p.name LIKE @SearchTerm OR sa.reason LIKE @SearchTerm OR sa.adjustment_type LIKE @SearchTerm)";
             }
 
             if (!string.IsNullOrWhiteSpace(adjustmentType))
             {
                 sql += " AND sa.adjustment_type = @AdjustmentType";
+            }
+
+            if (startDate.HasValue)
+            {
+                sql += " AND CAST(sa.timestamps AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                sql += " AND CAST(sa.timestamps AS DATE) <= @EndDate";
             }
 
             sql += " ORDER BY sa.timestamps DESC OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
@@ -97,6 +116,14 @@ namespace IT13_Final.Services.Data
             if (!string.IsNullOrWhiteSpace(adjustmentType))
             {
                 cmd.Parameters.AddWithValue("@AdjustmentType", adjustmentType);
+            }
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
             }
             cmd.Parameters.AddWithValue("@Offset", offset);
             cmd.Parameters.AddWithValue("@PageSize", pageSize);
@@ -127,7 +154,7 @@ namespace IT13_Final.Services.Data
             return adjustments;
         }
 
-        public async Task<int> GetStockAdjustmentsCountAsync(int userId, string? searchTerm = null, string? adjustmentType = null, CancellationToken ct = default)
+        public async Task<int> GetStockAdjustmentsCountAsync(int userId, string? searchTerm = null, string? adjustmentType = null, DateTime? startDate = null, DateTime? endDate = null, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -141,12 +168,22 @@ namespace IT13_Final.Services.Data
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
-                sql += " AND (v.name LIKE @SearchTerm OR p.name LIKE @SearchTerm OR sa.reason LIKE @SearchTerm)";
+                sql += " AND (v.name LIKE @SearchTerm OR p.name LIKE @SearchTerm OR sa.reason LIKE @SearchTerm OR sa.adjustment_type LIKE @SearchTerm)";
             }
 
             if (!string.IsNullOrWhiteSpace(adjustmentType))
             {
                 sql += " AND sa.adjustment_type = @AdjustmentType";
+            }
+
+            if (startDate.HasValue)
+            {
+                sql += " AND CAST(sa.timestamps AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                sql += " AND CAST(sa.timestamps AS DATE) <= @EndDate";
             }
 
             using var cmd = new SqlCommand(sql, conn);
@@ -158,6 +195,14 @@ namespace IT13_Final.Services.Data
             if (!string.IsNullOrWhiteSpace(adjustmentType))
             {
                 cmd.Parameters.AddWithValue("@AdjustmentType", adjustmentType);
+            }
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
             }
 
             var count = await cmd.ExecuteScalarAsync(ct);
@@ -181,7 +226,7 @@ namespace IT13_Final.Services.Data
                 INNER JOIN dbo.tbl_users u ON sa.user_id = u.id
                 LEFT JOIN dbo.tbl_sizes sz ON sa.size_id = sz.id
                 LEFT JOIN dbo.tbl_colors c ON sa.color_id = c.id
-                WHERE sa.id = @AdjustmentId AND sa.archives IS NULL AND v.user_id = @UserId";
+                WHERE sa.id = @AdjustmentId AND sa.archives IS NULL AND (@UserId = 0 OR v.user_id = @UserId)";
 
             using var cmd = new SqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@AdjustmentId", adjustmentId);
@@ -266,6 +311,54 @@ namespace IT13_Final.Services.Data
                 System.Diagnostics.Debug.WriteLine($"Error creating stock adjustment: {ex.Message}");
                 return null;
             }
+        }
+
+        public async Task<List<DailyAdjustmentData>> GetDailyAdjustmentDataAsync(int userId, int days = 30, CancellationToken ct = default)
+        {
+            var data = new List<DailyAdjustmentData>();
+            var startDate = DateTime.Today.AddDays(-days);
+
+            using var conn = new SqlConnection(_connectionString);
+            await conn.OpenAsync(ct);
+
+            var sql = @"
+                SELECT CAST(sa.timestamps AS DATE) as date, 
+                       COUNT(*) as count,
+                       SUM(CASE WHEN sa.adjustment_type = 'Increase' THEN 1 ELSE 0 END) as increase_count,
+                       SUM(CASE WHEN sa.adjustment_type = 'Decrease' THEN 1 ELSE 0 END) as decrease_count
+                FROM dbo.tbl_stock_adjustments sa
+                INNER JOIN dbo.tbl_variants v ON sa.variant_id = v.id
+                WHERE sa.archives IS NULL AND v.user_id = @UserId
+                    AND CAST(sa.timestamps AS DATE) >= @StartDate
+                GROUP BY CAST(sa.timestamps AS DATE)
+                ORDER BY date";
+
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
+            cmd.Parameters.AddWithValue("@StartDate", startDate);
+
+            using var reader = await cmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                data.Add(new DailyAdjustmentData
+                {
+                    Date = reader.GetDateTime(0),
+                    Count = reader.GetInt32(1),
+                    IncreaseCount = reader.GetInt32(2),
+                    DecreaseCount = reader.GetInt32(3)
+                });
+            }
+
+            // Fill in missing dates with zero values
+            var allDates = new List<DailyAdjustmentData>();
+            for (int i = 0; i < days; i++)
+            {
+                var date = startDate.AddDays(i);
+                var existing = data.FirstOrDefault(d => d.Date.Date == date.Date);
+                allDates.Add(existing ?? new DailyAdjustmentData { Date = date, Count = 0, IncreaseCount = 0, DecreaseCount = 0 });
+            }
+
+            return allDates;
         }
     }
 }

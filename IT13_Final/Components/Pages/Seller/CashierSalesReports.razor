@@ -1,0 +1,1091 @@
+@page "/seller/CashierSalesReports"
+@layout IT13_Final.Components.Layout.Seller.Seller
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IT13_Final.Services.Data.ISalesService SalesService
+@inject IT13_Final.Services.Audit.IHistoryService HistoryService
+@inject IJSRuntime JSRuntime
+@implements IDisposable
+@using System.Linq
+@using Microsoft.Data.SqlClient
+
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Sales Reports (All Cashiers)</h1>
+        <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintReport" disabled="@isGeneratingPDF" title="Print Report">
+            @if (isGeneratingPDF)
+            {
+                <span>Generating...</span>
+            }
+            else
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 9V2h12v7"></path>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+            }
+        </button>
+    </div>
+</div>
+
+@* Search and Date Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.3-4.3"></path>
+        </svg>
+        <input type="text" 
+               id="seller-sales-report-search-input"
+               class="search-input" 
+               placeholder="Search by sale number..." 
+               @bind="searchTerm" 
+               @bind:event="oninput" 
+               @bind:after="HandleSearchInput"
+               @onkeypress="HandleSearchKeyPress" />
+        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            <button class="clear-search-btn" @onclick="HandleClearSearch" title="Clear search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date"
+               class="date-input"
+               value="@(startDate?.ToString("yyyy-MM-dd"))"
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleStartDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date"
+               class="date-input"
+               value="@(endDate?.ToString("yyyy-MM-dd"))"
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleEndDateChange" />
+        <button class="filter-btn" @onclick="ApplyFilters">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            Apply
+        </button>
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
+
+@* Summary Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Sales Summary</h3>
+            <span class="card-subtitle">@totalCount total transactions</span>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <div class="summary-grid">
+            <div class="summary-box">
+                <div class="summary-label">Total Sales Amount</div>
+                <div class="summary-value">₱@totalSalesAmount.ToString("N2")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Total Transactions</div>
+                <div class="summary-value">@totalCount</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">VAT (12%)</div>
+                <div class="summary-value">₱@vatAmount.ToString("N2")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Admin Fee (2%)</div>
+                <div class="summary-value">₱@adminFeeAmount.ToString("N2")</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Sales List Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Sales List</h3>
+            <span class="card-subtitle">@totalCount sales found</span>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Sale Number</th>
+                    <th>Amount</th>
+                    <th>Payment Method</th>
+                    <th>Cashier</th>
+                    <th>Date</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="6" class="loading-cell">Loading sales...</td>
+                    </tr>
+                }
+                else if (sales.Count == 0)
+                {
+                    <tr>
+                        <td colspan="6" class="empty-cell">No sales found for this filter.</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var sale in sales)
+                    {
+                        <tr class="clickable-row" @onclick="() => HandleSaleClick(sale.Id)">
+                            <td class="sale-number">@sale.SaleNumber</td>
+                            <td>₱@sale.Amount.ToString("N2")</td>
+                            <td>@sale.PaymentMethod</td>
+                            <td>@sale.CashierName</td>
+                            <td>
+                                <div class="timestamp-info">
+                                    <div class="timestamp-date">@sale.Timestamps.ToString("MMM dd, yyyy")</div>
+                                    <div class="timestamp-time">@sale.Timestamps.ToString("HH:mm:ss")</div>
+                                </div>
+                            </td>
+                            <td class="actions-cell" @onclick:stopPropagation="true">
+                                <button class="action-btn print-row-btn" @onclick="() => HandlePrintSale(sale.Id)" title="Print Receipt">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M6 9V2h12v7"></path>
+                                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                                        <rect x="6" y="14" width="12" height="8"></rect>
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)" title="Previous page">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m15 18-6-6 6-6"></path>
+                </svg>
+            </button>
+
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                var pageNum = i;
+                @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
+                {
+                    <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 2 || i == currentPage + 2)
+                {
+                    <span class="page-ellipsis">...</span>
+                }
+            }
+
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)" title="Next page">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m9 18 6-6-6-6"></path>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+@* Sale Details Modal *@
+@if (showSaleDetailsModal && selectedSale != null)
+{
+    <div class="modal-overlay" @onclick="CloseSaleDetailsModal">
+        <div class="add-admin-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Sale Details - @selectedSale.SaleNumber</h2>
+                <button class="modal-close-btn" @onclick="CloseSaleDetailsModal" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="sale-info">
+                    <div class="info-row">
+                        <span class="info-label">Sale Number:</span>
+                        <span class="info-value">@selectedSale.SaleNumber</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Date & Time:</span>
+                        <span class="info-value">@selectedSale.Timestamps.ToString("MMM dd, yyyy HH:mm:ss")</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Cashier:</span>
+                        <span class="info-value">@selectedSale.CashierName</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Payment Method:</span>
+                        <span class="info-value">@selectedSale.PaymentMethod</span>
+                    </div>
+                    @if (!string.IsNullOrEmpty(selectedSale.ReferenceNumber))
+                    {
+                        <div class="info-row">
+                            <span class="info-label">Reference Number:</span>
+                            <span class="info-value">@selectedSale.ReferenceNumber</span>
+                        </div>
+                    }
+                    <div class="info-row">
+                        <span class="info-label">Total Amount:</span>
+                        <span class="info-value">₱@selectedSale.Amount.ToString("N2")</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Amount Paid:</span>
+                        <span class="info-value">₱@selectedSale.AmountPaid.ToString("N2")</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Change Given:</span>
+                        <span class="info-value">₱@selectedSale.ChangeGiven.ToString("N2")</span>
+                    </div>
+                </div>
+
+                @if (saleItems != null && saleItems.Count > 0)
+                {
+                    <div class="sale-items-section">
+                        <h4 class="items-title">Sale Items</h4>
+                        <table class="items-table">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Variant</th>
+                                    <th>Size</th>
+                                    <th>Color</th>
+                                    <th>Quantity</th>
+                                    <th>Price</th>
+                                    <th>Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in saleItems)
+                                {
+                                    <tr>
+                                        <td>@item.ProductName</td>
+                                        <td>@item.VariantName</td>
+                                        <td>@(item.SizeName ?? "N/A")</td>
+                                        <td>
+                                            @if (!string.IsNullOrEmpty(item.ColorName))
+                                            {
+                                                <div style="display: flex; align-items: center; gap: 8px;">
+                                                    @if (!string.IsNullOrEmpty(item.ColorHexValue))
+                                                    {
+                                                        <span style="display: inline-block; width: 20px; height: 20px; border-radius: 4px; border: 1px solid #ddd; background-color: @item.ColorHexValue;"></span>
+                                                    }
+                                                    <span>@item.ColorName</span>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <span>N/A</span>
+                                            }
+                                        </td>
+                                        <td>@item.Quantity</td>
+                                        <td>₱@item.Price.ToString("N2")</td>
+                                        <td>₱@item.Subtotal.ToString("N2")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td colspan="6" style="text-align: right; font-weight: 600;">Total:</td>
+                                    <td style="font-weight: 700;">₱@selectedSale.Amount.ToString("N2")</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="save-admin-btn" @onclick="() => HandlePrintSale(selectedSale.Id)">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                        <rect x="6" y="14" width="12" height="8"></rect>
+                    </svg>
+                    <span>Print Receipt</span>
+                </button>
+                <button class="cancel-btn" @onclick="CloseSaleDetailsModal">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<IT13_Final.Services.Data.SaleReportModel> sales = new();
+    private List<IT13_Final.Services.Data.SaleReportModel> allSalesForPrint = new();
+
+    private string searchTerm = string.Empty;
+    private DateTime? startDate;
+    private DateTime? endDate;
+    private string selectedDateRange = string.Empty;
+
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue;
+
+    private bool isLoading = false;
+    private bool isGeneratingPDF = false;
+
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling(totalCount / (double)pageSize);
+
+    private decimal totalSalesAmount = 0m;
+    private decimal vatAmount = 0m;
+    private decimal adminFeeAmount = 0m;
+
+    private int sellerUserId = 0;
+    private System.Threading.Timer? _searchTimer;
+
+    // Modal state
+    private bool showSaleDetailsModal = false;
+    private IT13_Final.Services.Data.SaleReportModel? selectedSale = null;
+    private List<IT13_Final.Services.Data.SaleReportItemModel> saleItems = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // For seller-scoped data, link staff by seller's own user id (tbl_users.id),
+        // same pattern as Seller/AuditLogs. No extra DB lookup is needed here.
+        sellerUserId = AuthState.CurrentUser?.Id ?? 0;
+        await LoadSales();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JSRuntime.InvokeVoidAsync("setupSearchInputFilter", "seller-sales-report-search-input");
+        }
+    }
+
+    private async Task LoadSales()
+    {
+        if (sellerUserId <= 0)
+        {
+            sellerUserId = AuthState.CurrentUser?.Id ?? 0;
+        }
+
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            // Get all cashier user IDs for this seller
+            var cashierUserIds = await GetCashierUserIdsAsync();
+            
+            if (cashierUserIds.Count == 0)
+            {
+                sales = new List<IT13_Final.Services.Data.SaleReportModel>();
+                totalCount = 0;
+                totalSalesAmount = 0;
+                vatAmount = 0;
+                adminFeeAmount = 0;
+                return;
+            }
+
+            // Build parameterized IN clause
+            var userIdParams = new List<string>();
+            for (int i = 0; i < cashierUserIds.Count; i++)
+            {
+                userIdParams.Add($"@cashierId{i}");
+            }
+            var cashierIdsInClause = userIdParams.Count > 0 ? string.Join(",", userIdParams) : "0";
+
+            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+            using var conn = new SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            // Get count
+            var countSql = $@"
+                SELECT COUNT(*)
+                FROM dbo.tbl_sales s
+                INNER JOIN dbo.tbl_users u ON s.user_id = u.id
+                WHERE s.archives IS NULL 
+                AND s.status = 'Completed'
+                AND s.user_id IN ({cashierIdsInClause})
+                AND EXISTS (
+                    SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
+                    WHERE dsv.cashier_user_id = s.user_id
+                    AND dsv.sale_date = CAST(s.timestamps AS DATE)
+                    AND dsv.status = 'Approved'
+                    AND dsv.archived_at IS NULL
+                    AND dsv.seller_user_id = @SellerUserId
+                )";
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                countSql += " AND (s.sale_number LIKE @SearchTerm)";
+            }
+
+            if (startDate.HasValue)
+            {
+                countSql += " AND CAST(s.timestamps AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                countSql += " AND CAST(s.timestamps AS DATE) <= @EndDate";
+            }
+
+            using var countCmd = new SqlCommand(countSql, conn);
+            for (int i = 0; i < cashierUserIds.Count; i++)
+            {
+                countCmd.Parameters.AddWithValue($"@cashierId{i}", cashierUserIds[i]);
+            }
+            countCmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                countCmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
+            }
+            if (startDate.HasValue)
+            {
+                countCmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                countCmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+            }
+
+            var countResult = await countCmd.ExecuteScalarAsync();
+            totalCount = countResult != null ? Convert.ToInt32(countResult) : 0;
+
+            // Get sales
+            var offset = (currentPage - 1) * pageSize;
+            var salesSql = $@"
+                SELECT s.id, s.sale_number, s.amount, s.payment_type, s.timestamps,
+                       COALESCE(u.name, (LTRIM(RTRIM(ISNULL(u.fname,''))) + ' ' + LTRIM(RTRIM(ISNULL(u.lname,''))))) as cashier_name,
+                       p.amount_paid, p.change_given, p.reference_number
+                FROM dbo.tbl_sales s
+                INNER JOIN dbo.tbl_users u ON s.user_id = u.id
+                LEFT JOIN dbo.tbl_payments p ON s.id = p.sale_id AND p.archives IS NULL
+                WHERE s.archives IS NULL 
+                AND s.status = 'Completed'
+                AND s.user_id IN ({cashierIdsInClause})
+                AND EXISTS (
+                    SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
+                    WHERE dsv.cashier_user_id = s.user_id
+                    AND dsv.sale_date = CAST(s.timestamps AS DATE)
+                    AND dsv.status = 'Approved'
+                    AND dsv.archived_at IS NULL
+                    AND dsv.seller_user_id = @SellerUserId
+                )";
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                salesSql += " AND (s.sale_number LIKE @SearchTerm)";
+            }
+
+            if (startDate.HasValue)
+            {
+                salesSql += " AND CAST(s.timestamps AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                salesSql += " AND CAST(s.timestamps AS DATE) <= @EndDate";
+            }
+
+            salesSql += " ORDER BY s.timestamps DESC OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
+
+            using var salesCmd = new SqlCommand(salesSql, conn);
+            for (int i = 0; i < cashierUserIds.Count; i++)
+            {
+                salesCmd.Parameters.AddWithValue($"@cashierId{i}", cashierUserIds[i]);
+            }
+            salesCmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                salesCmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
+            }
+            if (startDate.HasValue)
+            {
+                salesCmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                salesCmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+            }
+            salesCmd.Parameters.AddWithValue("@Offset", offset);
+            salesCmd.Parameters.AddWithValue("@PageSize", pageSize);
+
+            sales = new List<IT13_Final.Services.Data.SaleReportModel>();
+            using var reader = await salesCmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                sales.Add(new IT13_Final.Services.Data.SaleReportModel
+                {
+                    Id = reader.GetInt32(0),
+                    SaleNumber = reader.GetString(1),
+                    Amount = reader.GetDecimal(2),
+                    PaymentMethod = reader.IsDBNull(3) ? string.Empty : reader.GetString(3),
+                    Timestamps = reader.GetDateTime(4),
+                    CashierName = reader.IsDBNull(5) ? string.Empty : reader.GetString(5),
+                    AmountPaid = reader.IsDBNull(6) ? reader.GetDecimal(2) : reader.GetDecimal(6),
+                    ChangeGiven = reader.IsDBNull(7) ? 0 : reader.GetDecimal(7),
+                    ReferenceNumber = reader.IsDBNull(8) ? null : reader.GetString(8)
+                });
+            }
+
+            if (currentPage > totalPages && totalPages > 0)
+            {
+                currentPage = totalPages;
+                await LoadSales();
+                return;
+            }
+
+            totalSalesAmount = sales.Sum(s => s.Amount);
+            
+            // Calculate VAT (12% on total sales)
+            vatAmount = totalSalesAmount * 0.12m;
+            
+            // Calculate Admin Fee (2% per product)
+            await CalculateAdminFee();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading sales for seller: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to load sales reports. Please try again.");
+            sales = new List<IT13_Final.Services.Data.SaleReportModel>();
+            totalCount = 0;
+            totalSalesAmount = 0;
+            vatAmount = 0;
+            adminFeeAmount = 0;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task<List<int>> GetCashierUserIdsAsync()
+    {
+        var cashierIds = new List<int>();
+        
+        if (sellerUserId <= 0)
+        {
+            sellerUserId = AuthState.CurrentUser?.Id ?? 0;
+        }
+
+        if (sellerUserId <= 0)
+        {
+            return cashierIds;
+        }
+
+        try
+        {
+            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+            using var conn = new SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            var sql = @"SELECT u.id
+                        FROM dbo.tbl_users u
+                        JOIN dbo.tbl_roles r ON r.id = u.role_id
+                        WHERE u.user_id = @SellerUserId
+                        AND LOWER(r.name) = 'cashier'
+                        AND u.archived_at IS NULL";
+
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                cashierIds.Add(reader.GetInt32(0));
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading cashier IDs: {ex.Message}");
+        }
+
+        return cashierIds;
+    }
+
+    private async void HandleStartDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            startDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            startDate = null;
+            selectedDateRange = "";
+        }
+        await ApplyFilters();
+    }
+
+    private async void HandleEndDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            endDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            endDate = null;
+            selectedDateRange = "";
+        }
+        await ApplyFilters();
+    }
+
+    private async Task HandleDateRangeChange()
+    {
+        var now = DateTime.Now;
+        switch (selectedDateRange)
+        {
+            case "":
+                startDate = null;
+                endDate = null;
+                break;
+            case "today":
+                startDate = now.Date;
+                endDate = now.Date;
+                break;
+            case "yesterday":
+                startDate = now.Date.AddDays(-1);
+                endDate = now.Date.AddDays(-1);
+                break;
+            case "last7days":
+                startDate = now.Date.AddDays(-6);
+                endDate = now.Date;
+                break;
+            case "last30days":
+                startDate = now.Date.AddDays(-29);
+                endDate = now.Date;
+                break;
+            case "thismonth":
+                startDate = new DateTime(now.Year, now.Month, 1);
+                endDate = now.Date;
+                break;
+            case "thisyear":
+                startDate = new DateTime(now.Year, 1, 1);
+                endDate = now.Date;
+                break;
+        }
+        await ApplyFilters();
+    }
+
+    private async Task ClearDateFilter()
+    {
+        selectedDateRange = "";
+        startDate = null;
+        endDate = null;
+        currentPage = 1;
+        await LoadSales();
+    }
+
+    private async Task ApplyFilters()
+    {
+        currentPage = 1;
+        await LoadSales();
+    }
+
+    private void HandleSearchInput()
+    {
+        var filtered = System.Text.RegularExpressions.Regex.Replace(searchTerm, @"[^a-zA-Z0-9\s\-_]", "");
+        if (filtered != searchTerm)
+        {
+            searchTerm = filtered;
+        }
+
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            currentPage = 1;
+            await InvokeAsync(LoadSales);
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task HandleClearSearch()
+    {
+        searchTerm = string.Empty;
+        currentPage = 1;
+        await LoadSales();
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            currentPage = 1;
+            await LoadSales();
+        }
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages && page != currentPage)
+        {
+            currentPage = page;
+            await LoadSales();
+        }
+    }
+
+    private async Task HandlePrintSale(int saleId)
+    {
+        try
+        {
+            // For seller view, allow printing any sale in scope (no cashier restriction)
+            var sale = await SalesService.GetSaleForReportAsync(saleId, 0);
+            if (sale == null)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Sale not found or you don't have permission to access it.");
+                return;
+            }
+
+            var items = await SalesService.GetSaleItemsForReportAsync(saleId);
+            if (items == null || items.Count == 0)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "No items found for this sale.");
+                return;
+            }
+
+            var receiptData = new
+            {
+                saleNumber = sale.SaleNumber,
+                dateTime = sale.Timestamps.ToString("MMM dd, yyyy HH:mm:ss"),
+                cashierName = sale.CashierName,
+                items = items.Select(item => new
+                {
+                    productName = item.ProductName,
+                    variantName = item.VariantName,
+                    sizeName = item.SizeName ?? string.Empty,
+                    colorName = item.ColorName ?? string.Empty,
+                    quantity = item.Quantity,
+                    subtotal = item.Subtotal
+                }).ToArray(),
+                totalAmount = sale.Amount,
+                paymentMethod = sale.PaymentMethod,
+                amountPaid = sale.AmountPaid,
+                changeGiven = sale.ChangeGiven,
+                referenceNumber = sale.ReferenceNumber
+            };
+
+            await JSRuntime.InvokeVoidAsync("printReceipt", receiptData);
+
+            try
+            {
+                if (AuthState.CurrentUser != null)
+                {
+                    await HistoryService.LogAsync(
+                        AuthState.CurrentUser.Id,
+                        "print",
+                        "Seller_Sales_Report",
+                        $"Printed receipt for sale: {sale.SaleNumber}"
+                    );
+                }
+            }
+            catch { }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error printing sale: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to print receipt. Please try again.");
+        }
+    }
+
+    private async Task CalculateAdminFee()
+    {
+        try
+        {
+            var cashierUserIds = await GetCashierUserIdsAsync();
+            if (cashierUserIds.Count == 0)
+            {
+                adminFeeAmount = 0m;
+                return;
+            }
+
+            // Build parameterized IN clause
+            var userIdParams = new List<string>();
+            for (int i = 0; i < cashierUserIds.Count; i++)
+            {
+                userIdParams.Add($"@cashierId{i}");
+            }
+            var cashierIdsInClause = userIdParams.Count > 0 ? string.Join(",", userIdParams) : "0";
+
+            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+            using var conn = new SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            var sql = $@"
+                SELECT SUM(si.subtotal) as total_revenue
+                FROM dbo.tbl_sales_items si
+                INNER JOIN dbo.tbl_sales s ON si.sale_id = s.id
+                WHERE s.archives IS NULL
+                AND si.archives IS NULL
+                AND s.status = 'Completed'
+                AND s.user_id IN ({cashierIdsInClause})
+                AND EXISTS (
+                    SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
+                    WHERE dsv.cashier_user_id = s.user_id
+                    AND dsv.sale_date = CAST(s.timestamps AS DATE)
+                    AND dsv.status = 'Approved'
+                    AND dsv.archived_at IS NULL
+                    AND dsv.seller_user_id = @SellerUserId
+                )";
+
+            if (startDate.HasValue)
+            {
+                sql += " AND CAST(s.timestamps AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                sql += " AND CAST(s.timestamps AS DATE) <= @EndDate";
+            }
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                sql += " AND s.sale_number LIKE @SearchTerm";
+            }
+
+            using var cmd = new SqlCommand(sql, conn);
+            for (int i = 0; i < cashierUserIds.Count; i++)
+            {
+                cmd.Parameters.AddWithValue($"@cashierId{i}", cashierUserIds[i]);
+            }
+            cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+            }
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
+            }
+
+            var result = await cmd.ExecuteScalarAsync();
+            var totalRevenue = result != null && result != DBNull.Value ? Convert.ToDecimal(result) : 0m;
+            adminFeeAmount = totalRevenue * 0.02m;
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error calculating admin fee: {ex.Message}");
+            adminFeeAmount = 0m;
+        }
+    }
+
+    private async Task PrintReport()
+    {
+        try
+        {
+            isGeneratingPDF = true;
+            StateHasChanged();
+
+            var cashierUserIds = await GetCashierUserIdsAsync();
+            if (cashierUserIds.Count == 0)
+            {
+                allSalesForPrint = new List<IT13_Final.Services.Data.SaleReportModel>();
+            }
+            else
+            {
+                // Build parameterized IN clause
+                var userIdParams = new List<string>();
+                for (int i = 0; i < cashierUserIds.Count; i++)
+                {
+                    userIdParams.Add($"@cashierId{i}");
+                }
+                var cashierIdsInClause = userIdParams.Count > 0 ? string.Join(",", userIdParams) : "0";
+
+                const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+                using var conn = new SqlConnection(connectionString);
+                await conn.OpenAsync();
+
+                var salesSql = $@"
+                    SELECT s.id, s.sale_number, s.amount, s.payment_type, s.timestamps,
+                           COALESCE(u.name, (LTRIM(RTRIM(ISNULL(u.fname,''))) + ' ' + LTRIM(RTRIM(ISNULL(u.lname,''))))) as cashier_name,
+                           p.amount_paid, p.change_given, p.reference_number
+                    FROM dbo.tbl_sales s
+                    INNER JOIN dbo.tbl_users u ON s.user_id = u.id
+                    LEFT JOIN dbo.tbl_payments p ON s.id = p.sale_id AND p.archives IS NULL
+                    WHERE s.archives IS NULL 
+                    AND s.status = 'Completed'
+                    AND s.user_id IN ({cashierIdsInClause})";
+
+                if (!string.IsNullOrWhiteSpace(searchTerm))
+                {
+                    salesSql += " AND (s.sale_number LIKE @SearchTerm)";
+                }
+
+                if (startDate.HasValue)
+                {
+                    salesSql += " AND CAST(s.timestamps AS DATE) >= @StartDate";
+                }
+
+                if (endDate.HasValue)
+                {
+                    salesSql += " AND CAST(s.timestamps AS DATE) <= @EndDate";
+                }
+
+                salesSql += " ORDER BY s.timestamps DESC";
+
+                using var salesCmd = new SqlCommand(salesSql, conn);
+                for (int i = 0; i < cashierUserIds.Count; i++)
+                {
+                    salesCmd.Parameters.AddWithValue($"@cashierId{i}", cashierUserIds[i]);
+                }
+                if (!string.IsNullOrWhiteSpace(searchTerm))
+                {
+                    salesCmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
+                }
+                if (startDate.HasValue)
+                {
+                    salesCmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+                }
+                if (endDate.HasValue)
+                {
+                    salesCmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+                }
+
+                allSalesForPrint = new List<IT13_Final.Services.Data.SaleReportModel>();
+                using var reader = await salesCmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    allSalesForPrint.Add(new IT13_Final.Services.Data.SaleReportModel
+                    {
+                        Id = reader.GetInt32(0),
+                        SaleNumber = reader.GetString(1),
+                        Amount = reader.GetDecimal(2),
+                        PaymentMethod = reader.IsDBNull(3) ? string.Empty : reader.GetString(3),
+                        Timestamps = reader.GetDateTime(4),
+                        CashierName = reader.IsDBNull(5) ? string.Empty : reader.GetString(5),
+                        AmountPaid = reader.IsDBNull(6) ? reader.GetDecimal(2) : reader.GetDecimal(6),
+                        ChangeGiven = reader.IsDBNull(7) ? 0 : reader.GetDecimal(7),
+                        ReferenceNumber = reader.IsDBNull(8) ? null : reader.GetString(8)
+                    });
+                }
+            }
+
+            await JSRuntime.InvokeVoidAsync("generateAndPrintSalesReport",
+                allSalesForPrint.Select(sale => new
+                {
+                    saleNumber = sale.SaleNumber,
+                    amount = sale.Amount,
+                    paymentMethod = sale.PaymentMethod,
+                    date = sale.Timestamps.ToString("MMM dd, yyyy"),
+                    time = sale.Timestamps.ToString("HH:mm:ss"),
+                    cashierName = sale.CashierName
+                }).ToArray(),
+                AuthState.CurrentUser?.FullName ?? "Seller",
+                startDate?.ToString("MMM dd, yyyy") ?? "All Time",
+                endDate?.ToString("MMM dd, yyyy") ?? "Today"
+            );
+
+            try
+            {
+                if (AuthState.CurrentUser != null)
+                {
+                    await HistoryService.LogAsync(
+                        AuthState.CurrentUser.Id,
+                        "print",
+                        "Seller_Sales_Report",
+                        $"Printed seller sales report - {allSalesForPrint.Count} sales from {startDate?.ToString("MMM dd, yyyy") ?? "All Time"} to {endDate?.ToString("MMM dd, yyyy") ?? "Today"}"
+                    );
+                }
+            }
+            catch { }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error generating seller sales report: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("window.print");
+        }
+        finally
+        {
+            isGeneratingPDF = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleSaleClick(int saleId)
+    {
+        try
+        {
+            // Load sale details
+            var sale = await SalesService.GetSaleForReportAsync(saleId, 0);
+            if (sale == null)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Sale not found or you don't have permission to access it.");
+                return;
+            }
+
+            selectedSale = sale;
+
+            // Load sale items
+            var items = await SalesService.GetSaleItemsForReportAsync(saleId);
+            saleItems = items ?? new List<IT13_Final.Services.Data.SaleReportItemModel>();
+
+            showSaleDetailsModal = true;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading sale details: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to load sale details. Please try again.");
+        }
+    }
+
+    private void CloseSaleDetailsModal()
+    {
+        showSaleDetailsModal = false;
+        selectedSale = null;
+        saleItems = new List<IT13_Final.Services.Data.SaleReportItemModel>();
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+    }
+}
+
+

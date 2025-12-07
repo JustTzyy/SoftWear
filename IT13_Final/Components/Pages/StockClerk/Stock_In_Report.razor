@@ -1,0 +1,691 @@
+@page "/stockclerk/Stock_In_Report"
+@layout IT13_Final.Components.Layout.StockClerk.StockClerk
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IT13_Final.Services.Data.IStockInService StockInService
+@inject IJSRuntime JSRuntime
+@implements IDisposable
+@using System.Linq
+
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Stock In Reports</h1>
+        <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintReport" disabled="@isGeneratingPDF" title="Print Report">
+            @if (isGeneratingPDF)
+            {
+                <span>Generating...</span>
+            }
+            else
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 9V2h12v7"></path>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+            }
+        </button>
+    </div>
+</div>
+
+@* Search and Date Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.3-4.3"></path>
+        </svg>
+        <input type="text" 
+               id="stock-in-report-search-input"
+               class="search-input" 
+               placeholder="Search by product, variant, or supplier..." 
+               @bind="searchTerm" 
+               @bind:event="oninput" 
+               @bind:after="HandleSearchInput"
+               @onkeypress="HandleSearchKeyPress" />
+        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            <button class="clear-search-btn" @onclick="HandleClearSearch" title="Clear search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date"
+               class="date-input"
+               value="@(startDate?.ToString("yyyy-MM-dd"))"
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleStartDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date"
+               class="date-input"
+               value="@(endDate?.ToString("yyyy-MM-dd"))"
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleEndDateChange" />
+        <button class="filter-btn" @onclick="ApplyFilters">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            Apply
+        </button>
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
+
+@* Summary Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Stock In Summary</h3>
+            <span class="card-subtitle">@totalCount total records</span>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <div class="summary-grid">
+            <div class="summary-box">
+                <div class="summary-label">Total Items Added</div>
+                <div class="summary-value">@totalQuantityAdded.ToString("N0")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Total Cost</div>
+                <div class="summary-value">₱@totalCost.ToString("N2")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Total Records</div>
+                <div class="summary-value">@totalCount</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Avg Cost per Item</div>
+                <div class="summary-value">₱@avgCostPerItem.ToString("N2")</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Stock In List Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Stock In List</h3>
+            <span class="card-subtitle">@totalCount records found</span>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <div class="table-container">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th>Variant</th>
+                        <th>Quantity</th>
+                        <th>Cost Price</th>
+                        <th>Total Cost</th>
+                        <th>Supplier</th>
+                        <th>Date</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (isLoading)
+                    {
+                        <tr>
+                            <td colspan="8" class="loading-cell">Loading stock in records...</td>
+                        </tr>
+                    }
+                    else if (stockIns.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="8" class="empty-cell">No stock in records found for this filter.</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var stockIn in stockIns)
+                        {
+                            <tr class="clickable-row" @onclick="() => HandleStockInClick(stockIn.Id)">
+                                <td class="sale-number">@stockIn.ProductName</td>
+                                <td>@stockIn.VariantName</td>
+                                <td>@stockIn.QuantityAdded</td>
+                                <td>₱@stockIn.CostPrice.ToString("N2")</td>
+                                <td>₱@((stockIn.QuantityAdded * stockIn.CostPrice).ToString("N2"))</td>
+                                <td>@(stockIn.SupplierName ?? "N/A")</td>
+                                <td>
+                                    <div class="timestamp-info">
+                                        <div class="timestamp-date">@stockIn.Timestamps.ToString("MMM dd, yyyy")</div>
+                                        <div class="timestamp-time">@stockIn.Timestamps.ToString("HH:mm:ss")</div>
+                                    </div>
+                                </td>
+                                <td class="actions-cell" @onclick:stopPropagation="true">
+                                    <button class="action-btn print-row-btn" @onclick="() => HandlePrintStockIn(stockIn.Id)" title="Print Details">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M6 9V2h12v7"></path>
+                                            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                                            <rect x="6" y="14" width="12" height="8"></rect>
+                                        </svg>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)" title="Previous page">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m15 18-6-6 6-6"></path>
+                </svg>
+            </button>
+
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                var pageNum = i;
+                @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
+                {
+                    <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 2 || i == currentPage + 2)
+                {
+                    <span class="page-ellipsis">...</span>
+                }
+            }
+
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)" title="Next page">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m9 18 6-6-6-6"></path>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+@if (showStockInDetailsModal && selectedStockIn != null)
+{
+    <div class="modal-overlay" @onclick="CloseStockInDetailsModal">
+        <div class="add-admin-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Stock In Details - ID: @selectedStockIn.Id</h2>
+                <button class="modal-close-btn" @onclick="CloseStockInDetailsModal" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="po-info">
+                    <div class="info-row">
+                        <span class="info-label">Product:</span>
+                        <span class="info-value">@selectedStockIn.ProductName</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Variant:</span>
+                        <span class="info-value">@selectedStockIn.VariantName</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Size:</span>
+                        <span class="info-value">@(selectedStockIn.SizeName ?? "N/A")</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Color:</span>
+                        <span class="info-value">
+                            @if (!string.IsNullOrEmpty(selectedStockIn.ColorName))
+                            {
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    @if (!string.IsNullOrEmpty(selectedStockIn.ColorHexValue))
+                                    {
+                                        <span style="display: inline-block; width: 20px; height: 20px; border-radius: 4px; border: 1px solid #ddd; background-color: @selectedStockIn.ColorHexValue;"></span>
+                                    }
+                                    <span>@selectedStockIn.ColorName</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <span>N/A</span>
+                            }
+                        </span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Quantity Added:</span>
+                        <span class="info-value">@selectedStockIn.QuantityAdded</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Cost Price:</span>
+                        <span class="info-value">₱@selectedStockIn.CostPrice.ToString("N2")</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Total Cost:</span>
+                        <span class="info-value">₱@((selectedStockIn.QuantityAdded * selectedStockIn.CostPrice).ToString("N2"))</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Date:</span>
+                        <span class="info-value">@selectedStockIn.Timestamps.ToString("MMM dd, yyyy HH:mm:ss")</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Recorded By:</span>
+                        <span class="info-value">@selectedStockIn.UserName</span>
+                    </div>
+                    @if (!string.IsNullOrEmpty(selectedStockIn.SupplierName))
+                    {
+                        <div class="info-row">
+                            <span class="info-label">Supplier:</span>
+                            <span class="info-value">@selectedStockIn.SupplierName</span>
+                        </div>
+                        @if (!string.IsNullOrEmpty(selectedStockIn.SupplierContactPerson))
+                        {
+                            <div class="info-row">
+                                <span class="info-label">Contact Person:</span>
+                                <span class="info-value">@selectedStockIn.SupplierContactPerson</span>
+                            </div>
+                        }
+                        @if (!string.IsNullOrEmpty(selectedStockIn.SupplierEmail))
+                        {
+                            <div class="info-row">
+                                <span class="info-label">Supplier Email:</span>
+                                <span class="info-value">@selectedStockIn.SupplierEmail</span>
+                            </div>
+                        }
+                        @if (!string.IsNullOrEmpty(selectedStockIn.SupplierContactNumber))
+                        {
+                            <div class="info-row">
+                                <span class="info-label">Supplier Contact:</span>
+                                <span class="info-value">@selectedStockIn.SupplierContactNumber</span>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="save-admin-btn" @onclick="() => HandlePrintStockIn(selectedStockIn.Id)">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M6 9V2h12v7"></path>
+                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                        <rect x="6" y="14" width="12" height="8"></rect>
+                    </svg>
+                    <span>Print Details</span>
+                </button>
+                <button class="cancel-btn" @onclick="CloseStockInDetailsModal">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<IT13_Final.Services.Data.StockInModel> stockIns = new();
+    private List<IT13_Final.Services.Data.StockInModel> allStockInsForPrint = new();
+    private string searchTerm = string.Empty;
+    private DateTime? startDate;
+    private DateTime? endDate;
+    private string selectedDateRange = string.Empty;
+
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue;
+
+    private bool isLoading = false;
+    private bool isGeneratingPDF = false;
+
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling(totalCount / (double)pageSize);
+
+    private int totalQuantityAdded = 0;
+    private decimal totalCost = 0m;
+    private decimal avgCostPerItem = 0m;
+
+    private System.Threading.Timer? _searchTimer;
+    private bool showStockInDetailsModal = false;
+    private IT13_Final.Services.Data.StockInDetailsModel? selectedStockIn = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStockIns();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("setupSearchInputFilter", "stock-in-report-search-input");
+            }
+            catch (Exception)
+            {
+                // JavaScript function might not be available yet, ignore
+            }
+        }
+    }
+
+    private async Task LoadStockIns()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var stockClerkUserId = AuthState.CurrentUser?.Id ?? 0;
+            if (stockClerkUserId > 0)
+            {
+                totalCount = await StockInService.GetStockInsCountAsync(stockClerkUserId, searchTerm, startDate, endDate);
+                stockIns = await StockInService.GetStockInsAsync(stockClerkUserId, searchTerm, startDate, endDate, currentPage, pageSize);
+
+                if (currentPage > totalPages && totalPages > 0)
+                {
+                    currentPage = totalPages;
+                    await LoadStockIns();
+                    return;
+                }
+
+                // Calculate summary statistics
+                totalQuantityAdded = stockIns.Sum(si => si.QuantityAdded);
+                totalCost = stockIns.Sum(si => si.QuantityAdded * si.CostPrice);
+                avgCostPerItem = totalQuantityAdded > 0 ? totalCost / totalQuantityAdded : 0m;
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading stock ins: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to load stock in records. Please try again.");
+            stockIns = new List<IT13_Final.Services.Data.StockInModel>();
+            totalCount = 0;
+            totalQuantityAdded = 0;
+            totalCost = 0m;
+            avgCostPerItem = 0m;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async void HandleStartDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            startDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            startDate = null;
+            selectedDateRange = "";
+        }
+        await ApplyFilters();
+    }
+
+    private async void HandleEndDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            endDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            endDate = null;
+            selectedDateRange = "";
+        }
+        await ApplyFilters();
+    }
+
+    private async Task HandleDateRangeChange()
+    {
+        var now = DateTime.Now;
+        switch (selectedDateRange)
+        {
+            case "":
+                startDate = null;
+                endDate = null;
+                break;
+            case "today":
+                startDate = now.Date;
+                endDate = now.Date;
+                break;
+            case "yesterday":
+                startDate = now.Date.AddDays(-1);
+                endDate = now.Date.AddDays(-1);
+                break;
+            case "last7days":
+                startDate = now.Date.AddDays(-6);
+                endDate = now.Date;
+                break;
+            case "last30days":
+                startDate = now.Date.AddDays(-29);
+                endDate = now.Date;
+                break;
+            case "thismonth":
+                startDate = new DateTime(now.Year, now.Month, 1);
+                endDate = now.Date;
+                break;
+            case "thisyear":
+                startDate = new DateTime(now.Year, 1, 1);
+                endDate = now.Date;
+                break;
+        }
+        await ApplyFilters();
+    }
+
+    private async Task ClearDateFilter()
+    {
+        selectedDateRange = "";
+        startDate = null;
+        endDate = null;
+        currentPage = 1;
+        await LoadStockIns();
+    }
+
+    private async Task ApplyFilters()
+    {
+        currentPage = 1;
+        await LoadStockIns();
+    }
+
+    private void HandleSearchInput()
+    {
+        var filtered = System.Text.RegularExpressions.Regex.Replace(searchTerm, @"[^a-zA-Z0-9\s\-_]", "");
+        if (filtered != searchTerm)
+        {
+            searchTerm = filtered;
+        }
+        
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            currentPage = 1;
+            await InvokeAsync(async () => await LoadStockIns());
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task HandleClearSearch()
+    {
+        searchTerm = string.Empty;
+        currentPage = 1;
+        await LoadStockIns();
+        StateHasChanged();
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            currentPage = 1;
+            await LoadStockIns();
+        }
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages)
+        {
+            if (page != currentPage)
+            {
+                currentPage = page;
+                await LoadStockIns();
+            }
+        }
+    }
+
+    private async Task HandleStockInClick(int stockInId)
+    {
+        try
+        {
+            var stockClerkUserId = AuthState.CurrentUser?.Id ?? 0;
+            if (stockClerkUserId == 0)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "User not authenticated. Please log in again.");
+                return;
+            }
+
+            selectedStockIn = await StockInService.GetStockInDetailsAsync(stockInId, stockClerkUserId);
+            if (selectedStockIn == null)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Stock in record not found or you don't have permission to access it.");
+                return;
+            }
+
+            showStockInDetailsModal = true;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading stock in details: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to load stock in details. Please try again.");
+        }
+    }
+
+    private void CloseStockInDetailsModal()
+    {
+        showStockInDetailsModal = false;
+        selectedStockIn = null;
+        StateHasChanged();
+    }
+
+    private async Task HandlePrintStockIn(int stockInId)
+    {
+        try
+        {
+            var stockClerkUserId = AuthState.CurrentUser?.Id ?? 0;
+            if (stockClerkUserId == 0)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "User not authenticated. Please log in again.");
+                return;
+            }
+
+            var stockIn = await StockInService.GetStockInDetailsAsync(stockInId, stockClerkUserId);
+            if (stockIn == null)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Stock in record not found or you don't have permission to access it.");
+                return;
+            }
+
+            var receiptData = new
+            {
+                id = stockIn.Id,
+                productName = stockIn.ProductName,
+                variantName = stockIn.VariantName,
+                sizeName = stockIn.SizeName ?? "",
+                colorName = stockIn.ColorName ?? "",
+                colorHex = stockIn.ColorHexValue ?? "",
+                quantityAdded = stockIn.QuantityAdded,
+                costPrice = stockIn.CostPrice,
+                totalCost = stockIn.QuantityAdded * stockIn.CostPrice,
+                dateTime = stockIn.Timestamps.ToString("MMM dd, yyyy HH:mm:ss"),
+                userName = stockIn.UserName,
+                supplierName = stockIn.SupplierName ?? "",
+                supplierContactPerson = stockIn.SupplierContactPerson ?? "",
+                supplierEmail = stockIn.SupplierEmail ?? "",
+                supplierContactNumber = stockIn.SupplierContactNumber ?? ""
+            };
+
+            await JSRuntime.InvokeVoidAsync("printStockInReceipt", receiptData);
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error printing stock in: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to print stock in details. Please try again.");
+        }
+    }
+
+    private async Task PrintReport()
+    {
+        try
+        {
+            isGeneratingPDF = true;
+            StateHasChanged();
+
+            var stockClerkUserId = AuthState.CurrentUser?.Id ?? 0;
+            if (stockClerkUserId > 0)
+            {
+                allStockInsForPrint = await StockInService.GetStockInsAsync(stockClerkUserId, searchTerm, startDate, endDate, 1, 10000);
+                
+                await JSRuntime.InvokeVoidAsync("generateAndPrintStockInReport", 
+                    allStockInsForPrint.Select(si => new {
+                        productName = si.ProductName,
+                        variantName = si.VariantName,
+                        quantity = si.QuantityAdded,
+                        costPrice = si.CostPrice,
+                        totalCost = si.QuantityAdded * si.CostPrice,
+                        supplierName = si.SupplierName ?? "N/A",
+                        stockClerkName = si.UserName ?? "N/A",
+                        date = si.Timestamps.ToString("MMM dd, yyyy"),
+                        time = si.Timestamps.ToString("HH:mm:ss")
+                    }).ToArray(),
+                    AuthState.CurrentUser?.FullName ?? "Stock Clerk",
+                    startDate?.ToString("MMM dd, yyyy") ?? "All Time",
+                    endDate?.ToString("MMM dd, yyyy") ?? "Today"
+                );
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error generating report: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to generate PDF. Please try again.");
+        }
+        finally
+        {
+            isGeneratingPDF = false;
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+    }
+}
+

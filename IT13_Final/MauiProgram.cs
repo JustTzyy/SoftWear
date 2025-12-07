@@ -37,6 +37,21 @@ namespace IT13_Final
             builder.Services.AddScoped<IStockAdjustmentService, StockAdjustmentService>();
             builder.Services.AddScoped<ISalesService, SalesService>();
             builder.Services.AddScoped<IReturnsService, ReturnsService>();
+            builder.Services.AddScoped<IDailySalesVerificationService, DailySalesVerificationService>();
+            builder.Services.AddScoped<IExpenseService, ExpenseService>();
+            builder.Services.AddScoped<ISupplierInvoiceService, SupplierInvoiceService>();
+            builder.Services.AddScoped<IIncomeBreakdownService, IncomeBreakdownService>();
+            builder.Services.AddScoped<ICashflowAuditService, CashflowAuditService>();
+            builder.Services.AddScoped<IDatabaseSyncService, DatabaseSyncService>();
+
+            // Auto-sync background service (syncs local to Azure every hour)
+            builder.Services.AddSingleton<AutoSyncBackgroundService>(sp =>
+            {
+                var syncService = new DatabaseSyncService();
+                var autoSync = new AutoSyncBackgroundService(syncService);
+                autoSync.Start(); // Start automatic sync on app launch
+                return autoSync;
+            });
 
 #if DEBUG
     		builder.Services.AddBlazorWebViewDeveloperTools();

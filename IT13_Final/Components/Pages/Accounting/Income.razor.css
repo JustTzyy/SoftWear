@@ -1,0 +1,444 @@
+/* Income Breakdown Page - Matching Stock Clerk Purchase Orders Design */
+
+/* ========================================
+   Welcome Header - Match Dashboard
+======================================== */
+.welcome-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    padding: 24px 28px;
+    background: linear-gradient(135deg, #1a2332 0%, #304D6D 50%, #5C7CFA 100%);
+    border-radius: 16px;
+    color: white;
+    box-shadow: 0 4px 20px rgba(26, 35, 50, 0.3);
+}
+
+.welcome-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.welcome-greeting {
+    font-size: 28px;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: -0.5px;
+}
+
+.welcome-date {
+    font-size: 14px;
+    opacity: 0.85;
+    margin: 0;
+    font-weight: 400;
+}
+
+.header-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.header-actions .action-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 44px;
+    padding: 0 20px;
+    border-radius: 12px;
+    border: none;
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.header-actions .action-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.25);
+    transform: translateY(-2px);
+}
+
+.header-actions .action-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.header-actions .action-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* ========================================
+   Dashboard Filters - Match Dashboard
+======================================== */
+.dashboard-filters {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+    padding: 16px 20px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    border: 1px solid #e5e7eb;
+    flex-wrap: wrap;
+}
+
+.search-wrapper {
+    position: relative;
+    flex: 1;
+    min-width: 200px;
+    max-width: 400px;
+}
+
+.date-filters {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.date-select,
+.date-input {
+    height: 42px;
+    padding: 0 14px;
+    border: 2px solid #e5e7eb;
+    border-radius: 10px;
+    font-size: 14px;
+    background: #f9fafb;
+    transition: all 0.2s;
+    color: #374151;
+}
+
+.date-select {
+    padding-right: 36px;
+    background-color: #f9fafb;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+}
+
+.date-input {
+    width: 130px;
+    text-align: center;
+}
+
+.date-select:hover,
+.date-input:hover {
+    border-color: #d1d5db;
+    background-color: #f3f4f6;
+}
+
+.date-select:focus,
+.date-input:focus {
+    outline: none;
+    border-color: #5C7CFA;
+    background-color: white;
+    box-shadow: 0 0 0 3px rgba(92, 124, 250, 0.1);
+}
+
+.date-separator {
+    color: #9ca3af;
+    font-size: 13px;
+}
+
+.filter-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 42px;
+    padding: 0 18px;
+    border: none;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #5C7CFA 0%, #4c6ef5 100%);
+    color: white;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 12px rgba(92, 124, 250, 0.3);
+}
+
+.filter-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(92, 124, 250, 0.4);
+}
+
+.filter-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.clear-btn {
+    width: 42px;
+    height: 42px;
+    border: 2px solid #e5e7eb;
+    border-radius: 10px;
+    background: #f9fafb;
+    color: #6b7280;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.clear-btn:hover {
+    background: #fee2e2;
+    border-color: #fecaca;
+}
+
+.clear-btn:hover svg {
+    color: #ef4444;
+}
+
+.clear-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* ========================================
+   Content Card - Match Dashboard
+======================================== */
+.content-card {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    border: 1px solid #e5e7eb;
+    overflow: hidden;
+    margin-bottom: 24px;
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid #e5e7eb;
+    background: #f9fafb;
+}
+
+.card-title-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.card-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1a1a1a;
+    margin: 0;
+}
+
+.card-subtitle {
+    font-size: 13px;
+    color: #9ca3af;
+}
+
+.card-body {
+    padding: 24px;
+}
+
+/* ========================================
+   Summary Grid
+======================================== */
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+}
+
+.summary-box {
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 20px;
+    transition: all 0.2s;
+}
+
+.summary-box:hover {
+    background: #eef2ff;
+    border-color: #c7d2fe;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(92, 124, 250, 0.1);
+}
+
+.summary-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+.summary-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: #1a1a1a;
+}
+
+/* ========================================
+   Admin Table - Match ActivityLog Style
+======================================== */
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.admin-table thead {
+    background: linear-gradient(135deg, #1a2332 0%, #304D6D 100%);
+}
+
+.admin-table th {
+    padding: 14px 20px;
+    text-align: left;
+    font-weight: 600;
+    color: white;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.admin-table tbody tr {
+    transition: all 0.2s;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.admin-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.admin-table tbody tr:hover {
+    background: #E0E0E0;
+}
+
+.admin-table tbody tr:nth-child(even) {
+    background: #F9F9F9;
+}
+
+.admin-table tbody tr:nth-child(even):hover {
+    background: #E0E0E0;
+}
+
+.admin-table td {
+    padding: 16px 20px;
+    color: #2d2d2d;
+    vertical-align: middle;
+}
+
+/* Loading and Empty States */
+.loading-cell,
+.empty-cell {
+    text-align: center;
+    padding: 60px 20px;
+    color: #6b7280;
+    font-size: 14px;
+}
+
+.loading-cell {
+    color: #5C7CFA;
+    font-weight: 600;
+}
+
+/* ========================================
+   Responsive Design
+======================================== */
+@media (max-width: 1024px) {
+    .dashboard-filters {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 16px;
+    }
+
+    .search-wrapper {
+        max-width: none;
+    }
+
+    .date-filters {
+        width: 100%;
+        flex-wrap: wrap;
+    }
+
+    .admin-table {
+        font-size: 13px;
+    }
+
+    .admin-table th,
+    .admin-table td {
+        padding: 12px 14px;
+    }
+}
+
+@media (max-width: 768px) {
+    .welcome-header {
+        flex-direction: column;
+        gap: 16px;
+        text-align: center;
+        padding: 20px;
+    }
+
+    .welcome-greeting {
+        font-size: 24px;
+    }
+
+    .header-actions {
+        justify-content: center;
+    }
+
+    .dashboard-filters {
+        padding: 16px;
+    }
+
+    .date-filters {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .card-header {
+        flex-direction: column;
+        gap: 16px;
+        align-items: stretch;
+    }
+
+    .summary-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 480px) {
+    .welcome-greeting {
+        font-size: 20px;
+    }
+
+    .card-title {
+        font-size: 14px;
+    }
+}
+
+/* Print Styles */
+@media print {
+    .welcome-header {
+        background: #1a2332 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    
+    .header-actions, .dashboard-filters { 
+        display: none !important; 
+    }
+    
+    .content-card {
+        box-shadow: none !important;
+        border: 1px solid #ddd !important;
+    }
+}

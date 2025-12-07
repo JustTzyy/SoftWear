@@ -1,13 +1,14 @@
 @inject IT13_Final.Services.Auth.AuthState AuthState
 @inject IT13_Final.Services.Audit.IHistoryService HistoryService
 @inject NavigationManager Nav
+@inject IJSRuntime JSRuntime
 @inherits LayoutComponentBase
 @implements IDisposable
 
-<div class="grid min-h-screen transition-all duration-300 ease-in-out" style="grid-template-columns: @(sidebarCollapsed ? "80px" : "260px") 1fr; background-color: #E0E0E0;">
+<div class="grid min-h-screen transition-all duration-300 ease-in-out" style="grid-template-columns: @(sidebarCollapsed ? "80px" : "260px") 1fr; background: #F5F5F5;">
     <aside class="bg-white transition-all duration-300 ease-in-out overflow-hidden" style="border-right: 1px solid #E0E0E0;">
-        <div class="flex items-start gap-3 py-4 px-4" style="min-height: 64px;">
-            <a href="/cashier/dashboard" class="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style="border: 2px solid #5C7CFA; padding: 6px; background-color: #1a2332;">
+        <div class="flex items-start gap-3 py-4 px-4 cursor-pointer hover:bg-gray-50 transition-colors duration-200" style="min-height: 64px;" @onclick="ToggleSidebar" title="Toggle sidebar">
+            <a href="/cashier/dashboard" class="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style="border: 2px solid #5C7CFA; padding: 6px; background-color: #1a2332;" @onclick:stopPropagation>
                 <img src="/images/logo.png" alt="Logo" class="w-full h-full object-contain" style="display: block; margin: auto;" />
             </a>
             <div class="transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">
@@ -81,10 +82,9 @@
     </aside>
 
     <div class="grid grid-rows-[64px_1fr]">
-        <header class="flex items-center gap-3 px-5 bg-white" style="border-bottom: 1px solid #E0E0E0;">
-            <button class="bg-transparent border-none text-xl cursor-pointer text-yinmn-blue transition-all duration-200 ease-in-out hover:opacity-70" @onclick="ToggleSidebar" aria-label="Toggle menu">≡</button>
+        <header class="flex items-center gap-3 px-6 bg-white" style="border-bottom: 1px solid #E0E0E0; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 100;">
             <div class="flex-1"></div>
-            <div class="relative flex items-center gap-2.5" @onclick="ToggleProfileMenu">
+            <div class="relative flex items-center gap-2.5" id="profile-menu-container" @onclick="ToggleProfileMenu" @onclick:stopPropagation>
                 <div class="w-9 h-9 rounded-full bg-gradient-to-br from-uranian-blue to-white text-yinmn-blue flex items-center justify-center font-extrabold">@GetInitials()</div>
                 <button class="flex items-center gap-2 py-1.5 px-2.5 rounded-[10px] bg-white cursor-pointer text-gray-700 transition-all duration-200 ease-in-out hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)]" style="border: 1px solid #E0E0E0;">
                     <span class="text-sm">@DisplayName()</span>
@@ -92,7 +92,7 @@
                 </button>
                 @if (profileOpen)
                 {
-                    <div class="absolute top-14 right-0 bg-white rounded-xl shadow-[0_12px_28px_rgba(0,0,0,0.12)] p-2 w-60 z-10" style="border: 1px solid #E0E0E0;" @onclick:stopPropagation>
+                    <div class="absolute top-14 right-0 bg-white rounded-xl shadow-[0_12px_28px_rgba(0,0,0,0.12)] p-2 w-60" style="border: 1px solid #E0E0E0; z-index: 50;" @onclick:stopPropagation>
                         <a class="grid grid-cols-[22px_1fr] items-center gap-2.5 py-2.5 px-3 no-underline text-gray-800 rounded-[10px] border-none bg-transparent w-full text-left transition-all duration-200 ease-in-out hover:bg-platinum" href="/cashier/settings" @onclick="CloseProfileMenu">
                             <svg class="w-[18px] h-[18px] stroke-yinmn-blue stroke-2 fill-none" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none"/><path d="M12 8v8M8 12h8"/></svg>
                             <span>Settings</span>
@@ -110,7 +110,7 @@
             </div>
         </header>
 
-        <main class="p-6">
+        <main class="p-6" @onclick="() => { if (profileOpen) CloseProfileMenu(); }">
             @Body
         </main>
     </div>
@@ -290,6 +290,31 @@
         var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length >= 2) return (parts[0][0].ToString() + parts[1][0]).ToUpperInvariant();
         return name[0].ToString().ToUpperInvariant();
+    }
+
+    private string GetPageTitle()
+    {
+        if (string.IsNullOrEmpty(currentUri)) return $"Welcome, {AuthState.CurrentUser?.FullName ?? "Cashier"}!";
+        
+        try
+        {
+            var uri = Nav.ToAbsoluteUri(currentUri);
+            var currentPath = uri.AbsolutePath.ToLowerInvariant().TrimEnd('/');
+            
+            if (currentPath == "/cashier/dashboard") return $"Welcome, {AuthState.CurrentUser?.FullName ?? "Cashier"}!";
+            if (currentPath == "/cashier/sales") return "Point of Sale";
+            if (currentPath == "/cashier/returns") return "Returns";
+            if (currentPath == "/cashier/sales_report") return "Sales Reports";
+            if (currentPath == "/cashier/returns_report") return "Returns Reports";
+            if (currentPath == "/cashier/settings") return "Settings";
+            if (currentPath == "/cashier/activitylog") return "My Activity Logs";
+            
+            return "Dashboard";
+        }
+        catch
+        {
+            return "Dashboard";
+        }
     }
 
     private async void OnSignOut()

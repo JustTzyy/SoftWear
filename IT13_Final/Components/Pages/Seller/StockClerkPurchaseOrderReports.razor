@@ -1,0 +1,1021 @@
+@page "/seller/StockClerkPurchaseOrderReports"
+@layout IT13_Final.Components.Layout.Seller.Seller
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IT13_Final.Services.Data.IPurchaseOrderService PurchaseOrderService
+@inject IJSRuntime JSRuntime
+@implements IDisposable
+@using System.Linq
+@using Microsoft.Data.SqlClient
+
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Purchase Order Reports (All Stock Clerks)</h1>
+        <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintReport" disabled="@isGeneratingPDF" title="Print Report">
+            @if (isGeneratingPDF)
+            {
+                <span>Generating...</span>
+            }
+            else
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 9V2h12v7"></path>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+            }
+        </button>
+    </div>
+</div>
+
+@* Search and Date Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.3-4.3"></path>
+        </svg>
+        <input type="text" 
+               id="seller-po-report-search-input"
+               class="search-input" 
+               placeholder="Search by PO number or supplier..." 
+               @bind="searchTerm" 
+               @bind:event="oninput" 
+               @bind:after="HandleSearchInput"
+               @onkeypress="HandleSearchKeyPress" />
+        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            <button class="clear-search-btn" @onclick="HandleClearSearch" title="Clear search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date"
+               class="date-input"
+               value="@(startDate?.ToString("yyyy-MM-dd"))"
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleStartDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date"
+               class="date-input"
+               value="@(endDate?.ToString("yyyy-MM-dd"))"
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleEndDateChange" />
+        <select class="date-select" @bind="selectedStatus" @bind:after="HandleStatusChange">
+            <option value="">All Status</option>
+            <option value="Completed">Completed</option>
+            <option value="Cancelled">Cancelled</option>
+            <option value="Pending">Pending</option>
+        </select>
+        <button class="filter-btn" @onclick="ApplyFilters">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            Apply
+        </button>
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
+
+@* Summary Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Purchase Order Summary</h3>
+            <span class="card-subtitle">@totalCount total orders</span>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <div class="summary-grid">
+            <div class="summary-box">
+                <div class="summary-label">Total Orders</div>
+                <div class="summary-value">@totalCount</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Total Amount</div>
+                <div class="summary-value">₱@totalAmount.ToString("N2")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Completed</div>
+                <div class="summary-value">@completedCount</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Pending</div>
+                <div class="summary-value">@pendingCount</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Purchase Order List Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Purchase Order List</h3>
+            <span class="card-subtitle">@totalCount orders found</span>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>PO Number</th>
+                    <th>Supplier</th>
+                    <th>Status</th>
+                    <th>Total Amount</th>
+                    <th>Expected Delivery</th>
+                    <th>Created By</th>
+                    <th>Date</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="8" class="loading-cell">Loading purchase orders...</td>
+                    </tr>
+                }
+                else if (purchaseOrders.Count == 0)
+                {
+                    <tr>
+                        <td colspan="8" class="empty-cell">No purchase orders found for this filter.</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var po in purchaseOrders)
+                    {
+                        <tr class="clickable-row" @onclick="() => HandlePOClick(po.Id)">
+                            <td class="sale-number">@po.PONumber</td>
+                            <td>@po.SupplierName</td>
+                            <td>
+                                <span class="status-text @(po.Status == "Completed" ? "status-text-approved" : po.Status == "Cancelled" ? "status-text-cancelled" : "status-text-pending")">@po.Status</span>
+                            </td>
+                            <td>₱@po.TotalAmount.ToString("N2")</td>
+                            <td>@(po.ExpectedDeliveryDate?.ToString("MMM dd, yyyy") ?? "N/A")</td>
+                            <td>@po.CreatedByName</td>
+                            <td>
+                                <div class="timestamp-info">
+                                    <div class="timestamp-date">@po.CreatedAt.ToString("MMM dd, yyyy")</div>
+                                    <div class="timestamp-time">@po.CreatedAt.ToString("HH:mm:ss")</div>
+                                </div>
+                            </td>
+                            <td class="actions-cell" @onclick:stopPropagation="true">
+                                <button class="action-btn print-row-btn" @onclick="() => HandlePrintPO(po.Id)" title="Print Details">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M6 9V2h12v7"></path>
+                                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                                        <rect x="6" y="14" width="12" height="8"></rect>
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)" title="Previous page">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m15 18-6-6 6-6"></path>
+                </svg>
+            </button>
+
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                var pageNum = i;
+                @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
+                {
+                    <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 2 || i == currentPage + 2)
+                {
+                    <span class="page-ellipsis">...</span>
+                }
+            }
+
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)" title="Next page">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m9 18 6-6-6-6"></path>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+@* Purchase Order Details Modal *@
+@if (showPODetailsModal && selectedPO != null)
+{
+    <div class="modal-overlay" @onclick="ClosePODetailsModal">
+        <div class="add-admin-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Purchase Order Details - @selectedPO.PONumber</h2>
+                <button class="modal-close-btn" @onclick="ClosePODetailsModal" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="po-info">
+                    <div class="info-row">
+                        <span class="info-label">PO Number:</span>
+                        <span class="info-value">@selectedPO.PONumber</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Supplier:</span>
+                        <span class="info-value">@selectedPO.SupplierName</span>
+                    </div>
+                    @if (!string.IsNullOrEmpty(selectedPO.SupplierEmail))
+                    {
+                        <div class="info-row">
+                            <span class="info-label">Supplier Email:</span>
+                            <span class="info-value">@selectedPO.SupplierEmail</span>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(selectedPO.SupplierContactNumber))
+                    {
+                        <div class="info-row">
+                            <span class="info-label">Supplier Contact:</span>
+                            <span class="info-value">@selectedPO.SupplierContactNumber</span>
+                        </div>
+                    }
+                    <div class="info-row">
+                        <span class="info-label">Status:</span>
+                        <span class="info-value">
+                            <span class="status-text @(selectedPO.Status == "Completed" ? "status-text-approved" : selectedPO.Status == "Cancelled" ? "status-text-cancelled" : "status-text-pending")">@selectedPO.Status</span>
+                        </span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Total Amount:</span>
+                        <span class="info-value">₱@selectedPO.TotalAmount.ToString("N2")</span>
+                    </div>
+                    @if (selectedPO.ExpectedDeliveryDate.HasValue)
+                    {
+                        <div class="info-row">
+                            <span class="info-label">Expected Delivery:</span>
+                            <span class="info-value">@selectedPO.ExpectedDeliveryDate.Value.ToString("MMM dd, yyyy")</span>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(selectedPO.Notes))
+                    {
+                        <div class="info-row">
+                            <span class="info-label">Notes:</span>
+                            <span class="info-value">@selectedPO.Notes</span>
+                        </div>
+                    }
+                    <div class="info-row">
+                        <span class="info-label">Created At:</span>
+                        <span class="info-value">@selectedPO.CreatedAt.ToString("MMM dd, yyyy HH:mm:ss")</span>
+                    </div>
+                    @if (selectedPO.UpdatedAt.HasValue)
+                    {
+                        <div class="info-row">
+                            <span class="info-label">Completed At:</span>
+                            <span class="info-value">@selectedPO.UpdatedAt.Value.ToString("MMM dd, yyyy HH:mm:ss")</span>
+                        </div>
+                    }
+                    <div class="info-row">
+                        <span class="info-label">Created By:</span>
+                        <span class="info-value">@selectedPO.CreatedByName</span>
+                    </div>
+                    @if (!string.IsNullOrEmpty(selectedPO.UpdatedByName))
+                    {
+                        <div class="info-row">
+                            <span class="info-label">Completed By:</span>
+                            <span class="info-value">@selectedPO.UpdatedByName</span>
+                        </div>
+                    }
+                    @if (selectedPO.Items != null && selectedPO.Items.Count > 0)
+                    {
+                        <div style="margin-top: 24px;">
+                            <h4 style="margin-bottom: 12px; font-size: 16px; font-weight: 700; color: #1f2937;">Items</h4>
+                            <table style="width: 100%; border-collapse: collapse;">
+                                <thead>
+                                    <tr style="background: #f3f4f6;">
+                                        <th style="padding: 10px; text-align: left; font-size: 12px; font-weight: 700; color: #374151;">Product</th>
+                                        <th style="padding: 10px; text-align: left; font-size: 12px; font-weight: 700; color: #374151;">Variant</th>
+                                        <th style="padding: 10px; text-align: left; font-size: 12px; font-weight: 700; color: #374151;">Size</th>
+                                        <th style="padding: 10px; text-align: left; font-size: 12px; font-weight: 700; color: #374151;">Color</th>
+                                        <th style="padding: 10px; text-align: right; font-size: 12px; font-weight: 700; color: #374151;">Quantity</th>
+                                        <th style="padding: 10px; text-align: right; font-size: 12px; font-weight: 700; color: #374151;">Unit Price</th>
+                                        <th style="padding: 10px; text-align: right; font-size: 12px; font-weight: 700; color: #374151;">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var item in selectedPO.Items)
+                                    {
+                                        <tr style="border-bottom: 1px solid #e5e7eb;">
+                                            <td style="padding: 10px; font-size: 13px;">@item.ProductName</td>
+                                            <td style="padding: 10px; font-size: 13px;">@item.VariantName</td>
+                                            <td style="padding: 10px; font-size: 13px;">@(item.SizeName ?? "N/A")</td>
+                                            <td style="padding: 10px; font-size: 13px;">
+                                                @if (!string.IsNullOrEmpty(item.ColorName))
+                                                {
+                                                    <div style="display: flex; align-items: center; gap: 6px;">
+                                                        @if (!string.IsNullOrEmpty(item.ColorHexValue))
+                                                        {
+                                                            <span style="display: inline-block; width: 16px; height: 16px; border-radius: 3px; border: 1px solid #ddd; background-color: @item.ColorHexValue;"></span>
+                                                        }
+                                                        <span>@item.ColorName</span>
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <span>N/A</span>
+                                                }
+                                            </td>
+                                            <td style="padding: 10px; text-align: right; font-size: 13px;">@item.Quantity</td>
+                                            <td style="padding: 10px; text-align: right; font-size: 13px;">₱@item.UnitPrice.ToString("N2")</td>
+                                            <td style="padding: 10px; text-align: right; font-size: 13px; font-weight: 600;">₱@item.TotalPrice.ToString("N2")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="save-admin-btn" @onclick="() => HandlePrintPO(selectedPO.Id)">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M6 9V2h12v7"></path>
+                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                        <rect x="6" y="14" width="12" height="8"></rect>
+                    </svg>
+                    <span>Print Details</span>
+                </button>
+                <button class="cancel-btn" @onclick="ClosePODetailsModal">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<IT13_Final.Services.Data.PurchaseOrderModel> purchaseOrders = new();
+    private string searchTerm = string.Empty;
+    private DateTime? startDate;
+    private DateTime? endDate;
+    private string selectedDateRange = string.Empty;
+    private string selectedStatus = string.Empty;
+
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue;
+
+    private bool isLoading = false;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling(totalCount / (double)pageSize);
+    private decimal totalAmount = 0m;
+    private int completedCount = 0;
+    private int pendingCount = 0;
+    private System.Threading.Timer? _searchTimer;
+    private bool showPODetailsModal = false;
+    private IT13_Final.Services.Data.PurchaseOrderDetailsModel? selectedPO = null;
+    private List<IT13_Final.Services.Data.PurchaseOrderModel> allPOsForPrint = new();
+    private bool isGeneratingPDF = false;
+    private int sellerUserId = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        sellerUserId = AuthState.CurrentUser?.Id ?? 0;
+        await LoadPurchaseOrders();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("setupSearchInputFilter", "seller-po-report-search-input");
+            }
+            catch (Exception)
+            {
+                // JavaScript function might not be available yet, ignore
+            }
+        }
+    }
+
+    private async Task<List<int>> GetStockClerkUserIdsAsync()
+    {
+        var clerkIds = new List<int>();
+        
+        if (sellerUserId <= 0)
+        {
+            sellerUserId = AuthState.CurrentUser?.Id ?? 0;
+        }
+
+        if (sellerUserId <= 0)
+        {
+            return clerkIds;
+        }
+
+        try
+        {
+            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+            using var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            var sql = @"
+                SELECT u.id
+                FROM dbo.tbl_users u
+                JOIN dbo.tbl_roles r ON r.id = u.role_id
+                WHERE u.user_id = @SellerId
+                AND LOWER(r.name) = 'stockclerk'
+                AND u.archived_at IS NULL";
+
+            using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@SellerId", sellerUserId);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                clerkIds.Add(reader.GetInt32(0));
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading stock clerk IDs: {ex.Message}");
+        }
+
+        return clerkIds;
+    }
+
+    private async Task LoadPurchaseOrders()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            // Get all stock clerk user IDs for this seller
+            var clerkIds = await GetStockClerkUserIdsAsync();
+            
+            if (clerkIds.Count == 0)
+            {
+                purchaseOrders = new List<IT13_Final.Services.Data.PurchaseOrderModel>();
+                totalCount = 0;
+                isLoading = false;
+                StateHasChanged();
+                return;
+            }
+
+            // Build parameterized IN clause
+            var userIdParams = new List<string>();
+            for (int i = 0; i < clerkIds.Count; i++)
+            {
+                userIdParams.Add($"@clerkId{i}");
+            }
+            var clerkIdsInClause = userIdParams.Count > 0 ? string.Join(",", userIdParams) : "0";
+
+            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+            using var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            // Get count - show all statuses (Completed, Cancelled, Pending)
+            var countSql = $@"
+                SELECT COUNT(*)
+                FROM dbo.tbl_purchase_orders po
+                WHERE po.archived_at IS NULL
+                AND po.created_by IN ({clerkIdsInClause})";
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                countSql += " AND (po.po_number LIKE @SearchTerm OR EXISTS (SELECT 1 FROM dbo.tbl_suppliers s WHERE s.id = po.supplier_id AND s.company_name LIKE @SearchTerm))";
+            }
+
+            if (!string.IsNullOrWhiteSpace(selectedStatus))
+            {
+                countSql += " AND po.status = @Status";
+            }
+
+            if (startDate.HasValue)
+            {
+                countSql += " AND CAST(po.created_at AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                countSql += " AND CAST(po.created_at AS DATE) <= @EndDate";
+            }
+
+            using var countCmd = new Microsoft.Data.SqlClient.SqlCommand(countSql, conn);
+            for (int i = 0; i < clerkIds.Count; i++)
+            {
+                countCmd.Parameters.AddWithValue($"@clerkId{i}", clerkIds[i]);
+            }
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                countCmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
+            }
+            if (!string.IsNullOrWhiteSpace(selectedStatus))
+            {
+                countCmd.Parameters.AddWithValue("@Status", selectedStatus);
+            }
+            if (startDate.HasValue)
+            {
+                countCmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                countCmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+            }
+
+            var countResult = await countCmd.ExecuteScalarAsync();
+            totalCount = countResult != null ? Convert.ToInt32(countResult) : 0;
+
+            // Get data
+            var offset = (currentPage - 1) * pageSize;
+            var dataSql = $@"
+                SELECT po.id, po.po_number, po.supplier_id, s.company_name as supplier_name,
+                       po.status, po.total_amount, po.created_at, po.expected_delivery_date,
+                       COALESCE(u.name, (LTRIM(RTRIM(ISNULL(u.fname,''))) + ' ' + LTRIM(RTRIM(ISNULL(u.lname,''))))) as created_by_name
+                FROM dbo.tbl_purchase_orders po
+                INNER JOIN dbo.tbl_suppliers s ON po.supplier_id = s.id
+                INNER JOIN dbo.tbl_users u ON po.created_by = u.id
+                WHERE po.archived_at IS NULL
+                AND po.created_by IN ({clerkIdsInClause})";
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                dataSql += " AND (po.po_number LIKE @SearchTerm OR s.company_name LIKE @SearchTerm)";
+            }
+
+            if (!string.IsNullOrWhiteSpace(selectedStatus))
+            {
+                dataSql += " AND po.status = @Status";
+            }
+
+            if (startDate.HasValue)
+            {
+                dataSql += " AND CAST(po.created_at AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                dataSql += " AND CAST(po.created_at AS DATE) <= @EndDate";
+            }
+
+            dataSql += " ORDER BY po.created_at DESC OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
+
+            using var dataCmd = new Microsoft.Data.SqlClient.SqlCommand(dataSql, conn);
+            for (int i = 0; i < clerkIds.Count; i++)
+            {
+                dataCmd.Parameters.AddWithValue($"@clerkId{i}", clerkIds[i]);
+            }
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                dataCmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
+            }
+            if (!string.IsNullOrWhiteSpace(selectedStatus))
+            {
+                dataCmd.Parameters.AddWithValue("@Status", selectedStatus);
+            }
+            if (startDate.HasValue)
+            {
+                dataCmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                dataCmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+            }
+            dataCmd.Parameters.AddWithValue("@Offset", offset);
+            dataCmd.Parameters.AddWithValue("@PageSize", pageSize);
+
+            purchaseOrders = new List<IT13_Final.Services.Data.PurchaseOrderModel>();
+            using var reader = await dataCmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                purchaseOrders.Add(new IT13_Final.Services.Data.PurchaseOrderModel
+                {
+                    Id = reader.GetInt32(0),
+                    PONumber = reader.GetString(1),
+                    SupplierId = reader.GetInt32(2),
+                    SupplierName = reader.GetString(3),
+                    Status = reader.GetString(4),
+                    TotalAmount = reader.GetDecimal(5),
+                    CreatedAt = reader.GetDateTime(6),
+                    ExpectedDeliveryDate = reader.IsDBNull(7) ? null : reader.GetDateTime(7),
+                    CreatedByName = reader.IsDBNull(8) ? "N/A" : reader.GetString(8)
+                });
+            }
+
+            if (currentPage > totalPages && totalPages > 0)
+            {
+                currentPage = totalPages;
+                await LoadPurchaseOrders();
+                return;
+            }
+
+            // Calculate summary statistics
+            totalAmount = purchaseOrders.Sum(po => po.TotalAmount);
+            completedCount = purchaseOrders.Count(po => po.Status == "Completed");
+            pendingCount = purchaseOrders.Count(po => po.Status == "Pending");
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading purchase orders: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to load purchase orders. Please try again.");
+            purchaseOrders = new List<IT13_Final.Services.Data.PurchaseOrderModel>();
+            totalCount = 0;
+            totalAmount = 0m;
+            completedCount = 0;
+            pendingCount = 0;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleStatusChange()
+    {
+        currentPage = 1;
+        await ApplyFilters();
+    }
+
+    private async void HandleStartDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            startDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            startDate = null;
+            selectedDateRange = "";
+        }
+        await ApplyFilters();
+    }
+
+    private async void HandleEndDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            endDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            endDate = null;
+            selectedDateRange = "";
+        }
+        await ApplyFilters();
+    }
+
+    private async Task HandleDateRangeChange()
+    {
+        var now = DateTime.Now;
+        switch (selectedDateRange)
+        {
+            case "":
+                startDate = null;
+                endDate = null;
+                break;
+            case "today":
+                startDate = now.Date;
+                endDate = now.Date;
+                break;
+            case "yesterday":
+                startDate = now.Date.AddDays(-1);
+                endDate = now.Date.AddDays(-1);
+                break;
+            case "last7days":
+                startDate = now.Date.AddDays(-6);
+                endDate = now.Date;
+                break;
+            case "last30days":
+                startDate = now.Date.AddDays(-29);
+                endDate = now.Date;
+                break;
+            case "thismonth":
+                startDate = new DateTime(now.Year, now.Month, 1);
+                endDate = now.Date;
+                break;
+            case "thisyear":
+                startDate = new DateTime(now.Year, 1, 1);
+                endDate = now.Date;
+                break;
+        }
+        await ApplyFilters();
+    }
+
+    private async Task ClearDateFilter()
+    {
+        selectedDateRange = "";
+        startDate = null;
+        endDate = null;
+        selectedStatus = "";
+        currentPage = 1;
+        await LoadPurchaseOrders();
+    }
+
+    private async Task ApplyFilters()
+    {
+        currentPage = 1;
+        await LoadPurchaseOrders();
+    }
+
+    private void HandleSearchInput()
+    {
+        var filtered = System.Text.RegularExpressions.Regex.Replace(searchTerm, @"[^a-zA-Z0-9\s\-_]", "");
+        if (filtered != searchTerm)
+        {
+            searchTerm = filtered;
+        }
+        
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            currentPage = 1;
+            await InvokeAsync(async () => await LoadPurchaseOrders());
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task HandleClearSearch()
+    {
+        searchTerm = string.Empty;
+        currentPage = 1;
+        await LoadPurchaseOrders();
+        StateHasChanged();
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            currentPage = 1;
+            await LoadPurchaseOrders();
+        }
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages)
+        {
+            if (page != currentPage)
+            {
+                currentPage = page;
+                await LoadPurchaseOrders();
+            }
+        }
+    }
+
+    private async Task HandlePOClick(int poId)
+    {
+        try
+        {
+            // Pass 0 for userId to bypass user filter since list is already filtered by stock clerks
+            selectedPO = await PurchaseOrderService.GetPurchaseOrderDetailsAsync(poId, 0);
+            if (selectedPO == null)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Purchase order not found or you don't have permission to access it.");
+                return;
+            }
+
+            showPODetailsModal = true;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading purchase order details: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to load purchase order details. Please try again.");
+        }
+    }
+
+    private void ClosePODetailsModal()
+    {
+        showPODetailsModal = false;
+        selectedPO = null;
+        StateHasChanged();
+    }
+
+    private async Task HandlePrintPO(int poId)
+    {
+        try
+        {
+            // Pass 0 for userId to bypass user filter since list is already filtered by stock clerks
+            var po = await PurchaseOrderService.GetPurchaseOrderDetailsAsync(poId, 0);
+            if (po == null)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Purchase order not found or you don't have permission to access it.");
+                return;
+            }
+
+            var receiptData = new
+            {
+                id = po.Id,
+                poNumber = po.PONumber,
+                supplierName = po.SupplierName,
+                supplierEmail = po.SupplierEmail ?? "",
+                supplierContactNumber = po.SupplierContactNumber ?? "",
+                status = po.Status,
+                totalAmount = po.TotalAmount,
+                expectedDeliveryDate = po.ExpectedDeliveryDate?.ToString("MMM dd, yyyy") ?? "",
+                notes = po.Notes ?? "",
+                createdAt = po.CreatedAt.ToString("MMM dd, yyyy HH:mm:ss"),
+                updatedAt = po.UpdatedAt?.ToString("MMM dd, yyyy HH:mm:ss") ?? "",
+                createdByName = po.CreatedByName,
+                updatedByName = po.UpdatedByName ?? "",
+                items = po.Items.Select(i => new {
+                    productName = i.ProductName,
+                    variantName = i.VariantName,
+                    sizeName = i.SizeName ?? "",
+                    colorName = i.ColorName ?? "",
+                    colorHex = i.ColorHexValue ?? "",
+                    quantity = i.Quantity,
+                    unitPrice = i.UnitPrice,
+                    totalPrice = i.TotalPrice
+                }).ToArray()
+            };
+
+            await JSRuntime.InvokeVoidAsync("printPOCompletedReceipt", receiptData);
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error printing purchase order: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to print purchase order details. Please try again.");
+        }
+    }
+
+    private async Task PrintReport()
+    {
+        try
+        {
+            isGeneratingPDF = true;
+            StateHasChanged();
+
+            if (sellerUserId <= 0)
+            {
+                sellerUserId = AuthState.CurrentUser?.Id ?? 0;
+            }
+
+            // Get all stock clerk user IDs for this seller
+            var clerkIds = await GetStockClerkUserIdsAsync();
+            
+            if (clerkIds.Count == 0)
+            {
+                allPOsForPrint = new List<IT13_Final.Services.Data.PurchaseOrderModel>();
+            }
+            else
+            {
+                // Build parameterized IN clause
+                var userIdParams = new List<string>();
+                for (int i = 0; i < clerkIds.Count; i++)
+                {
+                    userIdParams.Add($"@clerkId{i}");
+                }
+                var clerkIdsInClause = userIdParams.Count > 0 ? string.Join(",", userIdParams) : "0";
+
+                const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+                using var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString);
+                await conn.OpenAsync();
+
+                var posSql = $@"
+                    SELECT po.id, po.po_number, po.supplier_id, s.company_name as supplier_name,
+                           po.status, po.total_amount, po.created_at, po.expected_delivery_date,
+                           COALESCE(u.name, (LTRIM(RTRIM(ISNULL(u.fname,''))) + ' ' + LTRIM(RTRIM(ISNULL(u.lname,''))))) as created_by_name
+                    FROM dbo.tbl_purchase_orders po
+                    INNER JOIN dbo.tbl_suppliers s ON po.supplier_id = s.id
+                    INNER JOIN dbo.tbl_users u ON po.created_by = u.id
+                    WHERE po.archived_at IS NULL
+                    AND po.created_by IN ({clerkIdsInClause})";
+
+                if (!string.IsNullOrWhiteSpace(searchTerm))
+                {
+                    posSql += " AND (po.po_number LIKE @SearchTerm OR s.company_name LIKE @SearchTerm)";
+                }
+
+                if (!string.IsNullOrWhiteSpace(selectedStatus))
+                {
+                    posSql += " AND po.status = @Status";
+                }
+
+                if (startDate.HasValue)
+                {
+                    posSql += " AND CAST(po.created_at AS DATE) >= @StartDate";
+                }
+
+                if (endDate.HasValue)
+                {
+                    posSql += " AND CAST(po.created_at AS DATE) <= @EndDate";
+                }
+
+                posSql += " ORDER BY po.created_at DESC";
+
+                using var cmd = new Microsoft.Data.SqlClient.SqlCommand(posSql, conn);
+                for (int i = 0; i < clerkIds.Count; i++)
+                {
+                    cmd.Parameters.AddWithValue($"@clerkId{i}", clerkIds[i]);
+                }
+                if (!string.IsNullOrWhiteSpace(searchTerm))
+                {
+                    cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
+                }
+                if (!string.IsNullOrWhiteSpace(selectedStatus))
+                {
+                    cmd.Parameters.AddWithValue("@Status", selectedStatus);
+                }
+                if (startDate.HasValue)
+                {
+                    cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+                }
+                if (endDate.HasValue)
+                {
+                    cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+                }
+
+                allPOsForPrint = new List<IT13_Final.Services.Data.PurchaseOrderModel>();
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    allPOsForPrint.Add(new IT13_Final.Services.Data.PurchaseOrderModel
+                    {
+                        Id = reader.GetInt32(0),
+                        PONumber = reader.GetString(1),
+                        SupplierId = reader.GetInt32(2),
+                        SupplierName = reader.GetString(3),
+                        Status = reader.GetString(4),
+                        TotalAmount = reader.GetDecimal(5),
+                        CreatedAt = reader.GetDateTime(6),
+                        ExpectedDeliveryDate = reader.IsDBNull(7) ? null : reader.GetDateTime(7),
+                        CreatedByName = reader.IsDBNull(8) ? "N/A" : reader.GetString(8)
+                    });
+                }
+            }
+            
+            await JSRuntime.InvokeVoidAsync("generateAndPrintPOCompletedReport", 
+                allPOsForPrint.Select(po => new {
+                    poNumber = po.PONumber,
+                    supplierName = po.SupplierName,
+                    status = po.Status,
+                    totalAmount = po.TotalAmount,
+                    expectedDeliveryDate = po.ExpectedDeliveryDate?.ToString("MMM dd, yyyy") ?? "N/A",
+                    dateCompleted = po.CreatedAt.ToString("MMM dd, yyyy"),
+                    timeCompleted = po.CreatedAt.ToString("HH:mm:ss"),
+                    createdByName = po.CreatedByName
+                }).ToArray(),
+                AuthState.CurrentUser?.FullName ?? "Seller",
+                startDate?.ToString("MMM dd, yyyy") ?? "All Time",
+                endDate?.ToString("MMM dd, yyyy") ?? "Today"
+            );
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error generating report: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("window.print");
+        }
+        finally
+        {
+            isGeneratingPDF = false;
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+    }
+}
+

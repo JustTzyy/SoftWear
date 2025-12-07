@@ -9,7 +9,13 @@
 @inject IJSRuntime JSRuntime
 @implements IDisposable
 
-<h1 class="settings-title">Settings</h1>
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Account Settings</h1>
+        <p class="welcome-date">Manage your profile, security, and preferences</p>
+    </div>
+</div>
 
 <div class="settings-grid">
     <aside class="settings-menu">
@@ -73,7 +79,7 @@
                 <DataAnnotationsValidator />
                 <div class="form-grid">
                     <div class="field">
-                        <label class="field-label">First Name</label>
+                        <label class="field-label">First Name <span class="required-asterisk">*</span></label>
                         <input id="firstNameInput" class="input" value="@_personalModel.FirstName" @oninput="FilterFirstNameInput" @ref="firstNameRef" />
                         <ValidationMessage For="@(() => _personalModel.FirstName)" />
                     </div>
@@ -82,27 +88,27 @@
                         <input id="middleNameInput" class="input" value="@_personalModel.MiddleName" @oninput="FilterMiddleNameInput" @ref="middleNameRef" />
                     </div>
                     <div class="field">
-                        <label class="field-label">Last Name</label>
+                        <label class="field-label">Last Name <span class="required-asterisk">*</span></label>
                         <input id="lastNameInput" class="input" value="@_personalModel.LastName" @oninput="FilterLastNameInput" @ref="lastNameRef" />
                         <ValidationMessage For="@(() => _personalModel.LastName)" />
                     </div>
                     <div class="field">
-                        <label class="field-label">Contact Number</label>
-                        <InputText class="input" @bind-Value="_personalModel.Contact" />
+                        <label class="field-label">Contact Number <span class="required-asterisk">*</span></label>
+                        <input id="contactNumberInput" class="input" @bind="_personalModel.Contact" @bind:event="oninput" />
                         <ValidationMessage For="@(() => _personalModel.Contact)" />
                     </div>
                     <div class="field">
-                        <label class="field-label">Birthday</label>
+                        <label class="field-label">Birthday <span class="required-asterisk">*</span></label>
                         <InputDate TValue="DateOnly?" class="input" @bind-Value="PersonalBirthday" />
                         <ValidationMessage For="@(() => _personalModel.Birthday)" />
                     </div>
                     <div class="field">
-                        <label class="field-label">Age</label>
+                        <label class="field-label">Age <span class="required-asterisk">*</span></label>
                         <InputNumber TValue="int?" class="input" @bind-Value="_personalModel.Age" disabled />
                         <ValidationMessage For="@(() => _personalModel.Age)" />
                     </div>
                     <div class="field">
-                        <label class="field-label">Sex</label>
+                        <label class="field-label">Sex <span class="required-asterisk">*</span></label>
                         <select class="input" value="@_personalModel.Sex" @onchange="@((ChangeEventArgs e) => { _personalModel.Sex = e.Value?.ToString() ?? string.Empty; StateHasChanged(); })">
                             <option value="">Select</option>
                             <option value="Male">Male</option>
@@ -148,12 +154,12 @@
                 <DataAnnotationsValidator />
                 <div class="form-grid">
                     <div class="field" style="grid-column: 1 / -1;">
-                        <label class="field-label">Street Address</label>
-                        <InputText class="input" @bind-Value="_addressModel.Street" placeholder="e.g., 123 Main St" />
+                        <label class="field-label">Street Address <span class="required-asterisk">*</span></label>
+                        <input id="streetAddressInput" class="input" @bind="_addressModel.Street" @bind:event="oninput" placeholder="e.g., 123 Main St" />
                         <ValidationMessage For="@(() => _addressModel.Street)" />
                     </div>
                     <div class="field">
-                        <label class="field-label">Province</label>
+                        <label class="field-label">Province <span class="required-asterisk">*</span></label>
                         <select class="input" value="@_addressModel.Province" @onchange="OnProvinceChanged">
                             <option value="">Select Province</option>
                             @foreach (var province in _provinces)
@@ -164,7 +170,7 @@
                         <ValidationMessage For="@(() => _addressModel.Province)" />
                     </div>
                     <div class="field">
-                        <label class="field-label">City</label>
+                        <label class="field-label">City <span class="required-asterisk">*</span></label>
                         <select class="input" value="@_addressModel.City" @onchange="OnCityChanged" disabled="@(string.IsNullOrEmpty(_addressModel.Province))">
                             <option value="">Select City</option>
                             @foreach (var city in _cities)
@@ -175,7 +181,7 @@
                         <ValidationMessage For="@(() => _addressModel.City)" />
                     </div>
                     <div class="field">
-                        <label class="field-label">Zip Code</label>
+                        <label class="field-label">Zip Code <span class="required-asterisk">*</span></label>
                         <input class="input" value="@_addressModel.Zip" disabled />
                         <ValidationMessage For="@(() => _addressModel.Zip)" />
                     </div>
@@ -220,13 +226,13 @@
                         <input class="input" value="@(AuthState.CurrentUser?.Email ?? "")" disabled />
                     </div>
                     <div class="field" style="grid-column: 1 / -1;">
-                        <label class="field-label">New Email</label>
-                        <InputText class="input" @bind-Value="_emailModel.NewEmail" placeholder="Enter new email address" />
+                        <label class="field-label">New Email <span class="required-asterisk">*</span></label>
+                        <input id="newEmailInput" class="input" @bind="_emailModel.NewEmail" @bind:event="oninput" placeholder="Enter new email address" />
                         <ValidationMessage For="@(() => _emailModel.NewEmail)" />
                     </div>
                     <div class="field" style="grid-column: 1 / -1;">
-                        <label class="field-label">Confirm New Email</label>
-                        <InputText class="input" @bind-Value="_emailModel.ConfirmEmail" placeholder="Confirm new email address" />
+                        <label class="field-label">Confirm New Email <span class="required-asterisk">*</span></label>
+                        <input id="confirmEmailInput" class="input" @bind="_emailModel.ConfirmEmail" @bind:event="oninput" placeholder="Confirm new email address" />
                         <ValidationMessage For="@(() => _emailModel.ConfirmEmail)" />
                     </div>
                 </div>
@@ -492,19 +498,32 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        // Initialize filters when switching to specific tabs
+        // JavaScript functions check if elements exist, so safe to call
+        try
         {
-            // Initialize JavaScript filtering for name inputs
-            try
+            if (activeTab == "personal")
             {
+                // Initialize JavaScript filtering for name inputs (with auto-capitalization)
                 await JSRuntime.InvokeVoidAsync("filterNameInput", "firstNameInput");
                 await JSRuntime.InvokeVoidAsync("filterNameInput", "middleNameInput");
                 await JSRuntime.InvokeVoidAsync("filterNameInput", "lastNameInput");
+                // Initialize contact number filter
+                await JSRuntime.InvokeVoidAsync("setupContactNumberFilter", "contactNumberInput");
             }
-            catch (Exception)
+            else if (activeTab == "address")
             {
-                // JavaScript interop might not be available yet, ignore
+                await JSRuntime.InvokeVoidAsync("setupAddressFilter", "streetAddressInput");
             }
+            else if (activeTab == "email")
+            {
+                await JSRuntime.InvokeVoidAsync("setupEmailFilter", "newEmailInput");
+                await JSRuntime.InvokeVoidAsync("setupEmailFilter", "confirmEmailInput");
+            }
+        }
+        catch (Exception)
+        {
+            // JavaScript interop might not be available yet or element doesn't exist, ignore
         }
     }
 
@@ -662,24 +681,51 @@
     private void FilterFirstNameInput(ChangeEventArgs e)
     {
         var val = e.Value?.ToString() ?? string.Empty;
+        // Filter to allow only letters, spaces, apostrophes, hyphens, and periods
         var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
-        _personalModel.FirstName = filtered;
+        // Auto-capitalize: first letter of each word
+        if (!string.IsNullOrEmpty(filtered))
+        {
+            _personalModel.FirstName = System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(filtered.ToLower());
+        }
+        else
+        {
+            _personalModel.FirstName = string.Empty;
+        }
         StateHasChanged();
     }
 
     private void FilterMiddleNameInput(ChangeEventArgs e)
     {
         var val = e.Value?.ToString() ?? string.Empty;
+        // Filter to allow only letters, spaces, apostrophes, hyphens, and periods
         var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
-        _personalModel.MiddleName = filtered;
+        // Auto-capitalize: first letter of each word
+        if (!string.IsNullOrEmpty(filtered))
+        {
+            _personalModel.MiddleName = System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(filtered.ToLower());
+        }
+        else
+        {
+            _personalModel.MiddleName = string.Empty;
+        }
         StateHasChanged();
     }
 
     private void FilterLastNameInput(ChangeEventArgs e)
     {
         var val = e.Value?.ToString() ?? string.Empty;
+        // Filter to allow only letters, spaces, apostrophes, hyphens, and periods
         var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
-        _personalModel.LastName = filtered;
+        // Auto-capitalize: first letter of each word
+        if (!string.IsNullOrEmpty(filtered))
+        {
+            _personalModel.LastName = System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(filtered.ToLower());
+        }
+        else
+        {
+            _personalModel.LastName = string.Empty;
+        }
         StateHasChanged();
     }
 

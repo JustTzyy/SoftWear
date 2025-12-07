@@ -2,14 +2,84 @@
 @layout IT13_Final.Components.Layout.StockClerk.StockClerk
 @inject IT13_Final.Services.Auth.AuthState AuthState
 @inject IT13_Final.Services.Data.IUserService UserService
-@inject IT13_Final.Services.Data.IProductService ProductService
-@inject IT13_Final.Services.Data.IVariantService VariantService
-@inject IT13_Final.Services.Data.ICategoryService CategoryService
-@inject IT13_Final.Services.Data.ISupplierService SupplierService
+@inject IT13_Final.Services.Data.IInventoryService InventoryService
+@inject IT13_Final.Services.Data.IStockInService StockInService
+@inject IT13_Final.Services.Data.IStockOutService StockOutService
+@inject IT13_Final.Services.Data.IStockAdjustmentService StockAdjustmentService
+@inject IT13_Final.Services.Data.IPurchaseOrderService PurchaseOrderService
+@inject IT13_Final.Services.Audit.IHistoryService HistoryService
 @inject NavigationManager Nav
-@using Microsoft.Data.SqlClient
+@inject IJSRuntime JSRuntime
+@using System.Linq
+@implements IDisposable
 
-<h1 class="page-title">Dashboard Reports</h1>
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">@GetGreeting(), @(AuthState.CurrentUser?.FullName ?? "Stock Clerk")!</h1>
+        <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintDashboard" title="Print Dashboard">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                <rect x="6" y="14" width="12" height="8"></rect>
+            </svg>
+        </button>
+    </div>
+</div>
+
+@* Search and Date Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.35-4.35"></path>
+        </svg>
+        <input type="text" id="dashboard-search-input" class="search-input" placeholder="Search inventory, products..." @bind="searchTerm" @bind:event="oninput" @bind:after="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            <button class="clear-search-btn" @onclick="HandleClearSearch" title="Clear">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        }
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">Custom</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="text" 
+               class="date-input" 
+               value="@(startDate?.ToString("MM/dd/yyyy"))" 
+               placeholder="mm/dd/yyyy"
+               @onchange="HandleFromDateChange" />
+        <span class="date-separator">to</span>
+        <input type="text" 
+               class="date-input" 
+               value="@(endDate?.ToString("MM/dd/yyyy"))" 
+               placeholder="mm/dd/yyyy"
+               @onchange="HandleToDateChange" />
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
 
 @if (showSecurityAlert)
 {
@@ -21,247 +91,548 @@
                     <path d="M9 12l2 2 4-4"></path>
                 </svg>
                 <span>Security Alert</span>
-                <button class="alert-close" @onclick="HandleLater">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                </button>
+                <button class="alert-close" @onclick="HandleLater">×</button>
             </div>
-            
             <div class="security-alert-body">
-                <svg class="warning-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                    <line x1="12" y1="9" x2="12" y2="13"></line>
-                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                </svg>
-                <p class="alert-message">You are currently using a default password. For security reasons, please change your password immediately.</p>
+                <p>You are currently using a default password. For security reasons, please change your password immediately.</p>
             </div>
-
             <div class="security-alert-footer">
-                <button class="alert-btn later-btn" @onclick="HandleLater">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                    <span>Later</span>
-                </button>
-                <button class="alert-btn change-password-btn" @onclick="HandleChangePassword">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>  
-                    </svg>
-                    <span>Change Password</span>
-                </button>
+                <button class="btn-secondary" @onclick="HandleLater">Later</button>
+                <button class="btn-primary" @onclick="HandleChangePassword">Change Password</button>
             </div>
         </div>
     </div>
 }
 
-<div class="search-row">
-    <input class="search" placeholder="Search dashboard data" />
-    <button class="print">Print Report</button>
-    <div class="fill"></div>
-</div>
+@if (isLoading)
+{
+    <div class="loading-state">
+        <div class="loading-spinner"></div>
+        <p>Loading dashboard...</p>
+    </div>
+}
+else
+{
+    @* Key Stock KPIs *@
+    @if (showKpiSection)
+    {
+    <div class="kpi-row">
+        <div class="kpi-card kpi-stock-in" @onclick='() => Nav.NavigateTo("/stockclerk/Stock_In_Report")'>
+            <div class="kpi-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 5v14M5 12l7-7 7 7"></path>
+                </svg>
+            </div>
+            <div class="kpi-content">
+                <span class="kpi-label">Stock In</span>
+                <span class="kpi-value">@stats.TotalStockIn</span>
+                <span class="kpi-trend trend-up">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                    <span>@stats.TodayStockIn today</span>
+                </span>
+            </div>
+        </div>
 
-<section class="card">
-    <h2 class="card-title">Inventory Management KPIs</h2>
-    <div class="subtext">Overview of inventory and stock management metrics</div>
+        <div class="kpi-card kpi-stock-out" @onclick='() => Nav.NavigateTo("/stockclerk/Stock_Out_Report")'>
+            <div class="kpi-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 19V5M5 12l7 7 7-7"></path>
+                </svg>
+            </div>
+            <div class="kpi-content">
+                <span class="kpi-label">Stock Out</span>
+                <span class="kpi-value">@stats.TotalStockOut</span>
+                <span class="kpi-trend trend-down">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    <span>@stats.TodayStockOut today</span>
+                </span>
+            </div>
+        </div>
 
-    <div class="grid-4">
-        <div class="metric">
-            <div class="label">TOTAL PRODUCTS</div>
-            <div class="value">@totalProducts</div>
+        <div class="kpi-card kpi-adjustments" @onclick='() => Nav.NavigateTo("/stockclerk/Stock_Adjustment_Report")'>
+            <div class="kpi-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+            </div>
+            <div class="kpi-content">
+                <span class="kpi-label">Adjustments</span>
+                <span class="kpi-value">@stats.TotalAdjustments</span>
+                <span class="kpi-trend">
+                    <span>@stats.TodayAdjustments today</span>
+                </span>
+            </div>
         </div>
-        <div class="metric">
-            <div class="label">TOTAL VARIANTS</div>
-            <div class="value">@totalVariants</div>
+
+        <div class="kpi-card kpi-low-stock @(stats.LowStockItems > 0 ? "alert" : "")" @onclick='() => Nav.NavigateTo("/stockclerk/Inventory")'>
+            <div class="kpi-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                    <line x1="12" y1="9" x2="12" y2="13"></line>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+            </div>
+            <div class="kpi-content">
+                <span class="kpi-label">Low Stock Alert</span>
+                <span class="kpi-value @(stats.LowStockItems > 0 ? "alert-value" : "")">@stats.LowStockItems</span>
+                <span class="kpi-trend @(stats.LowStockItems > 0 ? "trend-warning" : "trend-success")">
+                    @if (stats.LowStockItems > 0)
+                    {
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path></svg>
+                        <span>Needs attention</span>
+                    }
+                    else
+                    {
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                        <span>All stock healthy</span>
+                    }
+                </span>
+            </div>
         </div>
-        <div class="metric">
-            <div class="label">CATEGORIES</div>
-            <div class="value">@totalCategories</div>
-        </div>
-        <div class="metric">
-            <div class="label">SUPPLIERS</div>
-            <div class="value">@totalSuppliers</div>
+
+        <div class="kpi-card kpi-products" @onclick='() => Nav.NavigateTo("/stockclerk/Inventory")'>
+            <div class="kpi-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                    <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                </svg>
+            </div>
+            <div class="kpi-content">
+                <span class="kpi-label">Total Products</span>
+                <span class="kpi-value">@stats.TotalProducts</span>
+                <span class="kpi-trend">
+                    <span>Product variants</span>
+                </span>
+            </div>
         </div>
     </div>
-</section>
+    }
 
-<section class="card">
-    <h2 class="card-title">Inventory Overview</h2>
-    <div class="subtext">Summary of inventory and stock management</div>
-    <div class="grid-4">
-        <div class="metric sm">
-            <div class="label">ACTIVE PRODUCTS</div>
-            <div class="value">@activeProducts</div>
-        </div>
-        <div class="metric sm">
-            <div class="label">ACTIVE VARIANTS</div>
-            <div class="value">@activeVariants</div>
-        </div>
-        <div class="metric sm">
-            <div class="label">ARCHIVED PRODUCTS</div>
-            <div class="value">@archivedProducts</div>
-        </div>
-        <div class="metric sm">
-            <div class="label">ARCHIVED VARIANTS</div>
-            <div class="value">@archivedVariants</div>
-        </div>
-    </div>
-</section>
+    @* Main Charts Row *@
+    @if (showStockChart)
+    {
+    <div class="charts-grid">
+        @* Stock Movement Trend *@
+        <div class="chart-card chart-wide" @onclick='() => Nav.NavigateTo("/stockclerk/Stock_In_Report")'>
+            <div class="chart-header">
+                <h3>Stock Movement Trend</h3>
+                <span class="chart-subtitle">Daily stock in vs stock out</span>
+            </div>
+            <div class="chart-body" @onclick:stopPropagation>
+                <svg class="line-chart" viewBox="0 0 800 300" preserveAspectRatio="xMidYMid meet">
+                    @if ((stockInData.Any() && stockInData.Any(d => d.Count > 0)) || (stockOutData.Any() && stockOutData.Any(d => d.Count > 0)))
+                    {
+                        var maxIn = stockInData.Any() ? stockInData.Max(d => d.Count) : 0;
+                        var maxOut = stockOutData.Any() ? stockOutData.Max(d => d.Count) : 0;
+                        var maxAmount = Math.Max(maxIn, maxOut);
+                        if (maxAmount == 0) maxAmount = 1;
+                        var chartHeight = 220.0;
+                        var chartWidth = 700.0;
+                        var dataCount = Math.Max(stockInData.Count, stockOutData.Count);
+                        var pointSpacing = chartWidth / Math.Max(dataCount - 1, 1);
 
-<section class="card">
-    <h2 class="card-title">Products by Category</h2>
-    <div class="subtext">Distribution of products across different categories</div>
-    <div class="chart-container">
-        <svg class="bar-chart" viewBox="0 0 800 300" preserveAspectRatio="xMidYMid meet">
-            @if (categoryData != null && categoryData.Any())
-            {
-                var maxValue = categoryData.Max(c => c.Count);
-                var barWidth = 700.0 / categoryData.Count;
-                var chartHeight = 250.0;
-                var spacing = 10.0;
-                var xPos = 50.0;
-                
-                @foreach (var item in categoryData)
-                {
-                    var barHeight = maxValue > 0 ? (item.Count / (double)maxValue) * chartHeight : 0;
-                    var yPos = chartHeight - barHeight + 25;
-                    
-                    <g>
-                        <rect x="@xPos" y="@yPos" width="@(barWidth - spacing)" height="@barHeight" 
-                              fill="#A2B9CD" rx="4" class="chart-bar"/>
-                        @{
-                            var textX1 = xPos + (barWidth - spacing) / 2;
-                            var textY1 = yPos - 5;
-                            var textX2 = xPos + (barWidth - spacing) / 2;
-                            var textY2 = chartHeight + 45;
+                        @* Stock In Line *@
+                        var inFillPath = "M 60,240 ";
+                        var inLinePath = "M ";
+                        for (int i = 0; i < stockInData.Count; i++)
+                        {
+                            var item = stockInData[i];
+                            var x = 60 + (i * pointSpacing);
+                            var y = maxAmount > 0 ? 240 - ((double)item.Count / (double)maxAmount) * chartHeight : 240;
+                            
+                            if (i == 0)
+                            {
+                                inLinePath += $"{x},{y} ";
+                                inFillPath += $"L {x},{y} ";
+                            }
+                            else
+                            {
+                                inLinePath += $"L {x},{y} ";
+                                inFillPath += $"L {x},{y} ";
+                            }
                         }
-                        @CreateSvgText(textX1.ToString("F1"), textY1.ToString("F1"), "middle", "12", "600", "#304D6D", item.Count.ToString())
-                        @CreateSvgTextWithTransform(textX2.ToString("F1"), textY2.ToString("F1"), "middle", "11", "#6b6b6b", $"rotate(-45 {textX2:F1} {textY2:F1})", item.Name)
-                    </g>
-                    xPos += barWidth;
-                }
-                
-                <!-- Y-axis labels -->
-                @for (int i = 0; i <= 5; i++)
-                {
-                    var value = (int)(maxValue * i / 5.0);
-                    var y = chartHeight - (chartHeight * i / 5.0) + 25;
-                    var textY = y + 4;
-                    <line x1="45" y1="@y" x2="50" y2="@y" stroke="#E0E0E0" stroke-width="1"/>
-                    @CreateSvgText("40", textY.ToString("F1"), "end", "10", "", "#6b6b6b", value.ToString())
-                }
-                
-                <!-- Axes -->
-                <line x1="50" y1="25" x2="50" y2="@(chartHeight + 25)" stroke="#304D6D" stroke-width="2"/>
-                <line x1="50" y1="@(chartHeight + 25)" x2="750" y2="@(chartHeight + 25)" stroke="#304D6D" stroke-width="2"/>
-            }
-            else
-            {
-                var noDataMsg = "No category data available";
-                @CreateSvgText("400", "150", "middle", "14", "", "#6b6b6b", noDataMsg)
-            }
-        </svg>
-    </div>
-</section>
+                        inFillPath += $"L {60 + (stockInData.Count - 1) * pointSpacing},240 Z";
 
-<section class="card">
-    <h2 class="card-title">Recent Product Activity</h2>
-    <div class="subtext">Products created over the last 30 days</div>
-    <div class="chart-container">
-        <svg class="line-chart" viewBox="0 0 800 300" preserveAspectRatio="xMidYMid meet">
-            @if (recentProductsData != null && recentProductsData.Any())
-            {
-                var maxValue = recentProductsData.Max(p => p.Count);
-                var chartWidth = 700.0;
-                var chartHeight = 250.0;
-                var pointCount = recentProductsData.Count;
-                var xStep = chartWidth / (pointCount > 1 ? pointCount - 1 : 1);
-                var points = new List<string>();
-                
-                @for (int i = 0; i < recentProductsData.Count; i++)
-                {
-                    var x = 50 + (i * xStep);
-                    var y = chartHeight + 25 - (maxValue > 0 ? (recentProductsData[i].Count / (double)maxValue) * chartHeight : 0);
-                    points.Add($"{x},{y}");
+                        @* Stock Out Line *@
+                        var outLinePath = "M ";
+                        for (int i = 0; i < stockOutData.Count; i++)
+                        {
+                            var item = stockOutData[i];
+                            var x = 60 + (i * pointSpacing);
+                            var y = maxAmount > 0 ? 240 - ((double)item.Count / (double)maxAmount) * chartHeight : 240;
+                            
+                            if (i == 0)
+                            {
+                                outLinePath += $"{x},{y} ";
+                            }
+                            else
+                            {
+                                outLinePath += $"L {x},{y} ";
+                            }
+                        }
+
+                        <defs>
+                            <linearGradient id="stockInGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" style="stop-color:#0d9488;stop-opacity:0.3" />
+                                <stop offset="100%" style="stop-color:#0d9488;stop-opacity:0" />
+                            </linearGradient>
+                        </defs>
+
+                        <path d="@inFillPath" fill="url(#stockInGradient)" />
+                        <path d="@inLinePath" fill="none" stroke="#0d9488" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                        <path d="@outLinePath" fill="none" stroke="#f43f5e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="8,4" />
+
+                        @* Data points for Stock In *@
+                        @for (int i = 0; i < stockInData.Count; i++)
+                        {
+                            var item = stockInData[i];
+                            var x = 60 + (i * pointSpacing);
+                            var y = maxAmount > 0 ? 240 - ((double)item.Count / (double)maxAmount) * chartHeight : 240;
+                            
+                            if (item.Count > 0 && (i == 0 || i == stockInData.Count - 1 || i % 5 == 0))
+                            {
+                                <circle cx="@x" cy="@y" r="5" fill="#0d9488" stroke="#fff" stroke-width="2" class="data-point" />
+                            }
+                        }
+
+                        @* X-axis labels *@
+                        @for (int i = 0; i < dataCount; i += Math.Max(1, dataCount / 6))
+                        {
+                            var date = i < stockInData.Count ? stockInData[i].Date : stockOutData[i].Date;
+                            var x = 60 + (i * pointSpacing);
+                            @((MarkupString)$"<text x=\"{x}\" y=\"265\" font-size=\"10\" fill=\"#6b7280\" text-anchor=\"middle\">{date.ToString("MMM d")}</text>")
+                        }
+
+                        @* Y-axis labels *@
+                        @for (int i = 0; i <= 4; i++)
+                        {
+                            var value = maxAmount * (4 - i) / 4.0;
+                            var y = 20 + (i * chartHeight / 4);
+                            @((MarkupString)$"<text x=\"55\" y=\"{y + 4}\" font-size=\"10\" fill=\"#6b7280\" text-anchor=\"end\">{(int)value}</text>")
+                            <line x1="60" y1="@y" x2="760" y2="@y" stroke="#e5e7eb" stroke-width="1" stroke-dasharray="4"/>
+                        }
+
+                        @* Legend *@
+                        <rect x="580" y="10" width="12" height="12" fill="#0d9488" rx="2" />
+                        @: <text x="597" y="20" font-size="11" fill="#6b7280">Stock In</text>
+                        <rect x="660" y="10" width="12" height="12" fill="#f43f5e" rx="2" />
+                        @: <text x="677" y="20" font-size="11" fill="#6b7280">Stock Out</text>
+                    }
+                    else
+                    {
+                        @: <text x="400" y="150" font-size="14" fill="#9ca3af" text-anchor="middle">No stock movement data available</text>
+                    }
+                </svg>
+            </div>
+        </div>
+
+        @* Stock Health Overview *@
+        <div class="chart-card" @onclick='() => Nav.NavigateTo("/stockclerk/Inventory")'>
+            <div class="chart-header">
+                <h3>Stock Health Overview</h3>
+                <span class="chart-subtitle">Inventory metrics</span>
+            </div>
+            <div class="chart-body" @onclick:stopPropagation>
+                @{
+                    var totalMovements = stats.TotalStockIn + stats.TotalStockOut + stats.TotalAdjustments;
+                    var healthMax = Math.Max(stats.TotalStockIn, Math.Max(stats.TotalStockOut, Math.Max(stats.TotalAdjustments, stats.TotalProducts)));
+                    if (healthMax <= 0) healthMax = 1;
                 }
-                
-                @if (points.Count > 1)
-                {
-                    <polyline points="@string.Join(" ", points)" fill="none" stroke="#A2B9CD" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-                }
-                
-                @for (int i = 0; i < recentProductsData.Count; i++)
-                {
-                    var x = 50 + (i * xStep);
-                    var y = chartHeight + 25 - (maxValue > 0 ? (recentProductsData[i].Count / (double)maxValue) * chartHeight : 0);
-                    var textY1 = y - 10;
-                    var textY2 = chartHeight + 45;
-                    var count = recentProductsData[i].Count;
-                    var date = recentProductsData[i].Date;
-                    <circle cx="@x" cy="@y" r="5" fill="#304D6D"/>
-                    @CreateSvgText(x.ToString("F1"), textY1.ToString("F1"), "middle", "11", "600", "#304D6D", count.ToString())
-                    @CreateSvgText(x.ToString("F1"), textY2.ToString("F1"), "middle", "10", "", "#6b6b6b", date)
-                }
-                
-                <!-- Y-axis labels -->
-                @for (int i = 0; i <= 5; i++)
-                {
-                    var value = (int)(maxValue * i / 5.0);
-                    var y = chartHeight - (chartHeight * i / 5.0) + 25;
-                    var textY = y + 4;
-                    <line x1="45" y1="@y" x2="50" y2="@y" stroke="#E0E0E0" stroke-width="1"/>
-                    @CreateSvgText("40", textY.ToString("F1"), "end", "10", "", "#6b6b6b", value.ToString())
-                }
-                
-                <!-- Axes -->
-                <line x1="50" y1="25" x2="50" y2="@(chartHeight + 25)" stroke="#304D6D" stroke-width="2"/>
-                <line x1="50" y1="@(chartHeight + 25)" x2="750" y2="@(chartHeight + 25)" stroke="#304D6D" stroke-width="2"/>
-            }
-            else
-            {
-                var noActivityMsg = "No recent product activity";
-                @CreateSvgText("400",    "150", "middle", "14", "", "#6b6b6b", noActivityMsg)
-            }
-        </svg>
+                <div class="horizontal-bars">
+                    <div class="bar-row">
+                        <span class="bar-label">Stock In</span>
+                        <div class="bar-track">
+                            <div class="bar-fill bar-stock-in" style="width: @((stats.TotalStockIn > 0 ? (double)stats.TotalStockIn / healthMax * 100 : 0).ToString("F1"))%"></div>
+                        </div>
+                        <span class="bar-value">@stats.TotalStockIn</span>
+                    </div>
+                    <div class="bar-row">
+                        <span class="bar-label">Stock Out</span>
+                        <div class="bar-track">
+                            <div class="bar-fill bar-stock-out" style="width: @((stats.TotalStockOut > 0 ? (double)stats.TotalStockOut / healthMax * 100 : 0).ToString("F1"))%"></div>
+                        </div>
+                        <span class="bar-value">@stats.TotalStockOut</span>
+                    </div>
+                    <div class="bar-row">
+                        <span class="bar-label">Adjustments</span>
+                        <div class="bar-track">
+                            <div class="bar-fill bar-adjustments" style="width: @((stats.TotalAdjustments > 0 ? (double)stats.TotalAdjustments / healthMax * 100 : 0).ToString("F1"))%"></div>
+                        </div>
+                        <span class="bar-value">@stats.TotalAdjustments</span>
+                    </div>
+                    <div class="bar-row">
+                        <span class="bar-label">Net Change</span>
+                        <div class="bar-track">
+                            @{
+                                var netChange = stats.TotalStockIn - stats.TotalStockOut;
+                            }
+                            <div class="bar-fill @(netChange >= 0 ? "bar-net-positive" : "bar-net-negative")" style="width: @((Math.Abs(netChange) > 0 ? Math.Abs((double)netChange) / healthMax * 100 : 0).ToString("F1"))%"></div>
+                        </div>
+                        <span class="bar-value @(netChange >= 0 ? "positive" : "negative")">@(netChange >= 0 ? "+" : "")@netChange</span>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-</section>
+    }
+
+    @* Adjustments Chart *@
+    @if (showAdjustmentsChart)
+    {
+    <div class="chart-card chart-full" @onclick='() => Nav.NavigateTo("/stockclerk/Stock_Adjustment_Report")'>
+        <div class="chart-header">
+            <h3>Stock Adjustments Trend</h3>
+            <span class="chart-subtitle">Increases vs Decreases over time</span>
+        </div>
+        <div class="chart-body" @onclick:stopPropagation>
+            <div class="bar-chart-vertical">
+                @if (adjustmentData.Any() && adjustmentData.Any(d => d.Count > 0))
+                {
+                    var maxAdjust = adjustmentData.Max(d => Math.Max(d.IncreaseCount, d.DecreaseCount));
+                    if (maxAdjust == 0) maxAdjust = 1;
+                    
+                    @foreach (var day in adjustmentData.TakeLast(14))
+                    {
+                        var incPercentage = maxAdjust > 0 ? (day.IncreaseCount / (double)maxAdjust) * 100 : 0;
+                        var decPercentage = maxAdjust > 0 ? (day.DecreaseCount / (double)maxAdjust) * 100 : 0;
+                        <div class="bar-column-dual">
+                            <div class="bar-value-top">@(day.IncreaseCount > 0 ? day.IncreaseCount.ToString() : "")</div>
+                            <div class="bar-wrapper-dual">
+                                <div class="bar-v bar-increase" style="height: @incPercentage%"></div>
+                                <div class="bar-v bar-decrease" style="height: @decPercentage%"></div>
+                            </div>
+                            <div class="bar-label-bottom">@day.Date.ToString("MMM d")</div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="empty-chart">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M3 3v18h18"></path>
+                            <path d="m19 9-5 5-4-4-3 3"></path>
+                        </svg>
+                        <span>No adjustment data available</span>
+                    </div>
+                }
+            </div>
+            <div class="chart-legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #10b981;"></div>
+                    <span>Increases</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #f43f5e;"></div>
+                    <span>Decreases</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    }
+
+    @* Bottom Section: Lists *@
+    @if (showLowStock || showInsights)
+    {
+    <div class="bottom-grid">
+        @* Low Stock Alerts *@
+        @if (showLowStock)
+        {
+        <div class="list-card @(lowStockItems.Any() ? "alert-card" : "")">
+            <div class="list-header">
+                <h3>Low Stock Alerts</h3>
+                <button class="view-all-btn" @onclick='() => Nav.NavigateTo("/stockclerk/Inventory")'>View All</button>
+            </div>
+            <div class="list-body">
+                @if (lowStockItems.Any())
+                {
+                    @foreach (var (item, index) in lowStockItems.Take(5).Select((p, i) => (p, i)))
+                    {
+                        <div class="list-item alert-item">
+                            <div class="alert-indicator"></div>
+                            <div class="item-info">
+                                <span class="item-name">@item.ProductName</span>
+                                <span class="item-detail">@item.VariantName @(item.SizeName != null ? $"- {item.SizeName}" : "") @(item.ColorName != null ? $"({item.ColorName})" : "")</span>
+                            </div>
+                            <div class="stock-info">
+                                <span class="current-stock">@item.CurrentStock</span>
+                                <span class="reorder-level">/ @item.ReorderLevel</span>
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="empty-state success">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
+                        <p>All stock levels are healthy!</p>
+                    </div>
+                }
+            </div>
+        </div>
+        }
+
+        @* Performance Insights *@
+        @if (showInsights)
+        {
+        <div class="list-card insights-card">
+            <div class="list-header">
+                <h3>Performance Insights</h3>
+                <span class="insights-badge">Analytics</span>
+            </div>
+            <div class="list-body">
+                <div class="insights-grid">
+                    <div class="insight-item">
+                        <div class="insight-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                            </svg>
+                        </div>
+                        <div class="insight-content">
+                            <span class="insight-label">Total Movements</span>
+                            <span class="insight-value">@(stats.TotalStockIn + stats.TotalStockOut + stats.TotalAdjustments)</span>
+                        </div>
+                    </div>
+                    <div class="insight-item">
+                        <div class="insight-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polyline points="12 6 12 12 16 14"></polyline>
+                            </svg>
+                        </div>
+                        <div class="insight-content">
+                            <span class="insight-label">Net Today</span>
+                            <span class="insight-value @(stats.TodayStockIn - stats.TodayStockOut >= 0 ? "positive" : "negative")">
+                                @(stats.TodayStockIn - stats.TodayStockOut >= 0 ? "+" : "")@(stats.TodayStockIn - stats.TodayStockOut)
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="recommendations">
+                    @if (lowStockItems.Any())
+                    {
+                        <div class="recommendation-item warning">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                <line x1="12" y1="9" x2="12" y2="13"></line>
+                                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                            </svg>
+                            <span><strong>@lowStockItems.First().ProductName</strong> has only @lowStockItems.First().CurrentStock units</span>
+                        </div>
+                    }
+                    @if (stats.TodayStockOut > stats.TodayStockIn)
+                    {
+                        <div class="recommendation-item info">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="16" x2="12" y2="12"></line>
+                                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                            </svg>
+                            <span>Stock out exceeds stock in today - monitor levels</span>
+                        </div>
+                    }
+                    else if (stats.TodayStockIn > stats.TodayStockOut)
+                    {
+                        <div class="recommendation-item success">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                            </svg>
+                            <span>Stock levels increasing - inventory healthy</span>
+                        </div>
+                    }
+                    @if (!lowStockItems.Any() && stats.TodayStockIn >= stats.TodayStockOut)
+                    {
+                        <div class="recommendation-item success">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                            </svg>
+                            <span>Excellent stock management - all levels optimal!</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+        }
+    </div>
+    }
+
+    @* No Results Message *@
+    @if (!string.IsNullOrWhiteSpace(searchTerm) && !showKpiSection && !showStockChart && !showAdjustmentsChart && !showLowStock && !showInsights)
+    {
+        <div class="no-results-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width: 64px; height: 64px; margin-bottom: 16px; opacity: 0.5;">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <h3 style="margin: 0 0 8px; color: #374151;">No results found</h3>
+            <p style="margin: 0; color: #6b7280;">No dashboard sections match "<strong>@searchTerm</strong>"</p>
+            <button class="filter-btn" style="margin-top: 16px;" @onclick="HandleClearSearch">Clear Search</button>
+        </div>
+    }
+}
 
 @code {
     private bool showSecurityAlert = false;
+    private bool isLoading = true;
     private int sellerUserId = 0;
-    private int totalProducts = 0;
-    private int totalVariants = 0;
-    private int totalCategories = 0;
-    private int totalSuppliers = 0;
-    private int activeProducts = 0;
-    private int activeVariants = 0;
-    private int archivedProducts = 0;
-    private int archivedVariants = 0;
-    private List<CategoryChartData> categoryData = new();
-    private List<RecentProductData> recentProductsData = new();
+    private IT13_Final.Services.Data.InventoryDashboardStatsModel stats = new();
+    private List<IT13_Final.Services.Data.DailyStockInData> stockInData = new();
+    private List<IT13_Final.Services.Data.DailyStockOutData> stockOutData = new();
+    private List<IT13_Final.Services.Data.DailyAdjustmentData> adjustmentData = new();
+    private List<IT13_Final.Services.Data.LowStockItemModel> lowStockItems = new();
 
-    private class CategoryChartData
+    // Search and Filter variables
+    private string searchTerm = string.Empty;
+    private string selectedDateRange = "";
+    private DateTime? startDate = null;
+    private DateTime? endDate = null;
+
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue;
+    private System.Threading.Timer? _searchTimer;
+
+    // Search visibility flags
+    private bool showKpiSection => IsSearchMatch("stock", "in", "out", "adjustment", "low", "product", "alert", "inventory");
+    private bool showStockChart => IsSearchMatch("stock", "movement", "trend", "chart", "in", "out");
+    private bool showAdjustmentsChart => IsSearchMatch("adjustment", "trend", "increase", "decrease", "chart");
+    private bool showLowStock => IsSearchMatch("low", "stock", "alert", "warning", "reorder") || lowStockItems.Any();
+    private bool showInsights => IsSearchMatch("insight", "performance", "recommendation", "analytics");
+
+    private bool IsSearchMatch(params string[] keywords)
     {
-        public string Name { get; set; } = string.Empty;
-        public int Count { get; set; }
+        if (string.IsNullOrWhiteSpace(searchTerm))
+            return true;
+        
+        var searchLower = searchTerm.ToLowerInvariant();
+        return keywords.Any(k => k.Contains(searchLower) || searchLower.Contains(k));
     }
 
-    private class RecentProductData
+    private string GetGreeting()
     {
-        public string Date { get; set; } = string.Empty;
-        public int Count { get; set; }
+        var hour = DateTime.Now.Hour;
+        if (hour < 12) return "Good morning";
+        if (hour < 17) return "Good afternoon";
+        return "Good evening";
     }
 
     protected override async Task OnInitializedAsync()
     {
         await CheckPasswordChangeRequired();
         await LoadSellerUserId();
-        if (sellerUserId > 0)
+        await LoadDashboardData();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
         {
-            await LoadDashboardData();
+            await JSRuntime.InvokeVoidAsync("setupSearchInputFilter", "dashboard-search-input");
         }
     }
 
@@ -272,11 +643,11 @@
             try
             {
                 const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
-                using var conn = new SqlConnection(connectionString);
+                using var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString);
                 await conn.OpenAsync();
 
                 var sql = "SELECT user_id FROM dbo.tbl_users WHERE id = @UserId AND archived_at IS NULL";
-                using var cmd = new SqlCommand(sql, conn);
+                using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
                 cmd.Parameters.AddWithValue("@UserId", AuthState.CurrentUser.Id);
 
                 var result = await cmd.ExecuteScalarAsync();
@@ -294,103 +665,260 @@
 
     private async Task LoadDashboardData()
     {
+        isLoading = true;
+        StateHasChanged();
+
         try
         {
-            // Load counts
-            totalProducts = await ProductService.GetProductsCountAsync(sellerUserId);
-            totalVariants = await VariantService.GetVariantsCountAsync(sellerUserId);
-            totalCategories = await CategoryService.GetCategoriesCountAsync(sellerUserId);
-            totalSuppliers = await SupplierService.GetSuppliersCountAsync(sellerUserId);
-            activeProducts = totalProducts;
-            activeVariants = totalVariants;
-            archivedProducts = await ProductService.GetArchivedProductsCountAsync(sellerUserId);
-            archivedVariants = await VariantService.GetArchivedVariantsCountAsync(sellerUserId);
+            // Get current logged-in user ID (stock clerk's own ID)
+            var currentUserId = AuthState.CurrentUser?.Id ?? 0;
+            
+            if (currentUserId <= 0)
+            {
+                stats = new IT13_Final.Services.Data.InventoryDashboardStatsModel();
+                stockInData = new List<IT13_Final.Services.Data.DailyStockInData>();
+                stockOutData = new List<IT13_Final.Services.Data.DailyStockOutData>();
+                adjustmentData = new List<IT13_Final.Services.Data.DailyAdjustmentData>();
+                lowStockItems = new List<IT13_Final.Services.Data.LowStockItemModel>();
+                isLoading = false;
+                StateHasChanged();
+                return;
+            }
 
-            // Load category distribution
-            await LoadCategoryData();
+            // Load sellerUserId for inventory items (inventory is shared per seller)
+            if (sellerUserId <= 0)
+            {
+                await LoadSellerUserId();
+            }
 
-            // Load recent products
-            await LoadRecentProductsData();
+            var days = GetDaysFromDateRange();
+            
+            // Load transaction data filtered by current user's ID (stock clerk who created the transactions)
+            await LoadTransactionDataByUser(currentUserId, days);
+            
+            // Load inventory stats and low stock items (filtered by sellerUserId since inventory is shared)
+            if (sellerUserId > 0)
+            {
+                stats = await InventoryService.GetDashboardStatsAsync(sellerUserId);
+                lowStockItems = await InventoryService.GetLowStockItemsAsync(sellerUserId, 10);
+            }
+            else
+            {
+                stats = new IT13_Final.Services.Data.InventoryDashboardStatsModel();
+                lowStockItems = new List<IT13_Final.Services.Data.LowStockItemModel>();
+            }
 
+            FilterDataByDateRange();
+            CalculateStatsFromFilteredData();
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                ApplySearchFilter();
+            }
+        }
+        catch (Exception ex)
+        {
+            stats = new IT13_Final.Services.Data.InventoryDashboardStatsModel();
+            stockInData = new List<IT13_Final.Services.Data.DailyStockInData>();
+            stockOutData = new List<IT13_Final.Services.Data.DailyStockOutData>();
+            adjustmentData = new List<IT13_Final.Services.Data.DailyAdjustmentData>();
+            lowStockItems = new List<IT13_Final.Services.Data.LowStockItemModel>();
+        }
+        finally
+        {
+            isLoading = false;
             StateHasChanged();
         }
-        catch
-        {
-            // Handle errors silently
-        }
     }
 
-    private async Task LoadCategoryData()
+    private async Task LoadTransactionDataByUser(int userId, int days)
     {
         try
         {
             const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
-            using var conn = new SqlConnection(connectionString);
+            using var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString);
             await conn.OpenAsync();
 
-            var sql = @"
-                SELECT c.name, COUNT(p.id) as product_count
-                FROM dbo.tbl_categories c
-                LEFT JOIN dbo.tbl_products p ON p.category_id = c.id AND p.archived_at IS NULL AND p.user_id = @UserId
-                WHERE c.archived_at IS NULL AND c.user_id = @UserId
-                GROUP BY c.id, c.name
-                ORDER BY product_count DESC, c.name";
+            var startDate = DateTime.Today.AddDays(-days);
 
-            using var cmd = new SqlCommand(sql, conn);
-            cmd.Parameters.AddWithValue("@UserId", sellerUserId);
-
-            using var reader = await cmd.ExecuteReaderAsync();
-            categoryData.Clear();
-            while (await reader.ReadAsync())
-            {
-                categoryData.Add(new CategoryChartData
-                {
-                    Name = reader.GetString(0),
-                    Count = reader.GetInt32(1)
-                });
-            }
-        }
-        catch
-        {
-            categoryData.Clear();
-        }
-    }
-
-    private async Task LoadRecentProductsData()
-    {
-        try
-        {
-            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
-            using var conn = new SqlConnection(connectionString);
-            await conn.OpenAsync();
-
-            var sql = @"
-                SELECT CAST(created_at AS DATE) as date, COUNT(*) as count
-                FROM dbo.tbl_products
-                WHERE user_id = @UserId 
-                  AND archived_at IS NULL 
-                  AND created_at >= DATEADD(DAY, -30, GETDATE())
-                GROUP BY CAST(created_at AS DATE)
+            // Load Stock In Data - filtered by user_id (the stock clerk who created it)
+            var stockInSql = @"
+                SELECT CAST(si.timestamps AS DATE) as date, COUNT(*) as count, COALESCE(SUM(si.quantity_added), 0) as quantity
+                FROM dbo.tbl_stock_in si
+                WHERE si.archives IS NULL 
+                AND si.user_id = @UserId
+                AND CAST(si.timestamps AS DATE) >= @StartDate
+                GROUP BY CAST(si.timestamps AS DATE)
                 ORDER BY date";
 
-            using var cmd = new SqlCommand(sql, conn);
-            cmd.Parameters.AddWithValue("@UserId", sellerUserId);
-
-            using var reader = await cmd.ExecuteReaderAsync();
-            recentProductsData.Clear();
-            while (await reader.ReadAsync())
+            using (var cmd = new Microsoft.Data.SqlClient.SqlCommand(stockInSql, conn))
             {
-                var date = reader.GetDateTime(0);
-                recentProductsData.Add(new RecentProductData
+                cmd.Parameters.AddWithValue("@UserId", userId);
+                cmd.Parameters.AddWithValue("@StartDate", startDate);
+
+                var tempStockInData = new List<IT13_Final.Services.Data.DailyStockInData>();
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
                 {
-                    Date = date.ToString("MM/dd"),
-                    Count = reader.GetInt32(1)
-                });
+                    tempStockInData.Add(new IT13_Final.Services.Data.DailyStockInData
+                    {
+                        Date = reader.GetDateTime(0),
+                        Count = reader.GetInt32(1),
+                        Quantity = reader.GetInt32(2)
+                    });
+                }
+
+                // Fill missing dates
+                stockInData = new List<IT13_Final.Services.Data.DailyStockInData>();
+                for (int i = 0; i < days; i++)
+                {
+                    var date = startDate.AddDays(i);
+                    var existing = tempStockInData.FirstOrDefault(d => d.Date.Date == date.Date);
+                    stockInData.Add(existing ?? new IT13_Final.Services.Data.DailyStockInData { Date = date, Count = 0, Quantity = 0 });
+                }
+            }
+
+            // Load Stock Out Data - filtered by user_id
+            var stockOutSql = @"
+                SELECT CAST(so.timestamps AS DATE) as date, COUNT(*) as count, COALESCE(SUM(so.quantity_removed), 0) as quantity
+                FROM dbo.tbl_stock_out so
+                WHERE so.archives IS NULL 
+                AND so.user_id = @UserId
+                AND CAST(so.timestamps AS DATE) >= @StartDate
+                GROUP BY CAST(so.timestamps AS DATE)
+                ORDER BY date";
+
+            using (var cmd = new Microsoft.Data.SqlClient.SqlCommand(stockOutSql, conn))
+            {
+                cmd.Parameters.AddWithValue("@UserId", userId);
+                cmd.Parameters.AddWithValue("@StartDate", startDate);
+
+                var tempStockOutData = new List<IT13_Final.Services.Data.DailyStockOutData>();
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    tempStockOutData.Add(new IT13_Final.Services.Data.DailyStockOutData
+                    {
+                        Date = reader.GetDateTime(0),
+                        Count = reader.GetInt32(1),
+                        Quantity = reader.GetInt32(2)
+                    });
+                }
+
+                stockOutData = new List<IT13_Final.Services.Data.DailyStockOutData>();
+                for (int i = 0; i < days; i++)
+                {
+                    var date = startDate.AddDays(i);
+                    var existing = tempStockOutData.FirstOrDefault(d => d.Date.Date == date.Date);
+                    stockOutData.Add(existing ?? new IT13_Final.Services.Data.DailyStockOutData { Date = date, Count = 0, Quantity = 0 });
+                }
+            }
+
+            // Load Adjustment Data - filtered by user_id
+            var adjustmentSql = @"
+                SELECT CAST(sa.timestamps AS DATE) as date, 
+                       COUNT(*) as count,
+                       SUM(CASE WHEN sa.adjustment_type = 'Increase' THEN 1 ELSE 0 END) as increase_count,
+                       SUM(CASE WHEN sa.adjustment_type = 'Decrease' THEN 1 ELSE 0 END) as decrease_count
+                FROM dbo.tbl_stock_adjustments sa
+                WHERE sa.archives IS NULL 
+                AND sa.user_id = @UserId
+                AND CAST(sa.timestamps AS DATE) >= @StartDate
+                GROUP BY CAST(sa.timestamps AS DATE)
+                ORDER BY date";
+
+            using (var cmd = new Microsoft.Data.SqlClient.SqlCommand(adjustmentSql, conn))
+            {
+                cmd.Parameters.AddWithValue("@UserId", userId);
+                cmd.Parameters.AddWithValue("@StartDate", startDate);
+
+                var tempAdjustmentData = new List<IT13_Final.Services.Data.DailyAdjustmentData>();
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    tempAdjustmentData.Add(new IT13_Final.Services.Data.DailyAdjustmentData
+                    {
+                        Date = reader.GetDateTime(0),
+                        Count = reader.GetInt32(1),
+                        IncreaseCount = reader.GetInt32(2),
+                        DecreaseCount = reader.GetInt32(3)
+                    });
+                }
+
+                adjustmentData = new List<IT13_Final.Services.Data.DailyAdjustmentData>();
+                for (int i = 0; i < days; i++)
+                {
+                    var date = startDate.AddDays(i);
+                    var existing = tempAdjustmentData.FirstOrDefault(d => d.Date.Date == date.Date);
+                    adjustmentData.Add(existing ?? new IT13_Final.Services.Data.DailyAdjustmentData { Date = date, Count = 0, IncreaseCount = 0, DecreaseCount = 0 });
+                }
             }
         }
         catch
         {
-            recentProductsData.Clear();
+            stockInData = new List<IT13_Final.Services.Data.DailyStockInData>();
+            stockOutData = new List<IT13_Final.Services.Data.DailyStockOutData>();
+            adjustmentData = new List<IT13_Final.Services.Data.DailyAdjustmentData>();
+        }
+    }
+
+    private int GetDaysFromDateRange()
+    {
+        if (startDate.HasValue && endDate.HasValue)
+        {
+            return Math.Max(1, (endDate.Value - startDate.Value).Days + 1);
+        }
+        return 30;
+    }
+
+    private void FilterDataByDateRange()
+    {
+        if (!startDate.HasValue || !endDate.HasValue)
+            return;
+
+        var start = startDate.Value.Date;
+        var end = endDate.Value.Date;
+
+        stockInData = stockInData.Where(d => d.Date.Date >= start && d.Date.Date <= end).ToList();
+        stockOutData = stockOutData.Where(d => d.Date.Date >= start && d.Date.Date <= end).ToList();
+        adjustmentData = adjustmentData.Where(d => d.Date.Date >= start && d.Date.Date <= end).ToList();
+    }
+
+    private void CalculateStatsFromFilteredData()
+    {
+        // Calculate total stats from all filtered data
+        stats.TotalStockIn = stockInData.Sum(d => d.Count);
+        stats.TotalStockOut = stockOutData.Sum(d => d.Count);
+        stats.TotalAdjustments = adjustmentData.Sum(d => d.Count);
+
+        // Calculate "today's" stats - use the end date of the selected range, or today if no filter
+        var end = endDate?.Date ?? DateTime.Today;
+
+        var endDateStockInData = stockInData.FirstOrDefault(d => d.Date.Date == end);
+        stats.TodayStockIn = endDateStockInData?.Count ?? 0;
+
+        var endDateStockOutData = stockOutData.FirstOrDefault(d => d.Date.Date == end);
+        stats.TodayStockOut = endDateStockOutData?.Count ?? 0;
+
+        var endDateAdjustmentData = adjustmentData.FirstOrDefault(d => d.Date.Date == end);
+        stats.TodayAdjustments = endDateAdjustmentData?.Count ?? 0;
+    }
+
+    private void ApplySearchFilter()
+    {
+        if (string.IsNullOrWhiteSpace(searchTerm))
+            return;
+
+        var searchLower = searchTerm.ToLowerInvariant();
+
+        if (lowStockItems.Any())
+        {
+            lowStockItems = lowStockItems
+                .Where(p => p.ProductName.ToLowerInvariant().Contains(searchLower) ||
+                           p.VariantName.ToLowerInvariant().Contains(searchLower) ||
+                           (p.SizeName != null && p.SizeName.ToLowerInvariant().Contains(searchLower)) ||
+                           (p.ColorName != null && p.ColorName.ToLowerInvariant().Contains(searchLower)))
+                .ToList();
         }
     }
 
@@ -423,23 +951,207 @@
         StateHasChanged();
     }
 
-    private MarkupString CreateSvgText(string x, string y, string anchor, string fontSize, string fontWeight, string fill, string content)
+    private void HandleSearchInput()
     {
-        var fontWeightAttr = string.IsNullOrEmpty(fontWeight) ? "" : $" font-weight=\"{fontWeight}\"";
-        return new MarkupString($"<text x=\"{x}\" y=\"{y}\" text-anchor=\"{anchor}\" font-size=\"{fontSize}\"{fontWeightAttr} fill=\"{fill}\">{content}</text>");
+        var filtered = System.Text.RegularExpressions.Regex.Replace(searchTerm, @"[^a-zA-Z0-9\s\-_]", "");
+        if (filtered != searchTerm)
+        {
+            searchTerm = filtered;
+        }
+        
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                try
+                {
+                    if (AuthState.CurrentUser != null && !string.IsNullOrWhiteSpace(searchTerm))
+                    {
+                        await HistoryService.LogAsync(
+                            AuthState.CurrentUser.Id,
+                            "search",
+                            "Dashboard",
+                            $"Searched dashboard: {searchTerm}"
+                        );
+                    }
+                }
+                catch { }
+                await LoadDashboardData();
+            });
+        }, null, 500, Timeout.Infinite);
     }
 
-    private MarkupString CreateSvgTextWithTransform(string x, string y, string anchor, string fontSize, string fill, string transform, string content)
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
     {
-        return new MarkupString($"<text x=\"{x}\" y=\"{y}\" text-anchor=\"{anchor}\" font-size=\"{fontSize}\" fill=\"{fill}\" transform=\"{transform}\">{content}</text>");
+        if (e.Key == "Enter")
+        {
+            await LoadDashboardData();
+        }
+    }
+
+    private async Task HandleClearSearch()
+    {
+        searchTerm = string.Empty;
+        await LoadDashboardData();
+        StateHasChanged();
+    }
+
+    private async void HandleDateRangeChange()
+    {
+        var today = DateTime.Today;
+        switch (selectedDateRange)
+        {
+            case "":
+                startDate = null;
+                endDate = null;
+                break;
+            case "today":
+                startDate = today;
+                endDate = today;
+                break;
+            case "yesterday":
+                startDate = today.AddDays(-1);
+                endDate = today.AddDays(-1);
+                break;
+            case "last7days":
+                startDate = today.AddDays(-6);
+                endDate = today;
+                break;
+            case "last30days":
+                startDate = today.AddDays(-29);
+                endDate = today;
+                break;
+            case "thismonth":
+                startDate = new DateTime(today.Year, today.Month, 1);
+                endDate = today;
+                break;
+            case "thisyear":
+                startDate = new DateTime(today.Year, 1, 1);
+                endDate = today;
+                break;
+        }
+
+        try
+        {
+            if (AuthState.CurrentUser != null)
+            {
+                await HistoryService.LogAsync(
+                    AuthState.CurrentUser.Id,
+                    "filter",
+                    "Dashboard",
+                    $"Date filter: {selectedDateRange}"
+                );
+            }
+        }
+        catch { }
+
+        await LoadDashboardData();
+        StateHasChanged();
+    }
+
+    private async void HandleFromDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            startDate = null;
+        }
+        else if (DateTime.TryParseExact(value, "MM/dd/yyyy", null, System.Globalization.DateTimeStyles.None, out var exactDate))
+        {
+            startDate = exactDate;
+        }
+        else if (DateTime.TryParse(value, out var date))
+        {
+            startDate = date;
+        }
+        selectedDateRange = "";
+        await LoadDashboardData();
+        StateHasChanged();
+    }
+
+    private async void HandleToDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            endDate = null;
+        }
+        else if (DateTime.TryParseExact(value, "MM/dd/yyyy", null, System.Globalization.DateTimeStyles.None, out var exactDate))
+        {
+            endDate = exactDate;
+        }
+        else if (DateTime.TryParse(value, out var date))
+        {
+            endDate = date;
+        }
+        selectedDateRange = "";
+        await LoadDashboardData();
+        StateHasChanged();
+    }
+
+    private async void ClearDateFilter()
+    {
+        selectedDateRange = "";
+        startDate = null;
+        endDate = null;
+        await LoadDashboardData();
+        StateHasChanged();
+    }
+
+    private async Task PrintDashboard()
+    {
+        try
+        {
+            if (AuthState.CurrentUser != null)
+            {
+                await HistoryService.LogAsync(
+                    AuthState.CurrentUser.Id,
+                    "print",
+                    "Dashboard",
+                    "Printed stock clerk dashboard"
+                );
+            }
+
+            var dashboardData = new
+            {
+                title = "Stock Clerk Dashboard Report",
+                printedBy = AuthState.CurrentUser?.FullName ?? "Stock Clerk",
+                printedAt = DateTime.Now.ToString("MMMM dd, yyyy hh:mm tt"),
+                dateRange = startDate.HasValue && endDate.HasValue 
+                    ? $"{startDate?.ToString("MM/dd/yyyy")} - {endDate?.ToString("MM/dd/yyyy")}" 
+                    : "All Time",
+                
+                inventory = new
+                {
+                    totalStockIn = stats.TotalStockIn,
+                    totalStockOut = stats.TotalStockOut,
+                    totalAdjustments = stats.TotalAdjustments,
+                    todayStockIn = stats.TodayStockIn,
+                    todayStockOut = stats.TodayStockOut,
+                    todayAdjustments = stats.TodayAdjustments,
+                    lowStockItems = stats.LowStockItems,
+                    totalProducts = stats.TotalProducts
+                },
+
+                lowStockList = lowStockItems.Take(10).Select(i => new
+                {
+                    product = i.ProductName,
+                    variant = i.VariantName,
+                    size = i.SizeName,
+                    color = i.ColorName,
+                    current = i.CurrentStock,
+                    reorder = i.ReorderLevel
+                }).ToList()
+            };
+
+            await JSRuntime.InvokeVoidAsync("printStockClerkDashboard", dashboardData);
+        }
+        catch { }
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
     }
 }
-
-
-
-
-
-
-
-
-

@@ -7,8 +7,6 @@
 @using Microsoft.Data.SqlClient
 @implements IDisposable
 
-<h1 class="page-title">Supplier Records</h1>
-
 <div class="colors-container">
     <div class="search-actions-row">
         <div class="search-wrapper">
@@ -97,66 +95,65 @@
 @if (showSupplierDetails && supplierDetails != null)
 {
     <div class="modal-overlay" @onclick="CloseSupplierDetails">
-        <div class="modal-container" @onclick:stopPropagation>
+        <div class="add-admin-modal" @onclick:stopPropagation>
             <div class="modal-header">
-                <div class="modal-title">
-                    <svg class="modal-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                <h2 class="modal-title-text">Supplier Details</h2>
+                <button class="modal-close-btn" @onclick="CloseSupplierDetails" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
                     </svg>
-                    <span>Supplier Details</span>
-                </div>
-                <button class="modal-close" @onclick="CloseSupplierDetails" title="Close">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                    <span class="modal-close-text">Close</span>
                 </button>
             </div>
 
-            <div class="modal-content">
-                <div class="details-list">
-                    <div class="detail-item">
-                        <span class="detail-label">COMPANY NAME:</span>
-                        <span class="detail-value">@supplierDetails.CompanyName</span>
+            <div class="modal-body">
+                <div class="po-info">
+                    <div class="info-row">
+                        <span class="info-label">Company Name:</span>
+                        <span class="info-value">@supplierDetails.CompanyName</span>
                     </div>
-                    <div class="detail-item">
-                        <span class="detail-label">CONTACT PERSON:</span>
-                        <span class="detail-value">@(string.IsNullOrEmpty(supplierDetails.ContactPerson) ? "N/A" : supplierDetails.ContactPerson)</span>
+                    <div class="info-row">
+                        <span class="info-label">Contact Person:</span>
+                        <span class="info-value">@(string.IsNullOrEmpty(supplierDetails.ContactPerson) ? "N/A" : supplierDetails.ContactPerson)</span>
                     </div>
-                    <div class="detail-item">
-                        <span class="detail-label">EMAIL:</span>
-                        <span class="detail-value">@(string.IsNullOrEmpty(supplierDetails.Email) ? "N/A" : supplierDetails.Email)</span>
+                    <div class="info-row">
+                        <span class="info-label">Email:</span>
+                        <span class="info-value">@(string.IsNullOrEmpty(supplierDetails.Email) ? "N/A" : supplierDetails.Email)</span>
                     </div>
-                    <div class="detail-item">
-                        <span class="detail-label">CONTACT NUMBER:</span>
-                        <span class="detail-value">@(string.IsNullOrEmpty(supplierDetails.ContactNumber) ? "N/A" : supplierDetails.ContactNumber)</span>
+                    <div class="info-row">
+                        <span class="info-label">Contact Number:</span>
+                        <span class="info-value">@(string.IsNullOrEmpty(supplierDetails.ContactNumber) ? "N/A" : supplierDetails.ContactNumber)</span>
                     </div>
-                    <div class="detail-item">
-                        <span class="detail-label">STATUS:</span>
-                        <span class="detail-value status-badge @(supplierDetails.Status.ToUpper() == "ACTIVE" ? "active" : "inactive")">@supplierDetails.Status</span>
+                    <div class="info-row">
+                        <span class="info-label">Status:</span>
+                        <span class="info-value">
+                            <span class="status-badge @(supplierDetails.Status.ToUpper() == "ACTIVE" ? "active" : "inactive")">@supplierDetails.Status</span>
+                        </span>
                     </div>
-                    <div class="detail-item">
-                        <span class="detail-label">STREET ADDRESS:</span>
-                        <span class="detail-value">@(string.IsNullOrEmpty(supplierDetails.Street) ? "N/A" : supplierDetails.Street)</span>
+                    <div class="info-row">
+                        <span class="info-label">Street Address:</span>
+                        <span class="info-value">@(string.IsNullOrEmpty(supplierDetails.Street) ? "N/A" : supplierDetails.Street)</span>
                     </div>
-                    <div class="detail-item">
-                        <span class="detail-label">CITY:</span>
-                        <span class="detail-value">@(string.IsNullOrEmpty(supplierDetails.City) ? "N/A" : supplierDetails.City)</span>
+                    <div class="info-row">
+                        <span class="info-label">City:</span>
+                        <span class="info-value">@(string.IsNullOrEmpty(supplierDetails.City) ? "N/A" : supplierDetails.City)</span>
                     </div>
-                    <div class="detail-item">
-                        <span class="detail-label">PROVINCE:</span>
-                        <span class="detail-value">@(string.IsNullOrEmpty(supplierDetails.Province) ? "N/A" : supplierDetails.Province)</span>
+                    <div class="info-row">
+                        <span class="info-label">Province:</span>
+                        <span class="info-value">@(string.IsNullOrEmpty(supplierDetails.Province) ? "N/A" : supplierDetails.Province)</span>
                     </div>
-                    <div class="detail-item">
-                        <span class="detail-label">ZIP CODE:</span>
-                        <span class="detail-value">@(string.IsNullOrEmpty(supplierDetails.Zip) ? "N/A" : supplierDetails.Zip)</span>
+                    <div class="info-row">
+                        <span class="info-label">Zip Code:</span>
+                        <span class="info-value">@(string.IsNullOrEmpty(supplierDetails.Zip) ? "N/A" : supplierDetails.Zip)</span>
                     </div>
-                    <div class="detail-item">
-                        <span class="detail-label">DATE CREATED:</span>
-                        <span class="detail-value">@supplierDetails.DateCreated.ToString("M/d/yyyy")</span>
+                    <div class="info-row">
+                        <span class="info-label">Date Created:</span>
+                        <span class="info-value">@supplierDetails.DateCreated.ToString("MMM dd, yyyy")</span>
                     </div>
                 </div>
+            </div>
+            <div class="modal-footer">
+                <button class="cancel-btn" @onclick="CloseSupplierDetails">Close</button>
             </div>
         </div>
     </div>
@@ -220,8 +217,8 @@
         {
             if (sellerUserId > 0)
             {
-                totalCount = await SupplierService.GetSuppliersCountAsync(sellerUserId, searchTerm);
-                suppliers = await SupplierService.GetSuppliersAsync(sellerUserId, searchTerm, currentPage, pageSize);
+                totalCount = await SupplierService.GetSuppliersCountAsync(sellerUserId, searchTerm, null, null);
+                suppliers = await SupplierService.GetSuppliersAsync(sellerUserId, searchTerm, null, null, currentPage, pageSize);
             }
         }
         catch (Exception)

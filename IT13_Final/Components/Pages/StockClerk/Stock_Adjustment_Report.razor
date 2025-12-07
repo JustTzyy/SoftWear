@@ -1,0 +1,676 @@
+@page "/stockclerk/Stock_Adjustment_Report"
+@layout IT13_Final.Components.Layout.StockClerk.StockClerk
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IT13_Final.Services.Data.IStockAdjustmentService StockAdjustmentService
+@inject IJSRuntime JSRuntime
+@implements IDisposable
+@using System.Linq
+
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Stock Adjustment Reports</h1>
+        <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintReport" disabled="@isGeneratingPDF" title="Print Report">
+            @if (isGeneratingPDF)
+            {
+                <span>Generating...</span>
+            }
+            else
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 9V2h12v7"></path>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+            }
+        </button>
+    </div>
+</div>
+
+@* Search and Date Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.3-4.3"></path>
+        </svg>
+        <input type="text" 
+               id="stock-adjustment-report-search-input"
+               class="search-input" 
+               placeholder="Search by product, variant, or reason..." 
+               @bind="searchTerm" 
+               @bind:event="oninput" 
+               @bind:after="HandleSearchInput"
+               @onkeypress="HandleSearchKeyPress" />
+        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            <button class="clear-search-btn" @onclick="HandleClearSearch" title="Clear search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date"
+               class="date-input"
+               value="@(startDate?.ToString("yyyy-MM-dd"))"
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleStartDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date"
+               class="date-input"
+               value="@(endDate?.ToString("yyyy-MM-dd"))"
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleEndDateChange" />
+        <select class="date-select" @bind="selectedAdjustmentType" @bind:after="HandleAdjustmentTypeChange">
+            <option value="">All Types</option>
+            <option value="Increase">Increase</option>
+            <option value="Decrease">Decrease</option>
+        </select>
+        <button class="filter-btn" @onclick="ApplyFilters">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            Apply
+        </button>
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
+
+@* Summary Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Stock Adjustment Summary</h3>
+            <span class="card-subtitle">@totalCount total records</span>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <div class="summary-grid">
+            <div class="summary-box">
+                <div class="summary-label">Total Records</div>
+                <div class="summary-value">@totalCount</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Total Increases</div>
+                <div class="summary-value">@totalIncreases</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Total Decreases</div>
+                <div class="summary-value">@totalDecreases</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Net Adjustment</div>
+                <div class="summary-value">@netAdjustment</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Stock Adjustment List Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Stock Adjustment List</h3>
+            <span class="card-subtitle">@totalCount records found</span>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Product</th>
+                    <th>Variant</th>
+                    <th>Adjustment Type</th>
+                    <th>Quantity</th>
+                    <th>Reason</th>
+                    <th>Date</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="7" class="loading-cell">Loading stock adjustment records...</td>
+                    </tr>
+                }
+                else if (stockAdjustments.Count == 0)
+                {
+                    <tr>
+                        <td colspan="7" class="empty-cell">No stock adjustment records found for this filter.</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var adjustment in stockAdjustments)
+                    {
+                        <tr class="clickable-row" @onclick="() => HandleStockAdjustmentClick(adjustment.Id)">
+                            <td class="sale-number">@adjustment.ProductName</td>
+                            <td>@adjustment.VariantName</td>
+                            <td>
+                                <span class="status-badge @(adjustment.AdjustmentType == "Increase" ? "status-approved" : "status-cancelled")">@adjustment.AdjustmentType</span>
+                            </td>
+                            <td>@adjustment.QuantityAdjusted</td>
+                            <td>@(adjustment.Reason ?? "N/A")</td>
+                            <td>
+                                <div class="timestamp-info">
+                                    <div class="timestamp-date">@adjustment.Timestamps.ToString("MMM dd, yyyy")</div>
+                                    <div class="timestamp-time">@adjustment.Timestamps.ToString("HH:mm:ss")</div>
+                                </div>
+                            </td>
+                            <td class="actions-cell" @onclick:stopPropagation="true">
+                                <button class="action-btn print-row-btn" @onclick="() => HandlePrintStockAdjustment(adjustment.Id)" title="Print Details">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M6 9V2h12v7"></path>
+                                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                                        <rect x="6" y="14" width="12" height="8"></rect>
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)" title="Previous page">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m15 18-6-6 6-6"></path>
+                </svg>
+            </button>
+
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                var pageNum = i;
+                @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
+                {
+                    <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 2 || i == currentPage + 2)
+                {
+                    <span class="page-ellipsis">...</span>
+                }
+            }
+
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)" title="Next page">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m9 18 6-6-6-6"></path>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+@* Stock Adjustment Details Modal *@
+@if (showStockAdjustmentDetailsModal && selectedStockAdjustment != null)
+{
+    <div class="modal-overlay" @onclick="CloseStockAdjustmentDetailsModal">
+        <div class="add-admin-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Stock Adjustment Details - ID: @selectedStockAdjustment.Id</h2>
+                <button class="modal-close-btn" @onclick="CloseStockAdjustmentDetailsModal" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="stock-adjustment-info">
+                    <div class="info-row">
+                        <span class="info-label">Product:</span>
+                        <span class="info-value">@selectedStockAdjustment.ProductName</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Variant:</span>
+                        <span class="info-value">@selectedStockAdjustment.VariantName</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Size:</span>
+                        <span class="info-value">@(selectedStockAdjustment.SizeName ?? "N/A")</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Color:</span>
+                        <span class="info-value">
+                            @if (!string.IsNullOrEmpty(selectedStockAdjustment.ColorName))
+                            {
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    @if (!string.IsNullOrEmpty(selectedStockAdjustment.ColorHexValue))
+                                    {
+                                        <span style="display: inline-block; width: 20px; height: 20px; border-radius: 4px; border: 1px solid #ddd; background-color: @selectedStockAdjustment.ColorHexValue;"></span>
+                                    }
+                                    <span>@selectedStockAdjustment.ColorName</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <span>N/A</span>
+                            }
+                        </span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Adjustment Type:</span>
+                        <span class="info-value">
+                            <span class="status-badge @(selectedStockAdjustment.AdjustmentType == "Increase" ? "status-approved" : "status-cancelled")">@selectedStockAdjustment.AdjustmentType</span>
+                        </span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Quantity Adjusted:</span>
+                        <span class="info-value">@selectedStockAdjustment.QuantityAdjusted</span>
+                    </div>
+                    @if (!string.IsNullOrEmpty(selectedStockAdjustment.Reason))
+                    {
+                        <div class="info-row">
+                            <span class="info-label">Reason:</span>
+                            <span class="info-value">@selectedStockAdjustment.Reason</span>
+                        </div>
+                    }
+                    <div class="info-row">
+                        <span class="info-label">Date:</span>
+                        <span class="info-value">@selectedStockAdjustment.Timestamps.ToString("MMM dd, yyyy HH:mm:ss")</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Recorded By:</span>
+                        <span class="info-value">@selectedStockAdjustment.UserName</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="save-admin-btn" @onclick="() => HandlePrintStockAdjustment(selectedStockAdjustment.Id)">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M6 9V2h12v7"></path>
+                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                        <rect x="6" y="14" width="12" height="8"></rect>
+                    </svg>
+                    <span>Print Details</span>
+                </button>
+                <button class="cancel-btn" @onclick="CloseStockAdjustmentDetailsModal">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<IT13_Final.Services.Data.StockAdjustmentModel> stockAdjustments = new();
+    private List<IT13_Final.Services.Data.StockAdjustmentModel> allStockAdjustmentsForPrint = new();
+    private string searchTerm = string.Empty;
+    private DateTime? startDate;
+    private DateTime? endDate;
+    private string selectedDateRange = string.Empty;
+    private string selectedAdjustmentType = string.Empty;
+
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue;
+
+    private bool isLoading = false;
+    private bool isGeneratingPDF = false;
+
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling(totalCount / (double)pageSize);
+
+    private int totalIncreases = 0;
+    private int totalDecreases = 0;
+    private int netAdjustment = 0;
+
+    private System.Threading.Timer? _searchTimer;
+    private bool showStockAdjustmentDetailsModal = false;
+    private IT13_Final.Services.Data.StockAdjustmentDetailsModel? selectedStockAdjustment = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStockAdjustments();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("setupSearchInputFilter", "stock-adjustment-report-search-input");
+            }
+            catch (Exception)
+            {
+                // JavaScript function might not be available yet, ignore
+            }
+        }
+    }
+
+    private async Task LoadStockAdjustments()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var stockClerkUserId = AuthState.CurrentUser?.Id ?? 0;
+            if (stockClerkUserId > 0)
+            {
+                var adjustmentTypeFilter = string.IsNullOrEmpty(selectedAdjustmentType) ? null : selectedAdjustmentType;
+                totalCount = await StockAdjustmentService.GetStockAdjustmentsCountAsync(stockClerkUserId, searchTerm, adjustmentTypeFilter, startDate, endDate);
+                stockAdjustments = await StockAdjustmentService.GetStockAdjustmentsAsync(stockClerkUserId, searchTerm, adjustmentTypeFilter, startDate, endDate, currentPage, pageSize);
+
+                if (currentPage > totalPages && totalPages > 0)
+                {
+                    currentPage = totalPages;
+                    await LoadStockAdjustments();
+                    return;
+                }
+
+                // Calculate summary statistics
+                totalIncreases = stockAdjustments.Where(sa => sa.AdjustmentType == "Increase").Sum(sa => sa.QuantityAdjusted);
+                totalDecreases = stockAdjustments.Where(sa => sa.AdjustmentType == "Decrease").Sum(sa => sa.QuantityAdjusted);
+                netAdjustment = totalIncreases - totalDecreases;
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading stock adjustments: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to load stock adjustment records. Please try again.");
+            stockAdjustments = new List<IT13_Final.Services.Data.StockAdjustmentModel>();
+            totalCount = 0;
+            totalIncreases = 0;
+            totalDecreases = 0;
+            netAdjustment = 0;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async void HandleStartDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            startDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            startDate = null;
+            selectedDateRange = "";
+        }
+        await ApplyFilters();
+    }
+
+    private async void HandleEndDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            endDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            endDate = null;
+            selectedDateRange = "";
+        }
+        await ApplyFilters();
+    }
+
+    private async Task HandleDateRangeChange()
+    {
+        var now = DateTime.Now;
+        switch (selectedDateRange)
+        {
+            case "":
+                startDate = null;
+                endDate = null;
+                break;
+            case "today":
+                startDate = now.Date;
+                endDate = now.Date;
+                break;
+            case "yesterday":
+                startDate = now.Date.AddDays(-1);
+                endDate = now.Date.AddDays(-1);
+                break;
+            case "last7days":
+                startDate = now.Date.AddDays(-6);
+                endDate = now.Date;
+                break;
+            case "last30days":
+                startDate = now.Date.AddDays(-29);
+                endDate = now.Date;
+                break;
+            case "thismonth":
+                startDate = new DateTime(now.Year, now.Month, 1);
+                endDate = now.Date;
+                break;
+            case "thisyear":
+                startDate = new DateTime(now.Year, 1, 1);
+                endDate = now.Date;
+                break;
+        }
+        await ApplyFilters();
+    }
+
+    private async Task HandleAdjustmentTypeChange()
+    {
+        currentPage = 1;
+        await LoadStockAdjustments();
+    }
+
+    private async Task ClearDateFilter()
+    {
+        selectedDateRange = "";
+        startDate = null;
+        endDate = null;
+        currentPage = 1;
+        await LoadStockAdjustments();
+    }
+
+    private async Task ApplyFilters()
+    {
+        currentPage = 1;
+        await LoadStockAdjustments();
+    }
+
+    private void HandleSearchInput()
+    {
+        var filtered = System.Text.RegularExpressions.Regex.Replace(searchTerm, @"[^a-zA-Z0-9\s\-_]", "");
+        if (filtered != searchTerm)
+        {
+            searchTerm = filtered;
+        }
+        
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            currentPage = 1;
+            await InvokeAsync(async () => await LoadStockAdjustments());
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task HandleClearSearch()
+    {
+        searchTerm = string.Empty;
+        currentPage = 1;
+        await LoadStockAdjustments();
+        StateHasChanged();
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            currentPage = 1;
+            await LoadStockAdjustments();
+        }
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages)
+        {
+            if (page != currentPage)
+            {
+                currentPage = page;
+                await LoadStockAdjustments();
+            }
+        }
+    }
+
+    private async Task HandleStockAdjustmentClick(int adjustmentId)
+    {
+        try
+        {
+            var stockClerkUserId = AuthState.CurrentUser?.Id ?? 0;
+            if (stockClerkUserId == 0)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "User not authenticated. Please log in again.");
+                return;
+            }
+
+            selectedStockAdjustment = await StockAdjustmentService.GetStockAdjustmentDetailsAsync(adjustmentId, stockClerkUserId);
+            if (selectedStockAdjustment == null)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Stock adjustment record not found or you don't have permission to access it.");
+                return;
+            }
+
+            showStockAdjustmentDetailsModal = true;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading stock adjustment details: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to load stock adjustment details. Please try again.");
+        }
+    }
+
+    private void CloseStockAdjustmentDetailsModal()
+    {
+        showStockAdjustmentDetailsModal = false;
+        selectedStockAdjustment = null;
+        StateHasChanged();
+    }
+
+    private async Task HandlePrintStockAdjustment(int adjustmentId)
+    {
+        try
+        {
+            var stockClerkUserId = AuthState.CurrentUser?.Id ?? 0;
+            if (stockClerkUserId == 0)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "User not authenticated. Please log in again.");
+                return;
+            }
+
+            var adjustment = await StockAdjustmentService.GetStockAdjustmentDetailsAsync(adjustmentId, stockClerkUserId);
+            if (adjustment == null)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Stock adjustment record not found or you don't have permission to access it.");
+                return;
+            }
+
+            var receiptData = new
+            {
+                id = adjustment.Id,
+                productName = adjustment.ProductName,
+                variantName = adjustment.VariantName,
+                sizeName = adjustment.SizeName ?? "",
+                colorName = adjustment.ColorName ?? "",
+                colorHex = adjustment.ColorHexValue ?? "",
+                adjustmentType = adjustment.AdjustmentType,
+                quantityAdjusted = adjustment.QuantityAdjusted,
+                reason = adjustment.Reason ?? "",
+                dateTime = adjustment.Timestamps.ToString("MMM dd, yyyy HH:mm:ss"),
+                userName = adjustment.UserName
+            };
+
+            await JSRuntime.InvokeVoidAsync("printStockAdjustmentReceipt", receiptData);
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error printing stock adjustment: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to print stock adjustment details. Please try again.");
+        }
+    }
+
+    private async Task PrintReport()
+    {
+        try
+        {
+            isGeneratingPDF = true;
+            StateHasChanged();
+
+            var stockClerkUserId = AuthState.CurrentUser?.Id ?? 0;
+            if (stockClerkUserId > 0)
+            {
+                var adjustmentTypeFilter = string.IsNullOrEmpty(selectedAdjustmentType) ? null : selectedAdjustmentType;
+                allStockAdjustmentsForPrint = await StockAdjustmentService.GetStockAdjustmentsAsync(stockClerkUserId, searchTerm, adjustmentTypeFilter, startDate, endDate, 1, 10000);
+                
+                await JSRuntime.InvokeVoidAsync("generateAndPrintStockAdjustmentReport", 
+                    allStockAdjustmentsForPrint.Select(sa => new {
+                        productName = sa.ProductName,
+                        variantName = sa.VariantName,
+                        adjustmentType = sa.AdjustmentType,
+                        quantity = sa.QuantityAdjusted,
+                        reason = sa.Reason ?? "N/A",
+                        stockClerkName = sa.UserName ?? "N/A",
+                        date = sa.Timestamps.ToString("MMM dd, yyyy"),
+                        time = sa.Timestamps.ToString("HH:mm:ss")
+                    }).ToArray(),
+                    AuthState.CurrentUser?.FullName ?? "Stock Clerk",
+                    startDate?.ToString("MMM dd, yyyy") ?? "All Time",
+                    endDate?.ToString("MMM dd, yyyy") ?? "Today"
+                );
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error generating report: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to generate PDF. Please try again.");
+        }
+        finally
+        {
+            isGeneratingPDF = false;
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+    }
+}
+

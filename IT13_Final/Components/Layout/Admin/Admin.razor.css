@@ -7,3 +7,36 @@
    - Air Superiority Blue: #82A0BC
 */
 
+/* Responsive Layout */
+@media (max-width: 1024px) {
+    .grid[style*="grid-template-columns"] {
+        grid-template-columns: 1fr !important;
+    }
+    
+    aside {
+        position: fixed !important;
+        left: -260px;
+        top: 0;
+        z-index: 1000;
+        transition: left 0.3s ease-in-out;
+        box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+    }
+    
+    aside.sidebar-open {
+        left: 0;
+    }
+    
+    main {
+        width: 100%;
+    }
+}
+
+@media (max-width: 768px) {
+    header {
+        padding: 12px 16px !important;
+    }
+    
+    header h1 {
+        font-size: 18px !important;
+    }
+}

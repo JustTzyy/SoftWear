@@ -1,0 +1,559 @@
+@page "/seller/AccountingExpenseReports"
+@layout IT13_Final.Components.Layout.Seller.Seller
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IT13_Final.Services.Data.IExpenseService ExpenseService
+@inject IT13_Final.Services.Audit.IHistoryService HistoryService
+@inject IJSRuntime JSRuntime
+@using Microsoft.Data.SqlClient
+
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Expense Reports</h1>
+        <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintReport" disabled="@isGeneratingPDF" title="Print Report">
+            @if (isGeneratingPDF)
+            {
+                <span>Generating...</span>
+            }
+            else
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 9V2h12v7"></path>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+            }
+        </button>
+    </div>
+</div>
+
+@* Search and Date Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.35-4.35"></path>
+        </svg>
+        <input type="text"
+               id="seller-expense-report-search-input"
+               class="search-input"
+               placeholder="Search by description or expense type..."
+               @bind="searchTerm"
+               @bind:event="oninput"
+               @bind:after="HandleSearchInput"
+               @onkeypress="HandleSearchKeyPress" />
+        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            <button class="clear-search-btn" @onclick="HandleClearSearch" title="Clear">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        }
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date"
+               class="date-input"
+               value="@(startDate?.ToString("yyyy-MM-dd"))"
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@(endDate?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd"))"
+               @onchange="HandleFromDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date"
+               class="date-input"
+               value="@(endDate?.ToString("yyyy-MM-dd"))"
+               min="@(startDate?.ToString("yyyy-MM-dd"))"
+               max="@DateTime.Today.ToString("yyyy-MM-dd")"
+               @onchange="HandleToDateChange" />
+        <select class="date-select" @bind="selectedExpenseType" @bind:after="HandleExpenseTypeChange" style="min-width: 200px;">
+            <option value="">All Types</option>
+            @foreach (var type in expenseTypes)
+            {
+                <option value="@type">@type</option>
+            }
+        </select>
+        <button class="filter-btn" @onclick="LoadExpenses">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            Apply
+        </button>
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearFilters" title="Clear">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
+
+@* Summary Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Expense Summary</h3>
+            <span class="card-subtitle">@GetDateRangeText()</span>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <div class="summary-grid">
+            <div class="summary-box">
+                <div class="summary-label">Total Expenses</div>
+                <div class="summary-value" style="color: #dc3545;">₱@totalExpenses.ToString("N2")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Total Transactions</div>
+                <div class="summary-value">@totalCount</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Average Expense</div>
+                <div class="summary-value">₱@(totalCount > 0 ? (totalExpenses / totalCount).ToString("N2") : "0.00")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">This Month</div>
+                <div class="summary-value" style="color: #dc3545;">₱@thisMonthExpenses.ToString("N2")</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Expenses List Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Expense Transactions</h3>
+            <span class="card-subtitle">@totalCount expenses found</span>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Expense Type</th>
+                    <th>Description</th>
+                    <th>Amount</th>
+                    <th>Created By</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="5" class="loading-cell">Loading expenses...</td>
+                    </tr>
+                }
+                else if (expenses.Count == 0)
+                {
+                    <tr>
+                        <td colspan="5" class="empty-cell">No expenses found for this filter.</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var expense in expenses)
+                    {
+                        <tr>
+                            <td>
+                                <div class="timestamp-info">
+                                    <div class="timestamp-date">@expense.ExpenseDate.ToString("MMM dd, yyyy")</div>
+                                </div>
+                            </td>
+                            <td>@expense.ExpenseType</td>
+                            <td>@(expense.Description ?? "-")</td>
+                            <td style="text-align: right; font-weight: 600; color: #dc3545;">₱@expense.Amount.ToString("N2")</td>
+                            <td>@expense.CreatedByName</td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                var pageNum = i;
+                @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
+                {
+                    <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 2 || i == currentPage + 2)
+                {
+                    <span class="page-ellipsis">...</span>
+                }
+            }
+
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    private List<IT13_Final.Services.Data.ExpenseModel> expenses = new();
+    private List<string> expenseTypes = new();
+
+    private string searchTerm = string.Empty;
+    private DateTime? startDate;
+    private DateTime? endDate;
+    private string selectedDateRange = string.Empty;
+    private string selectedExpenseType = string.Empty;
+
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue || !string.IsNullOrEmpty(selectedExpenseType);
+
+    private bool isLoading = false;
+    private bool isGeneratingPDF = false;
+
+    private int sellerUserId = 0;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling(totalCount / (double)pageSize);
+
+    private decimal totalExpenses = 0m;
+    private decimal thisMonthExpenses = 0m;
+
+    private System.Threading.Timer? _searchTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSellerUserId();
+        expenseTypes = await ExpenseService.GetExpenseTypesAsync();
+        await LoadExpenses();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JSRuntime.InvokeVoidAsync("setupSearchInputFilter", "seller-expense-report-search-input");
+        }
+    }
+
+    private async Task LoadSellerUserId()
+    {
+        if (AuthState.CurrentUser != null)
+        {
+            try
+            {
+                const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+                using var conn = new SqlConnection(connectionString);
+                await conn.OpenAsync();
+
+                var sql = "SELECT user_id FROM dbo.tbl_users WHERE id = @UserId AND archived_at IS NULL";
+                using var cmd = new SqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@UserId", AuthState.CurrentUser.Id);
+
+                var result = await cmd.ExecuteScalarAsync();
+                if (result != null && result != DBNull.Value)
+                {
+                    sellerUserId = Convert.ToInt32(result);
+                }
+                else
+                {
+                    // If user_id is NULL, use the seller's id directly (for top-level sellers)
+                    sellerUserId = AuthState.CurrentUser.Id;
+                }
+            }
+            catch
+            {
+                // Fallback to seller's id if database lookup fails
+                sellerUserId = AuthState.CurrentUser.Id;
+            }
+        }
+    }
+
+    private async Task LoadExpenses()
+    {
+        if (sellerUserId <= 0)
+        {
+            await LoadSellerUserId();
+            if (sellerUserId <= 0)
+            {
+                await JSRuntime.InvokeVoidAsync("console.error", "Seller User ID not found for Expense Reports.");
+                isLoading = false;
+                StateHasChanged();
+                return;
+            }
+        }
+
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            totalCount = await ExpenseService.GetExpensesCountAsync(
+                sellerUserId,
+                string.IsNullOrWhiteSpace(searchTerm) ? null : searchTerm,
+                string.IsNullOrWhiteSpace(selectedExpenseType) ? null : selectedExpenseType,
+                startDate,
+                endDate
+            );
+
+            expenses = await ExpenseService.GetExpensesAsync(
+                sellerUserId,
+                string.IsNullOrWhiteSpace(searchTerm) ? null : searchTerm,
+                string.IsNullOrWhiteSpace(selectedExpenseType) ? null : selectedExpenseType,
+                startDate,
+                endDate,
+                currentPage,
+                pageSize
+            );
+
+            totalExpenses = expenses.Sum(e => e.Amount);
+            
+            // Calculate this month's expenses from all expenses (not just paginated)
+            var thisMonthStart = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+            var allExpensesForMonth = await ExpenseService.GetExpensesAsync(
+                sellerUserId,
+                string.IsNullOrWhiteSpace(searchTerm) ? null : searchTerm,
+                string.IsNullOrWhiteSpace(selectedExpenseType) ? null : selectedExpenseType,
+                thisMonthStart,
+                DateTime.Today,
+                1,
+                10000
+            );
+            thisMonthExpenses = allExpensesForMonth.Sum(e => e.Amount);
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading expense reports: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading expense reports: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleSearchInput()
+    {
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                currentPage = 1;
+                await LoadExpenses();
+            });
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _searchTimer?.Dispose();
+            currentPage = 1;
+            await LoadExpenses();
+        }
+    }
+
+    private async Task HandleClearSearch()
+    {
+        searchTerm = string.Empty;
+        currentPage = 1;
+        await LoadExpenses();
+    }
+
+    private async Task HandleDateRangeChange()
+    {
+        var today = DateTime.Today;
+        switch (selectedDateRange)
+        {
+            case "today":
+                startDate = today;
+                endDate = today;
+                break;
+            case "yesterday":
+                startDate = today.AddDays(-1);
+                endDate = today.AddDays(-1);
+                break;
+            case "last7days":
+                startDate = today.AddDays(-7);
+                endDate = today;
+                break;
+            case "last30days":
+                startDate = today.AddDays(-30);
+                endDate = today;
+                break;
+            case "thismonth":
+                startDate = new DateTime(today.Year, today.Month, 1);
+                endDate = today;
+                break;
+            case "thisyear":
+                startDate = new DateTime(today.Year, 1, 1);
+                endDate = today;
+                break;
+            default:
+                break;
+        }
+        currentPage = 1;
+        await LoadExpenses();
+    }
+
+    private async Task HandleFromDateChange(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        {
+            startDate = date;
+            currentPage = 1;
+            await LoadExpenses();
+        }
+    }
+
+    private async Task HandleToDateChange(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        {
+            endDate = date;
+            currentPage = 1;
+            await LoadExpenses();
+        }
+    }
+
+    private async Task HandleExpenseTypeChange()
+    {
+        currentPage = 1;
+        await LoadExpenses();
+    }
+
+    private string GetDateRangeText()
+    {
+        if (!startDate.HasValue && !endDate.HasValue)
+            return "All Time";
+        if (startDate.HasValue && endDate.HasValue)
+            return $"{startDate.Value:MMM d} - {endDate.Value:MMM d, yyyy}";
+        return "Custom Range";
+    }
+
+    private async Task ClearFilters()
+    {
+        searchTerm = string.Empty;
+        startDate = null;
+        endDate = null;
+        selectedDateRange = string.Empty;
+        selectedExpenseType = string.Empty;
+        currentPage = 1;
+        await LoadExpenses();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages)
+        {
+            currentPage = page;
+            await LoadExpenses();
+        }
+    }
+
+    private async Task PrintReport()
+    {
+        try
+        {
+            isGeneratingPDF = true;
+            StateHasChanged();
+
+            // Fetch all expenses for current filters (no pagination)
+            var allExpenses = await ExpenseService.GetExpensesAsync(
+                sellerUserId,
+                string.IsNullOrWhiteSpace(searchTerm) ? null : searchTerm,
+                string.IsNullOrWhiteSpace(selectedExpenseType) ? null : selectedExpenseType,
+                startDate,
+                endDate,
+                1,
+                10000
+            );
+
+            var printTotalExpenses = allExpenses.Sum(e => e.Amount);
+            var printAvgExpense = allExpenses.Count > 0 ? printTotalExpenses / allExpenses.Count : 0m;
+            var thisMonthStart = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+            var printThisMonth = allExpenses.Where(e => e.ExpenseDate >= thisMonthStart).Sum(e => e.Amount);
+
+            var reportData = new
+            {
+                title = "Expense Report",
+                printedBy = AuthState.CurrentUser?.FullName ?? "Seller",
+                printedAt = DateTime.Now.ToString("MMMM dd, yyyy hh:mm tt"),
+                dateRange = GetDateRangeText(),
+                
+                kpi = new
+                {
+                    totalExpenses = printTotalExpenses.ToString("N2"),
+                    totalRecords = allExpenses.Count.ToString(),
+                    avgExpense = printAvgExpense.ToString("N2"),
+                    thisMonthExpenses = printThisMonth.ToString("N2")
+                },
+                
+                expenses = allExpenses.Select(e => new
+                {
+                    date = e.ExpenseDate.ToString("MMM dd, yyyy"),
+                    type = e.ExpenseType,
+                    description = e.Description ?? "",
+                    amount = e.Amount.ToString("N2"),
+                    createdBy = e.CreatedByName,
+                    hasReceipt = false
+                }).ToList()
+            };
+
+            await JSRuntime.InvokeVoidAsync("printExpenses", reportData);
+
+            try
+            {
+                if (AuthState.CurrentUser != null)
+                {
+                    await HistoryService.LogAsync(
+                        AuthState.CurrentUser.Id,
+                        "print",
+                        "Expense_Report",
+                        $"Printed expense report - {allExpenses.Count} expenses from {GetDateRangeText()}"
+                    );
+                }
+            }
+            catch { }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error printing expense report: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to generate PDF. Please try again.");
+        }
+        finally
+        {
+            isGeneratingPDF = false;
+            StateHasChanged();
+        }
+    }
+}

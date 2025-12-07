@@ -196,14 +196,14 @@
 }
 
 .suppliers-table thead {
-    background: #A2B9CD;
+    background: linear-gradient(135deg, #1a2332 0%, #304D6D 100%);
 }
 
 .suppliers-table th {
     padding: 14px 20px;
     text-align: left;
-    font-weight: 700;
-    color: #2d2d2d;
+    font-weight: 600;
+    color: white;
     font-size: 13px;
     text-transform: uppercase;
     letter-spacing: 0.5px;

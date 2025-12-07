@@ -41,8 +41,8 @@ namespace IT13_Final.Services.Data
 
     public interface ISupplierService
     {
-        Task<List<SupplierModel>> GetSuppliersAsync(int userId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
-        Task<int> GetSuppliersCountAsync(int userId, string? searchTerm = null, CancellationToken ct = default);
+        Task<List<SupplierModel>> GetSuppliersAsync(int userId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
+        Task<int> GetSuppliersCountAsync(int userId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, CancellationToken ct = default);
         Task<SupplierDetailsModel?> GetSupplierDetailsAsync(int supplierId, int userId, CancellationToken ct = default);
         Task<int?> CreateSupplierAsync(int userId, string companyName, string? contactPerson, string? email, string? contactNumber, string status, AddressModel? address, CancellationToken ct = default);
         Task<bool> UpdateSupplierAsync(int supplierId, int userId, string companyName, string? contactPerson, string? email, string? contactNumber, string status, AddressModel? address, CancellationToken ct = default);
@@ -58,7 +58,7 @@ namespace IT13_Final.Services.Data
         private readonly string _connectionString =
             "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
 
-        public async Task<List<SupplierModel>> GetSuppliersAsync(int userId, string? searchTerm = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
+        public async Task<List<SupplierModel>> GetSuppliersAsync(int userId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
         {
             var suppliers = new List<SupplierModel>();
             var offset = (page - 1) * pageSize;
@@ -70,8 +70,19 @@ namespace IT13_Final.Services.Data
                 SELECT id, company_name, contact_person, email, contact_number, status, created_at
                 FROM dbo.tbl_suppliers
                 WHERE archived_at IS NULL AND user_id = @UserId
-                " + (string.IsNullOrWhiteSpace(searchTerm) ? "" : "AND (company_name LIKE @SearchTerm OR contact_person LIKE @SearchTerm OR email LIKE @SearchTerm OR contact_number LIKE @SearchTerm)") + @"
-                ORDER BY created_at DESC
+                " + (string.IsNullOrWhiteSpace(searchTerm) ? "" : "AND (company_name LIKE @SearchTerm OR contact_person LIKE @SearchTerm OR email LIKE @SearchTerm OR contact_number LIKE @SearchTerm)") + @"";
+
+            if (startDate.HasValue)
+            {
+                sql += " AND CAST(created_at AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                sql += " AND CAST(created_at AS DATE) <= @EndDate";
+            }
+
+            sql += @" ORDER BY created_at DESC
                 OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
 
             using var cmd = new SqlCommand(sql, conn);
@@ -79,6 +90,14 @@ namespace IT13_Final.Services.Data
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
+            }
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value);
             }
             cmd.Parameters.AddWithValue("@Offset", offset);
             cmd.Parameters.AddWithValue("@PageSize", pageSize);
@@ -101,7 +120,7 @@ namespace IT13_Final.Services.Data
             return suppliers;
         }
 
-        public async Task<int> GetSuppliersCountAsync(int userId, string? searchTerm = null, CancellationToken ct = default)
+        public async Task<int> GetSuppliersCountAsync(int userId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, CancellationToken ct = default)
         {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -112,11 +131,29 @@ namespace IT13_Final.Services.Data
                 WHERE archived_at IS NULL AND user_id = @UserId
                 " + (string.IsNullOrWhiteSpace(searchTerm) ? "" : "AND (company_name LIKE @SearchTerm OR contact_person LIKE @SearchTerm OR email LIKE @SearchTerm OR contact_number LIKE @SearchTerm)");
 
+            if (startDate.HasValue)
+            {
+                sql += " AND CAST(created_at AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                sql += " AND CAST(created_at AS DATE) <= @EndDate";
+            }
+
             using var cmd = new SqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@UserId", userId);
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
+            }
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value);
             }
 
             var count = await cmd.ExecuteScalarAsync(ct);

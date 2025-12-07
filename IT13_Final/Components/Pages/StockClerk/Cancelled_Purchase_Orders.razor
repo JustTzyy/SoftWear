@@ -6,8 +6,6 @@
 @inject NavigationManager Nav
 @implements IDisposable
 
-<h1 class="page-title">Cancelled Purchase Orders</h1>
-
 <div class="colors-container">
     <div class="search-actions-row">
         <div class="search-wrapper">
@@ -38,20 +36,19 @@
                     <th>Total Amount</th>
                     <th>Expected Delivery</th>
                     <th>Created At</th>
-                    <th>Created By</th>
                 </tr>
             </thead>
             <tbody>
                 @if (isLoading)
                 {
                     <tr>
-                        <td colspan="7" class="loading-cell">Loading...</td>
+                        <td colspan="6" class="loading-cell">Loading...</td>
                     </tr>
                 }
                 else if (purchaseOrders.Count == 0)
                 {
                     <tr>
-                        <td colspan="7" class="empty-cell">No cancelled purchase orders found</td>
+                        <td colspan="6" class="empty-cell">No cancelled purchase orders found</td>
                     </tr>
                 }
                 else
@@ -67,7 +64,6 @@
                             <td>@po.TotalAmount.ToString("N2")</td>
                             <td>@(po.ExpectedDeliveryDate?.ToString("MMM dd, yyyy") ?? "N/A")</td>
                             <td>@po.CreatedAt.ToString("MMM dd, yyyy")</td>
-                            <td>@(string.IsNullOrEmpty(po.CreatedByName) ? "N/A" : po.CreatedByName)</td>
                         </tr>
                     }
                 }
@@ -286,14 +282,14 @@
         {
             if (sellerUserId > 0)
             {
-                var count = await PurchaseOrderService.GetCancelledPurchaseOrdersCountAsync(sellerUserId, searchTerm);
+                var count = await PurchaseOrderService.GetCancelledPurchaseOrdersCountAsync(sellerUserId, searchTerm, null, null);
                 totalPages = (int)Math.Ceiling(count / (double)pageSize);
                 if (currentPage > totalPages && totalPages > 0)
                 {
                     currentPage = totalPages;
                 }
 
-                purchaseOrders = await PurchaseOrderService.GetCancelledPurchaseOrdersAsync(sellerUserId, searchTerm, currentPage, pageSize);
+                purchaseOrders = await PurchaseOrderService.GetCancelledPurchaseOrdersAsync(sellerUserId, searchTerm, null, null, currentPage, pageSize);
             }
         }
         catch (Exception ex)

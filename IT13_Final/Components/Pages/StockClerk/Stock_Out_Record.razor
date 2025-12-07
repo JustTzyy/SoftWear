@@ -2,14 +2,13 @@
 @layout IT13_Final.Components.Layout.StockClerk.StockClerk
 @inject IT13_Final.Services.Data.IStockOutService StockOutService
 @inject IT13_Final.Services.Data.IVariantService VariantService
+@inject IT13_Final.Services.Data.IInventoryService InventoryService
 @inject IT13_Final.Services.Auth.AuthState AuthState
 @inject IJSRuntime JSRuntime
 @inject NavigationManager Nav
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.Data.SqlClient
 @implements IDisposable
-
-<h1 class="page-title">Stock Out Records</h1>
 
 @if (showSuccessMessage && !string.IsNullOrEmpty(successMessageText))
 {
@@ -124,7 +123,7 @@
 @if (showAddStockOutModal)
 {
     <div class="modal-overlay" @onclick="CloseAddStockOutModal">
-        <div class="add-supplier-modal" @onclick:stopPropagation>
+        <div class="add-admin-modal" @onclick:stopPropagation>
             <div class="modal-header">
                 <h2 class="modal-title-text">Add Stock Out</h2>
                 <button class="modal-close-btn" @onclick="CloseAddStockOutModal">
@@ -141,7 +140,7 @@
                     
                     <div class="form-grid">
                         <div class="form-field full-width">
-                            <label class="field-label">Variant <span class="required">*</span></label>
+                            <label class="field-label">Variant <span class="required-asterisk">*</span></label>
                             <InputSelect class="form-input" @bind-Value="_addStockOutModel.VariantId" @bind-Value:after="OnVariantSelectedAsync">
                                 <option value="0">Select Variant</option>
                                 @foreach (var variant in availableVariants)
@@ -152,7 +151,7 @@
                             <ValidationMessage For="@(() => _addStockOutModel.VariantId)" />
                         </div>
                         <div class="form-field">
-                            <label class="field-label">Size <span class="required">*</span></label>
+                            <label class="field-label">Size <span class="required-asterisk">*</span></label>
                             <InputSelect class="form-input" @bind-Value="_addStockOutModel.SizeId" disabled="@(selectedVariantDetails == null || selectedVariantDetails.SizeIds.Count == 0)">
                                 <option value="0">Select Size</option>
                                 @if (selectedVariantDetails != null && selectedVariantDetails.SizeIds.Count > 0)
@@ -166,7 +165,7 @@
                             <ValidationMessage For="@(() => _addStockOutModel.SizeId)" />
                         </div>
                         <div class="form-field">
-                            <label class="field-label">Color <span class="required">*</span></label>
+                            <label class="field-label">Color <span class="required-asterisk">*</span></label>
                             <InputSelect class="form-input" @bind-Value="_addStockOutModel.ColorId" disabled="@(selectedVariantDetails == null || selectedVariantDetails.ColorIds.Count == 0)">
                                 <option value="0">Select Color</option>
                                 @if (selectedVariantDetails != null && selectedVariantDetails.ColorIds.Count > 0)
@@ -180,7 +179,7 @@
                             <ValidationMessage For="@(() => _addStockOutModel.ColorId)" />
                         </div>
                         <div class="form-field">
-                            <label class="field-label">Quantity <span class="required">*</span></label>
+                            <label class="field-label">Quantity <span class="required-asterisk">*</span></label>
                             <InputNumber class="form-input" @bind-Value="_addStockOutModel.QuantityRemoved" placeholder="Enter quantity" />
                             <ValidationMessage For="@(() => _addStockOutModel.QuantityRemoved)" />
                         </div>
@@ -192,7 +191,7 @@
 
                     <div class="modal-footer">
                         <button type="button" class="cancel-btn" @onclick="CloseAddStockOutModal">Cancel</button>
-                        <button type="submit" class="save-supplier-btn">
+                        <button type="submit" class="save-admin-btn">
                             <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
                                 <polyline points="17 21 17 13 7 13 7 21"></polyline>
@@ -393,8 +392,8 @@
         {
             if (sellerUserId > 0)
             {
-                totalCount = await StockOutService.GetStockOutsCountAsync(sellerUserId, searchTerm);
-                stockOuts = await StockOutService.GetStockOutsAsync(sellerUserId, searchTerm, currentPage, pageSize);
+                totalCount = await StockOutService.GetStockOutsCountAsync(sellerUserId, searchTerm, null, null);
+                stockOuts = await StockOutService.GetStockOutsAsync(sellerUserId, searchTerm, null, null, currentPage, pageSize);
             }
         }
         catch (Exception)
@@ -489,14 +488,33 @@
     {
         try
         {
-            if (sellerUserId == 0)
+            var stockClerkUserId = AuthState.CurrentUser?.Id ?? 0;
+            if (stockClerkUserId == 0)
             {
-                await JSRuntime.InvokeVoidAsync("alert", "Unable to determine seller user ID. Please refresh the page.");
+                await JSRuntime.InvokeVoidAsync("alert", "Unable to determine user ID. Please refresh the page.");
                 return;
             }
 
+            // Validate that there's enough stock available
+            if (sellerUserId > 0)
+            {
+                var inventory = await InventoryService.GetInventoryDetailsAsync(
+                    _addStockOutModel.VariantId,
+                    _addStockOutModel.SizeId > 0 ? _addStockOutModel.SizeId : null,
+                    _addStockOutModel.ColorId > 0 ? _addStockOutModel.ColorId : null,
+                    sellerUserId
+                );
+
+                if (inventory == null || inventory.CurrentStock < _addStockOutModel.QuantityRemoved)
+                {
+                    var availableStock = inventory?.CurrentStock ?? 0;
+                    await JSRuntime.InvokeVoidAsync("alert", $"Insufficient stock! Available stock: {availableStock}, Requested: {_addStockOutModel.QuantityRemoved}");
+                    return;
+                }
+            }
+
             var result = await StockOutService.CreateStockOutAsync(
-                sellerUserId,
+                stockClerkUserId,
                 _addStockOutModel.VariantId,
                 _addStockOutModel.SizeId,
                 _addStockOutModel.ColorId,

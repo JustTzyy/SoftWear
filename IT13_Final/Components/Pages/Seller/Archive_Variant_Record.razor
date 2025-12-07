@@ -6,41 +6,111 @@
 @inject NavigationManager Nav
 @implements IDisposable
 
-<h1 class="page-title">Archived Variants</h1>
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Archived Variant Records</h1>
+        <p class="welcome-date">Manage archived variants • @totalCount total archived</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintArchivedVariantRecords" title="Print records">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 9V2h12v7"></path>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                <rect x="6" y="14" width="12" height="8"></rect>
+            </svg>
+        </button>
+    </div>
+</div>
+
+@* Search and Date Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.3-4.3"></path>
+        </svg>
+        <input type="text" class="search-input" placeholder="Search by name or product..." @bind="searchTerm" @bind:event="oninput" @bind:after="OnSearchInput" />
+        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            <button class="clear-search-btn" @onclick="ClearSearch" title="Clear search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date" 
+               class="date-input" 
+               value="@(filterStartDate?.ToString("yyyy-MM-dd"))" 
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleStartDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date" 
+               class="date-input" 
+               value="@(filterEndDate?.ToString("yyyy-MM-dd"))" 
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleEndDateChange" />
+        <button class="filter-btn" @onclick="ApplyDateFilter" title="Apply filter">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            Apply
+        </button>
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
 
 @if (showSuccessMessage && !string.IsNullOrEmpty(successMessageText))
 {
     <div class="success-banner">
-        <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="20 6 9 17 4 12"></polyline>
+        <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
         </svg>
         <span>@successMessageText</span>
     </div>
 }
 
-<div class="admin-records-container">
-    <div class="search-actions-row">
-        <div class="search-wrapper">
-            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"></circle>
-                <path d="m21 21-4.35-4.35"></path>
-            </svg>
-            <input type="text" class="search-input" placeholder="Search archived variants" value="@searchTerm" @oninput="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+@* Archived List Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Archived Variant List</h3>
+            <span class="card-subtitle">@totalCount archived variants</span>
         </div>
-
-        <div class="action-buttons">
-            <button class="back-btn" @onclick="NavigateBack">
-                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="19" y1="12" x2="5" y2="12"></line>
-                    <polyline points="12 19 5 12 12 5"></polyline>
+        <div class="card-actions">
+            <button class="card-action-btn primary" @onclick="NavigateToRecords">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15 18 9 12 15 6"></polyline>
                 </svg>
-                <span>Back to Variants</span>
+                <span>Back to Active</span>
             </button>
         </div>
     </div>
-
-    <div class="table-container">
-        <div class="table-header">List</div>
+    
+    <div class="card-body">
         <table class="admin-table">
             <thead>
                 <tr>
@@ -76,10 +146,12 @@
                             <td>₱@variant.Price.ToString("N2")</td>
                             <td>@variant.ArchivedDate.ToString("MMM dd, yyyy")</td>
                             <td class="actions-cell" @onclick:stopPropagation>
-                                <button class="action-btn restore-btn" @onclick="() => HandleRestore(variant.Id)" title="Restore">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="23 4 23 10 17 10"></polyline>
-                                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                                <button class="action-btn restore-btn" @onclick="() => HandleRestore(variant.Id)" title="Restore variant">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+                                        <path d="M21 3v5h-5"></path>
+                                        <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+                                        <path d="M8 16H3v5"></path>
                                     </svg>
                                 </button>
                             </td>
@@ -93,13 +165,28 @@
     @if (totalPages > 1)
     {
         <div class="pagination">
-            <button class="pagination-btn" @onclick="PreviousPage" disabled="@(currentPage == 1)">
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="15 18 9 12 15 6"></polyline>
                 </svg>
             </button>
-            <span class="page-info">Page @currentPage of @totalPages</span>
-            <button class="pagination-btn" @onclick="NextPage" disabled="@(currentPage == totalPages)">
+
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                var pageNum = i;
+                @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
+                {
+                    <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 2 || i == currentPage + 2)
+                {
+                    <span class="page-ellipsis">...</span>
+                }
+            }
+
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="9 18 15 12 9 6"></polyline>
                 </svg>
@@ -108,109 +195,127 @@
     }
 </div>
 
-@* Variant Details Modal *@
 @if (showVariantDetails && variantDetails != null)
 {
     <div class="modal-overlay" @onclick="CloseVariantDetails">
         <div class="modal-container" @onclick:stopPropagation>
             <div class="modal-header">
                 <div class="modal-title">
-                    <svg class="modal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="12" y1="16" x2="12" y2="12"></line>
-                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    <svg class="modal-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
                     </svg>
-                    <span>Archived Variant Details</span>
+                    <span>Variant Details</span>
                 </div>
                 <button class="modal-close" @onclick="CloseVariantDetails">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                    <span class="modal-close-text">Close</span>
+                </button>
+            </div>
+
+            <div class="modal-content">
+                <div class="details-column">
+                    <div class="details-section">
+                        <div class="details-section-header">
+                            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                            </svg>
+                            <span>Variant Information</span>
+                        </div>
+                        @if (!string.IsNullOrEmpty(variantDetails.ProductImageBase64))
+                        {
+                            <div class="product-image-large" style="background-color: @(selectedColorHex ?? "#FFFFFF");">
+                                <img src="data:image/jpeg;base64,@variantDetails.ProductImageBase64" alt="@variantDetails.ProductName" />
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="product-image-large no-image" style="background-color: @(selectedColorHex ?? "#F5F7FA");">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                    <polyline points="21 15 16 10 5 21"></polyline>
+                                </svg>
+                            </div>
+                        }
+                        <div class="details-list">
+                            <div class="detail-item">
+                                <span class="detail-label">VARIANT NAME:</span>
+                                <span class="detail-value">@variantDetails.Name</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">PRODUCT:</span>
+                                <span class="detail-value">@variantDetails.ProductName</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">PRICE:</span>
+                                <span class="detail-value">₱@variantDetails.Price.ToString("N2")</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">COST PRICE:</span>
+                                <span class="detail-value">@(variantDetails.CostPrice.HasValue ? $"₱{variantDetails.CostPrice.Value:N2}" : "N/A")</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">SIZES:</span>
+                                <span class="detail-value">
+                                    @if (variantDetails.SizeNames.Count > 0)
+                                    {
+                                        @string.Join(", ", variantDetails.SizeNames)
+                                    }
+                                    else
+                                    {
+                                        <span>None</span>
+                                    }
+                                </span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">COLORS:</span>
+                                <span class="detail-value">
+                                    @if (variantDetails.ColorNames.Count > 0 && variantDetails.ColorHexValues.Count > 0)
+                                    {
+                                        <div class="color-swatches-container">
+                                            @for (int i = 0; i < variantDetails.ColorNames.Count && i < variantDetails.ColorHexValues.Count; i++)
+                                            {
+                                                var colorHex = variantDetails.ColorHexValues[i];
+                                                var colorName = variantDetails.ColorNames[i];
+                                                <div class="color-swatch-item @(selectedColorHex == colorHex ? "selected" : "")" 
+                                                     @onclick="() => SelectColor(colorHex)"
+                                                     style="cursor: pointer;">
+                                                    <span class="color-swatch-large" style="background-color: @colorHex;"></span>
+                                                    <span class="color-name">@colorName</span>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span>None</span>
+                                    }
+                                </span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">STATUS:</span>
+                                <span class="detail-value status-badge inactive">@variantDetails.Status</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">DATE CREATED:</span>
+                                <span class="detail-value">@variantDetails.DateCreated.ToString("M/d/yyyy")</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="close-btn" @onclick="CloseVariantDetails">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
                     </svg>
+                    <span>CLOSE</span>
                 </button>
-            </div>
-
-            <div class="modal-content-variant">
-                @if (!string.IsNullOrEmpty(variantDetails.ProductImageBase64))
-                {
-                    <div class="product-image-large" style="background-color: @(selectedColorHex ?? "#FFFFFF");">
-                        <img src="data:image/jpeg;base64,@variantDetails.ProductImageBase64" alt="@variantDetails.ProductName" />
-                    </div>
-                }
-                else
-                {
-                    <div class="product-image-large no-image" style="background-color: @(selectedColorHex ?? "#F5F7FA");">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                            <polyline points="21 15 16 10 5 21"></polyline>
-                        </svg>
-                    </div>
-                }
-                <div class="details-list">
-                    <div class="detail-item">
-                        <span class="detail-label">VARIANT NAME:</span>
-                        <span class="detail-value">@variantDetails.Name</span>
-                    </div>
-                    <div class="detail-item">
-                        <span class="detail-label">PRODUCT:</span>
-                        <span class="detail-value">@variantDetails.ProductName</span>
-                    </div>
-                    <div class="detail-item">
-                        <span class="detail-label">PRICE:</span>
-                        <span class="detail-value">₱@variantDetails.Price.ToString("N2")</span>
-                    </div>
-                    <div class="detail-item">
-                        <span class="detail-label">COST PRICE:</span>
-                        <span class="detail-value">@(variantDetails.CostPrice.HasValue ? $"₱{variantDetails.CostPrice.Value:N2}" : "N/A")</span>
-                    </div>
-                    <div class="detail-item">
-                        <span class="detail-label">SIZES:</span>
-                        <span class="detail-value">
-                            @if (variantDetails.SizeNames.Count > 0)
-                            {
-                                @string.Join(", ", variantDetails.SizeNames)
-                            }
-                            else
-                            {
-                                <span>None</span>
-                            }
-                        </span>
-                    </div>
-                    <div class="detail-item">
-                        <span class="detail-label">COLORS:</span>
-                        <span class="detail-value">
-                            @if (variantDetails.ColorNames.Count > 0 && variantDetails.ColorHexValues.Count > 0)
-                            {
-                                <div class="color-swatches-container">
-                                    @for (int i = 0; i < variantDetails.ColorNames.Count && i < variantDetails.ColorHexValues.Count; i++)
-                                    {
-                                        var colorHex = variantDetails.ColorHexValues[i];
-                                        var colorName = variantDetails.ColorNames[i];
-                                        <div class="color-swatch-item @(selectedColorHex == colorHex ? "selected" : "")" 
-                                             @onclick="() => SelectColor(colorHex)"
-                                             style="cursor: pointer;">
-                                            <span class="color-swatch-large" style="background-color: @colorHex;"></span>
-                                            <span class="color-name">@colorName</span>
-                                        </div>
-                                    }
-                                </div>
-                            }
-                            else
-                            {
-                                <span>None</span>
-                            }
-                        </span>
-                    </div>
-                    <div class="detail-item">
-                        <span class="detail-label">STATUS:</span>
-                        <span class="detail-value status-badge inactive">@variantDetails.Status</span>
-                    </div>
-                    <div class="detail-item">
-                        <span class="detail-label">DATE CREATED:</span>
-                        <span class="detail-value">@variantDetails.DateCreated.ToString("M/d/yyyy")</span>
-                    </div>
-                </div>
             </div>
         </div>
     </div>
@@ -218,12 +323,21 @@
 
 @code {
     private List<IT13_Final.Services.Data.ArchivedVariantModel> archivedVariants = new();
+    private List<IT13_Final.Services.Data.ArchivedVariantModel> allFilteredVariants = new();
     private string searchTerm = string.Empty;
     private bool isLoading = true;
     private int currentPage = 1;
     private int pageSize = 10;
     private int totalCount = 0;
     private int totalPages => (int)Math.Ceiling((double)totalCount / pageSize);
+    
+    // Date filter variables
+    private string selectedDateRange = "";
+    private DateTime? filterStartDate;
+    private DateTime? filterEndDate;
+    
+    private bool HasActiveDateFilters => filterStartDate.HasValue || filterEndDate.HasValue || !string.IsNullOrEmpty(selectedDateRange);
+    
     private bool showVariantDetails = false;
     private IT13_Final.Services.Data.VariantDetailsModel? variantDetails = null;
     private string? selectedColorHex = null;
@@ -231,7 +345,6 @@
     private bool showSuccessMessage = false;
     private string successMessageText = string.Empty;
     private System.Threading.Timer? _successBannerTimer;
-
     private System.Threading.Timer? _searchTimer;
 
     protected override async Task OnInitializedAsync()
@@ -247,12 +360,50 @@
         try
         {
             var userId = AuthState.CurrentUser?.Id ?? 0;
-            totalCount = await VariantService.GetArchivedVariantsCountAsync(userId, searchTerm);
-            archivedVariants = await VariantService.GetArchivedVariantsAsync(userId, searchTerm, currentPage, pageSize);
+            
+            // Get all archived variants matching search term first
+            var allVariants = await VariantService.GetArchivedVariantsAsync(userId, searchTerm, 1, 10000);
+            
+            // Apply date filter client-side (filter by ArchivedDate)
+            if (filterStartDate.HasValue || filterEndDate.HasValue)
+            {
+                allFilteredVariants = allVariants.Where(v =>
+                {
+                    var archivedDate = v.ArchivedDate.Date;
+                    
+                    if (filterStartDate.HasValue && filterEndDate.HasValue)
+                    {
+                        return archivedDate >= filterStartDate.Value.Date && archivedDate <= filterEndDate.Value.Date;
+                    }
+                    else if (filterStartDate.HasValue)
+                    {
+                        return archivedDate >= filterStartDate.Value.Date;
+                    }
+                    else if (filterEndDate.HasValue)
+                    {
+                        return archivedDate <= filterEndDate.Value.Date;
+                    }
+                    return true;
+                }).ToList();
+            }
+            else
+            {
+                allFilteredVariants = allVariants;
+            }
+            
+            // Update total count based on filtered results
+            totalCount = allFilteredVariants.Count;
+            
+            // Apply pagination to filtered results
+            archivedVariants = allFilteredVariants
+                .Skip((currentPage - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
         }
         catch (Exception)
         {
             archivedVariants = new List<IT13_Final.Services.Data.ArchivedVariantModel>();
+            allFilteredVariants = new List<IT13_Final.Services.Data.ArchivedVariantModel>();
             totalCount = 0;
         }
         finally
@@ -262,75 +413,72 @@
         }
     }
 
-    private void HandleSearchInput(ChangeEventArgs e)
+    private void OnSearchInput()
     {
-        searchTerm = e.Value?.ToString() ?? string.Empty;
+        // Filter out special characters
+        var filtered = System.Text.RegularExpressions.Regex.Replace(searchTerm, @"[^a-zA-Z0-9\s\-_]", "");
+        if (filtered != searchTerm)
+        {
+            searchTerm = filtered;
+        }
         
         _searchTimer?.Dispose();
         _searchTimer = new System.Threading.Timer(async _ =>
         {
             currentPage = 1;
-            await InvokeAsync(async () => await LoadArchivedVariantsAsync());
-        }, null, 300, Timeout.Infinite);
+            await InvokeAsync(async () =>
+            {
+                await LoadArchivedVariantsAsync();
+            });
+        }, null, 400, Timeout.Infinite);
     }
 
-    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    private async Task ClearSearch()
     {
-        if (e.Key == "Enter")
+        searchTerm = string.Empty;
+        currentPage = 1;
+        await LoadArchivedVariantsAsync();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages && page != currentPage)
         {
-            _searchTimer?.Dispose();
-            currentPage = 1;
+            currentPage = page;
             await LoadArchivedVariantsAsync();
         }
     }
 
-    private async Task PreviousPage()
-    {
-        if (currentPage > 1)
-        {
-            currentPage--;
-            await LoadArchivedVariantsAsync();
-        }
-    }
-
-    private async Task NextPage()
-    {
-        if (currentPage < totalPages)
-        {
-            currentPage++;
-            await LoadArchivedVariantsAsync();
-        }
-    }
-
-    private void NavigateBack()
+    private void NavigateToRecords()
     {
         Nav.NavigateTo("/seller/Variant");
     }
 
     private async Task HandleRestore(int variantId)
     {
-        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to restore this variant?");
-        if (confirmed)
+        var variant = archivedVariants.FirstOrDefault(v => v.Id == variantId);
+        var variantName = variant?.Name ?? "this variant";
+        
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to restore {variantName}?");
+        if (!confirmed) return;
+        
+        try
         {
-            try
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            var success = await VariantService.RestoreVariantAsync(variantId, userId);
+            
+            if (success)
             {
-                var userId = AuthState.CurrentUser?.Id ?? 0;
-                var success = await VariantService.RestoreVariantAsync(variantId, userId);
-                if (success)
-                {
-                    ShowSuccessMessage("Variant restored successfully!");
-                    await LoadArchivedVariantsAsync();
-                }
-                else
-                {
-                    await JSRuntime.InvokeVoidAsync("alert", "Failed to restore variant.");
-                }
-            }
-            catch (Exception ex)
-            {
-                await JSRuntime.InvokeVoidAsync("alert", $"Error restoring variant: {ex.Message}");
+                await LoadArchivedVariantsAsync();
+                ShowSuccessMessage("Variant restored successfully!");
             }
         }
+        catch (Exception)
+        {
+            // Handle error
+        }
+        
+        StateHasChanged();
     }
 
     private async Task HandleRowClick(int variantId)
@@ -388,9 +536,140 @@
         _successBannerTimer?.Dispose();
         _successBannerTimer = new System.Threading.Timer(_ =>
         {
-            showSuccessMessage = false;
-            InvokeAsync(StateHasChanged);
+            InvokeAsync(() =>
+            {
+                showSuccessMessage = false;
+                StateHasChanged();
+            });
         }, null, 3000, Timeout.Infinite);
+    }
+
+    // Date filter methods
+    private void HandleStartDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            filterStartDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            filterStartDate = null;
+            selectedDateRange = "";
+        }
+    }
+
+    private void HandleEndDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            filterEndDate = date;
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            filterEndDate = null;
+            selectedDateRange = "";
+        }
+    }
+
+    private void HandleDateRangeChange()
+    {
+        var now = DateTime.Now;
+        switch (selectedDateRange)
+        {
+            case "":
+                filterStartDate = null;
+                filterEndDate = null;
+                break;
+            case "today":
+                filterStartDate = now.Date;
+                filterEndDate = now.Date;
+                break;
+            case "yesterday":
+                filterStartDate = now.Date.AddDays(-1);
+                filterEndDate = now.Date.AddDays(-1);
+                break;
+            case "last7days":
+                filterStartDate = now.Date.AddDays(-6);
+                filterEndDate = now.Date;
+                break;
+            case "last30days":
+                filterStartDate = now.Date.AddDays(-29);
+                filterEndDate = now.Date;
+                break;
+            case "thismonth":
+                filterStartDate = new DateTime(now.Year, now.Month, 1);
+                filterEndDate = now.Date;
+                break;
+            case "thisyear":
+                filterStartDate = new DateTime(now.Year, 1, 1);
+                filterEndDate = now.Date;
+                break;
+        }
+        currentPage = 1;
+        InvokeAsync(async () => await LoadArchivedVariantsAsync());
+    }
+
+    private async Task ApplyDateFilter()
+    {
+        currentPage = 1;
+        await LoadArchivedVariantsAsync();
+    }
+
+    private async Task ClearDateFilter()
+    {
+        filterStartDate = null;
+        filterEndDate = null;
+        selectedDateRange = "";
+        currentPage = 1;
+        await LoadArchivedVariantsAsync();
+    }
+
+    private string GetDateRangeText()
+    {
+        if (filterStartDate.HasValue && filterEndDate.HasValue)
+        {
+            return $"{filterStartDate.Value:MM/dd/yyyy} - {filterEndDate.Value:MM/dd/yyyy}";
+        }
+        else if (filterStartDate.HasValue)
+        {
+            return $"From {filterStartDate.Value:MM/dd/yyyy}";
+        }
+        else if (filterEndDate.HasValue)
+        {
+            return $"Until {filterEndDate.Value:MM/dd/yyyy}";
+        }
+        return "All Time";
+    }
+
+    private async Task PrintArchivedVariantRecords()
+    {
+        var currentUserName = AuthState.CurrentUser?.FullName ?? "Seller";
+        
+        // Use all filtered variants for the PDF, not just the current page
+        var recordsForPrint = allFilteredVariants.Any() ? allFilteredVariants : archivedVariants;
+
+        var reportData = new
+        {
+            title = "Archived Variant Records Report",
+            printedBy = currentUserName,
+            printedAt = DateTime.Now.ToString("MMMM dd, yyyy hh:mm tt"),
+            dateRange = GetDateRangeText(),
+            totalCount = recordsForPrint.Count,
+            records = recordsForPrint.Select(v => new
+            {
+                id = v.Id,
+                name = v.Name,
+                productName = v.ProductName,
+                price = $"₱{v.Price:N2}",
+                archivedDate = v.ArchivedDate.ToString("MMM dd, yyyy")
+            }).ToList()
+        };
+
+        await JSRuntime.InvokeVoidAsync("printArchivedVariantRecords", reportData);
     }
 
     public void Dispose()
@@ -399,5 +678,3 @@
         _successBannerTimer?.Dispose();
     }
 }
-
-

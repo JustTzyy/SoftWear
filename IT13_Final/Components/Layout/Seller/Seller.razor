@@ -4,10 +4,10 @@
 @inherits LayoutComponentBase
 @implements IDisposable
 
-<div class="grid min-h-screen transition-all duration-300 ease-in-out" style="grid-template-columns: @(sidebarCollapsed ? "80px" : "260px") 1fr; background-color: #E0E0E0;">
-    <aside class="bg-white transition-all duration-300 ease-in-out overflow-hidden" style="border-right: 1px solid #E0E0E0;">
-        <div class="flex items-start gap-3 py-4 px-4" style="min-height: 64px;">
-            <a href="/seller/dashboard" class="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style="border: 2px solid #5C7CFA; padding: 6px; background-color: #1a2332;">
+<div class="grid min-h-screen transition-all duration-300 ease-in-out" style="grid-template-columns: @(sidebarCollapsed ? "80px" : "260px") 1fr; background: #F5F5F5;">
+    <aside class="bg-white transition-all duration-300 ease-in-out overflow-hidden" style="border-right: 1px solid #E0E0E0; position: sticky; top: 0; height: 100vh;">
+        <div class="flex items-start gap-3 py-4 px-4 cursor-pointer hover:bg-gray-50 transition-colors duration-200" style="min-height: 64px;" @onclick="ToggleSidebar">
+            <a href="/seller/dashboard" class="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style="border: 2px solid #5C7CFA; padding: 6px; background-color: #1a2332;" @onclick:stopPropagation>
                 <img src="/images/logo.png" alt="Logo" class="w-full h-full object-contain" style="display: block; margin: auto;" />
             </a>
             <div class="transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">
@@ -29,11 +29,11 @@
             </a>
 
             <button class="@GetStaffMgmtButtonClass()" @onclick="() => staffMgmtOpen = !staffMgmtOpen" aria-expanded="@staffMgmtOpen" title="Staff Management">
-                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/seller/Accounting_Record", "/seller/Cashier_Record", "/seller/Stock_Clerk_Record")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/seller/Accounting_Record", "/seller/Cashier_Record", "/seller/Stock_Clerk_Record", "/seller/Permission_Requests")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                 </svg>
                 <span class="flex-1 transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">Staff Management</span>
-                <span class="@GetIconClass("/seller/Accounting_Record", "/seller/Cashier_Record", "/seller/Stock_Clerk_Record") transition-all duration-300 ease-in-out" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">@(staffMgmtOpen ? "▾" : "▸")</span>
+                <span class="@GetIconClass("/seller/Accounting_Record", "/seller/Cashier_Record", "/seller/Stock_Clerk_Record", "/seller/Permission_Requests") transition-all duration-300 ease-in-out" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">@(staffMgmtOpen ? "▾" : "▸")</span>
                 @if (IsStaffMgmtActive())
                 {
                     <div class="absolute left-0 top-0 bottom-0 w-1 bg-yinmn-blue rounded-r"></div>
@@ -53,6 +53,10 @@
                     <a class="@GetSubNavItemClass("/seller/Stock_Clerk_Record")" href="/seller/Stock_Clerk_Record">
                         <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/seller/Stock_Clerk_Record")"></span>
                         <span>Stock Clerk</span>
+                    </a>
+                    <a class="@GetSubNavItemClass("/seller/Permission_Requests")" href="/seller/Permission_Requests">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/seller/Permission_Requests")"></span>
+                        <span>Permission Requests</span>
                     </a>
                 </div>
             }
@@ -115,32 +119,109 @@
                 </div>
             }
 
-            <a class="@GetNavItemClass("/seller/room")" href="#" title="Room Management">
-                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/seller/room")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                </svg>
-                <span class="transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">Room Management</span>
-                @if (IsActive("/seller/room"))
-                {
-                    <div class="absolute left-0 top-0 bottom-0 w-1 bg-yinmn-blue rounded-r"></div>
-                }
-            </a>
-            <a class="@GetNavItemClass("/seller/reports")" href="#" title="Reports">
-                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/seller/reports")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <button class="@GetReportsButtonClass()" @onclick="() => reportsOpen = !reportsOpen" aria-expanded="@reportsOpen" title="Reports">
+                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/seller/AuditLogs", "/seller/CashierSalesReports", "/seller/CashierReturnsReports", "/seller/StockClerkStockInReports", "/seller/StockClerkStockOutReports", "/seller/StockClerkStockAdjustmentReports", "/seller/StockClerkSupplierReports", "/seller/StockClerkPurchaseOrderReports", "/seller/AccountingFinancialReports", "/seller/AccountingExpenseReports", "/seller/AccountingTaxReports", "/seller/AccountingDailySalesVerificationReports", "/seller/AccountingProfitLossReports", "/seller/AccountingCashInOutAudit", "/seller/AccountingIncomeBreakdown")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <span class="transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">Reports</span>
-                @if (IsActive("/seller/reports"))
+                <span class="flex-1 transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">Reports</span>
+                <span class="@GetIconClass("/seller/AuditLogs", "/seller/CashierSalesReports", "/seller/CashierReturnsReports", "/seller/StockClerkStockInReports", "/seller/StockClerkStockOutReports", "/seller/StockClerkStockAdjustmentReports", "/seller/StockClerkSupplierReports", "/seller/StockClerkPurchaseOrderReports", "/seller/AccountingFinancialReports", "/seller/AccountingExpenseReports", "/seller/AccountingTaxReports", "/seller/AccountingDailySalesVerificationReports", "/seller/AccountingProfitLossReports", "/seller/AccountingCashInOutAudit", "/seller/AccountingIncomeBreakdown") transition-all duration-300 ease-in-out" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">@(reportsOpen ? "▾" : "▸")</span>
+                @if (IsReportsActive())
                 {
                     <div class="absolute left-0 top-0 bottom-0 w-1 bg-yinmn-blue rounded-r"></div>
                 }
-            </a>
+            </button>
+            @if (reportsOpen && !sidebarCollapsed)
+            {
+                <div class="grid gap-1 py-1 pl-4">
+                    <a class="@GetSubNavItemClass("/seller/AuditLogs")" href="/seller/AuditLogs">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/seller/AuditLogs")"></span>
+                        <span>Audit Logs</span>
+                    </a>
+                    <button class="@GetSubSubNavButtonClass("/seller/CashierSalesReports", "/seller/CashierReturnsReports")" @onclick="() => cashierReportsOpen = !cashierReportsOpen" aria-expanded="@cashierReportsOpen">
+                        <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/CashierSalesReports", "/seller/CashierReturnsReports") flex-shrink-0"></span>
+                        <span class="flex-1 break-words">Cashier Reports</span>
+                        <span class="flex-shrink-0">@(cashierReportsOpen ? "▾" : "▸")</span>
+                    </button>
+                    @if (cashierReportsOpen && !sidebarCollapsed)
+                    {
+                        <div class="grid gap-1 py-1 pl-6">
+                            <a class="@GetSubSubNavItemClass("/seller/CashierSalesReports")" href="/seller/CashierSalesReports">
+                                <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/CashierSalesReports") flex-shrink-0"></span>
+                                <span class="break-words">Sales Reports</span>
+                            </a>
+                            <a class="@GetSubSubNavItemClass("/seller/CashierReturnsReports")" href="/seller/CashierReturnsReports">
+                                <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/CashierReturnsReports") flex-shrink-0"></span>
+                                <span class="break-words">Returns Reports</span>
+                            </a>
+                        </div>
+                    }
+                    <button class="@GetSubSubNavButtonClass("/seller/StockClerkStockInReports", "/seller/StockClerkStockOutReports", "/seller/StockClerkStockAdjustmentReports", "/seller/StockClerkPurchaseOrderReports")" @onclick="() => stockClerkReportsOpen = !stockClerkReportsOpen" aria-expanded="@stockClerkReportsOpen">
+                        <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/StockClerkStockInReports", "/seller/StockClerkStockOutReports", "/seller/StockClerkStockAdjustmentReports", "/seller/StockClerkPurchaseOrderReports") flex-shrink-0"></span>
+                        <span class="flex-1 break-words">Stock Clerk Reports</span>
+                        <span class="flex-shrink-0">@(stockClerkReportsOpen ? "▾" : "▸")</span>
+                    </button>
+                    @if (stockClerkReportsOpen && !sidebarCollapsed)
+                    {
+                        <div class="grid gap-1 py-1 pl-6">
+                            <a class="@GetSubSubNavItemClass("/seller/StockClerkStockInReports")" href="/seller/StockClerkStockInReports">
+                                <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/StockClerkStockInReports") flex-shrink-0"></span>
+                                <span class="break-words">Stock In Reports</span>
+                            </a>
+                            <a class="@GetSubSubNavItemClass("/seller/StockClerkStockOutReports")" href="/seller/StockClerkStockOutReports">
+                                <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/StockClerkStockOutReports") flex-shrink-0"></span>
+                                <span class="break-words">Stock Out Reports</span>
+                            </a>
+                            <a class="@GetSubSubNavItemClass("/seller/StockClerkStockAdjustmentReports")" href="/seller/StockClerkStockAdjustmentReports">
+                                <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/StockClerkStockAdjustmentReports") flex-shrink-0"></span>
+                                <span class="break-words">Stock Adjustment Reports</span>
+                            </a>
+                            <a class="@GetSubSubNavItemClass("/seller/StockClerkPurchaseOrderReports")" href="/seller/StockClerkPurchaseOrderReports">
+                                <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/StockClerkPurchaseOrderReports") flex-shrink-0"></span>
+                                <span class="break-words">Purchase Order Reports</span>
+                            </a>
+                        </div>
+                    }
+                    <button class="@GetSubSubNavButtonClass("/seller/AccountingExpenseReports", "/seller/AccountingTaxReports", "/seller/AccountingDailySalesVerificationReports", "/seller/AccountingProfitLossReports", "/seller/AccountingCashInOutAudit", "/seller/AccountingIncomeBreakdown")" @onclick="() => accountingReportsOpen = !accountingReportsOpen" aria-expanded="@accountingReportsOpen">
+                        <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/AccountingExpenseReports", "/seller/AccountingTaxReports", "/seller/AccountingDailySalesVerificationReports", "/seller/AccountingProfitLossReports", "/seller/AccountingCashInOutAudit", "/seller/AccountingIncomeBreakdown") flex-shrink-0"></span>
+                        <span class="flex-1 break-words">Accounting Reports</span>
+                        <span class="flex-shrink-0">@(accountingReportsOpen ? "▾" : "▸")</span>
+                    </button>
+                    @if (accountingReportsOpen && !sidebarCollapsed)
+                    {
+                        <div class="grid gap-1 py-1 pl-6">
+                            <a class="@GetSubSubNavItemClass("/seller/AccountingExpenseReports")" href="/seller/AccountingExpenseReports">
+                                <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/AccountingExpenseReports") flex-shrink-0"></span>
+                                <span class="break-words">Expense Reports</span>
+                            </a>
+                            <a class="@GetSubSubNavItemClass("/seller/AccountingTaxReports")" href="/seller/AccountingTaxReports">
+                                <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/AccountingTaxReports") flex-shrink-0"></span>
+                                <span class="break-words">Tax Reports</span>
+                            </a>
+                            <a class="@GetSubSubNavItemClass("/seller/AccountingDailySalesVerificationReports")" href="/seller/AccountingDailySalesVerificationReports">
+                                <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/AccountingDailySalesVerificationReports") flex-shrink-0"></span>
+                                <span class="break-words">Daily Sales Verification Reports</span>
+                            </a>
+                            <a class="@GetSubSubNavItemClass("/seller/AccountingProfitLossReports")" href="/seller/AccountingProfitLossReports">
+                                <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/AccountingProfitLossReports") flex-shrink-0"></span>
+                                <span class="break-words">Profit & Loss Statements</span>
+                            </a>
+                            <a class="@GetSubSubNavItemClass("/seller/AccountingCashInOutAudit")" href="/seller/AccountingCashInOutAudit">
+                                <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/AccountingCashInOutAudit") flex-shrink-0"></span>
+                                <span class="break-words">Cash In/Cash Out Audit</span>
+                            </a>
+                            <a class="@GetSubSubNavItemClass("/seller/AccountingIncomeBreakdown")" href="/seller/AccountingIncomeBreakdown">
+                                <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/AccountingIncomeBreakdown") flex-shrink-0"></span>
+                                <span class="break-words">Income Breakdown</span>
+                            </a>
+                        </div>
+                    }
+                </div>
+            }
         </nav>
     </aside>
 
     <div class="grid grid-rows-[64px_1fr]">
-        <header class="flex items-center gap-3 px-5 bg-white" style="border-bottom: 1px solid #E0E0E0;">
-            <button class="bg-transparent border-none text-xl cursor-pointer text-yinmn-blue transition-all duration-200 ease-in-out hover:opacity-70" @onclick="ToggleSidebar" aria-label="Toggle menu">≡</button>
+        <header class="flex items-center gap-3 px-5 bg-white" style="border-bottom: 1px solid #E0E0E0; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 100;">
             <div class="flex-1"></div>
             <div class="relative flex items-center gap-2.5" @onclick="ToggleProfileMenu">
                 <div class="w-9 h-9 rounded-full bg-gradient-to-br from-uranian-blue to-white text-yinmn-blue flex items-center justify-center font-extrabold">@GetInitials()</div>
@@ -179,6 +260,10 @@
     private bool staffMgmtOpen = false;
     private bool productMgmtOpen = false;
     private bool supplierMgmtOpen = false;
+    private bool reportsOpen = false;
+    private bool cashierReportsOpen = false;
+    private bool stockClerkReportsOpen = false;
+    private bool accountingReportsOpen = false;
     private bool profileOpen;
     private bool sidebarCollapsed = false;
     private string currentUri = string.Empty;
@@ -189,6 +274,7 @@
         CheckStaffMgmtExpansion();
         CheckProductMgmtExpansion();
         CheckSupplierMgmtExpansion();
+        CheckReportsExpansion();
         Nav.LocationChanged += OnLocationChanged;
     }
 
@@ -198,12 +284,13 @@
         CheckStaffMgmtExpansion();
         CheckProductMgmtExpansion();
         CheckSupplierMgmtExpansion();
+        CheckReportsExpansion();
         InvokeAsync(StateHasChanged);
     }
 
     private void CheckStaffMgmtExpansion()
     {
-        if (IsActive("/seller/Accounting_Record") || IsActive("/seller/Cashier_Record") || IsActive("/seller/Stock_Clerk_Record"))
+        if (IsActive("/seller/Accounting_Record") || IsActive("/seller/Cashier_Record") || IsActive("/seller/Stock_Clerk_Record") || IsActive("/seller/Permission_Requests"))
         {
             staffMgmtOpen = true;
         }
@@ -222,6 +309,40 @@
         if (IsActive("/seller/Supplier"))
         {
             supplierMgmtOpen = true;
+        }
+    }
+
+    private void CheckReportsExpansion()
+    {
+        if (IsActive("/seller/AuditLogs") || 
+            IsActive("/seller/CashierSalesReports") || IsActive("/seller/CashierReturnsReports") ||
+            IsActive("/seller/StockClerkStockInReports") || IsActive("/seller/StockClerkStockOutReports") || 
+            IsActive("/seller/StockClerkStockAdjustmentReports") || IsActive("/seller/StockClerkPurchaseOrderReports") ||
+            IsActive("/seller/AccountingExpenseReports") || 
+            IsActive("/seller/AccountingTaxReports") || IsActive("/seller/AccountingDailySalesVerificationReports") || 
+            IsActive("/seller/AccountingProfitLossReports") || IsActive("/seller/AccountingCashInOutAudit") || 
+            IsActive("/seller/AccountingIncomeBreakdown"))
+        {
+            reportsOpen = true;
+        }
+        
+        if (IsActive("/seller/CashierSalesReports") || IsActive("/seller/CashierReturnsReports"))
+        {
+            cashierReportsOpen = true;
+        }
+        
+        if (IsActive("/seller/StockClerkStockInReports") || IsActive("/seller/StockClerkStockOutReports") || 
+            IsActive("/seller/StockClerkStockAdjustmentReports") || IsActive("/seller/StockClerkPurchaseOrderReports"))
+        {
+            stockClerkReportsOpen = true;
+        }
+        
+        if (IsActive("/seller/AccountingExpenseReports") || 
+            IsActive("/seller/AccountingTaxReports") || IsActive("/seller/AccountingDailySalesVerificationReports") || 
+            IsActive("/seller/AccountingProfitLossReports") || IsActive("/seller/AccountingCashInOutAudit") || 
+            IsActive("/seller/AccountingIncomeBreakdown"))
+        {
+            accountingReportsOpen = true;
         }
     }
 
@@ -261,7 +382,7 @@
 
     private bool IsStaffMgmtActive()
     {
-        return IsActive("/seller/Accounting_Record") || IsActive("/seller/Cashier_Record") || IsActive("/seller/Stock_Clerk_Record");
+        return IsActive("/seller/Accounting_Record") || IsActive("/seller/Cashier_Record") || IsActive("/seller/Stock_Clerk_Record") || IsActive("/seller/Permission_Requests");
     }
 
     private string GetStaffMgmtButtonClass()
@@ -285,6 +406,18 @@
         return IsActive("/seller/Supplier");
     }
 
+    private bool IsReportsActive()
+    {
+        return IsActive("/seller/AuditLogs") || 
+               IsActive("/seller/CashierSalesReports") || IsActive("/seller/CashierReturnsReports") ||
+               IsActive("/seller/StockClerkStockInReports") || IsActive("/seller/StockClerkStockOutReports") || 
+               IsActive("/seller/StockClerkStockAdjustmentReports") || IsActive("/seller/StockClerkPurchaseOrderReports") ||
+               IsActive("/seller/AccountingExpenseReports") || 
+               IsActive("/seller/AccountingTaxReports") || IsActive("/seller/AccountingDailySalesVerificationReports") || 
+               IsActive("/seller/AccountingProfitLossReports") || IsActive("/seller/AccountingCashInOutAudit") || 
+               IsActive("/seller/AccountingIncomeBreakdown");
+    }
+
     private string GetSupplierMgmtButtonClass()
     {
         var baseClass = "relative w-full text-left cursor-pointer py-2.5 px-3 rounded-lg no-underline flex items-center gap-3 transition-all duration-200 ease-in-out";
@@ -301,6 +434,17 @@
         var baseClass = "relative w-full text-left cursor-pointer py-2.5 px-3 rounded-lg no-underline flex items-center gap-3 transition-all duration-200 ease-in-out";
         
         if (IsProductMgmtActive())
+        {
+            return $"{baseClass} bg-uranian-blue text-yinmn-blue";
+        }
+        return $"{baseClass} bg-transparent text-gray-800 hover:bg-uranian-blue hover:bg-opacity-30";
+    }
+
+    private string GetReportsButtonClass()
+    {
+        var baseClass = "relative w-full text-left cursor-pointer py-2.5 px-3 rounded-lg no-underline flex items-center gap-3 transition-all duration-200 ease-in-out";
+        
+        if (IsReportsActive())
         {
             return $"{baseClass} bg-uranian-blue text-yinmn-blue";
         }
@@ -326,6 +470,41 @@
         return "bg-gray-400";
     }
 
+    private string GetSubSubNavButtonClass(params string[] paths)
+    {
+        var baseClass = "w-full text-left cursor-pointer py-2 px-3 rounded-lg no-underline flex items-center gap-3 transition-all duration-200 ease-in-out";
+        foreach (var path in paths)
+        {
+            if (IsActive(path))
+            {
+                return $"{baseClass} bg-uranian-blue bg-opacity-30 text-yinmn-blue font-medium";
+            }
+        }
+        return $"{baseClass} text-gray-700 hover:bg-platinum";
+    }
+
+    private string GetSubSubNavItemClass(string path)
+    {
+        var baseClass = "py-2 px-3 rounded-lg no-underline flex items-center gap-3 transition-all duration-200 ease-in-out min-w-0";
+        if (IsActive(path))
+        {
+            return $"{baseClass} bg-uranian-blue bg-opacity-30 text-yinmn-blue font-medium";
+        }
+        return $"{baseClass} text-gray-700 hover:bg-platinum";
+    }
+
+    private string GetSubSubNavDotClass(params string[] paths)
+    {
+        foreach (var path in paths)
+        {
+            if (IsActive(path))
+            {
+                return "bg-yinmn-blue";
+            }
+        }
+        return "bg-gray-400";
+    }
+
     private string GetIconClass(params string[] paths)
     {
         foreach (var path in paths)
@@ -346,12 +525,17 @@
             staffMgmtOpen = false;
             productMgmtOpen = false;
             supplierMgmtOpen = false;
+            reportsOpen = false;
+            cashierReportsOpen = false;
+            stockClerkReportsOpen = false;
+            accountingReportsOpen = false;
         }
         else
         {
             CheckStaffMgmtExpansion();
             CheckProductMgmtExpansion();
             CheckSupplierMgmtExpansion();
+            CheckReportsExpansion();
         }
     }
 
@@ -378,6 +562,61 @@
         return name[0].ToString().ToUpperInvariant();
     }
 
+    private string GetPageTitle()
+    {
+        if (string.IsNullOrEmpty(currentUri)) return $"Welcome, {AuthState.CurrentUser?.FullName ?? "Seller"}!";
+        
+        try
+        {
+            var uri = Nav.ToAbsoluteUri(currentUri);
+            var path = uri.AbsolutePath.ToLowerInvariant().TrimEnd('/');
+            
+            // Map routes to page titles
+            if (path == "/seller/dashboard") return $"Welcome, {AuthState.CurrentUser?.FullName ?? "Seller"}!";
+            if (path == "/seller/accounting_record") return "Accounting Records";
+            if (path == "/seller/cashier_record") return "Cashier Records";
+            if (path == "/seller/stock_clerk_record") return "Stock Clerk Records";
+            if (path == "/seller/permission_requests") return "Permission Requests";
+            if (path == "/seller/category") return "Category Records";
+            if (path == "/seller/color") return "Color Records";
+            if (path == "/seller/product") return "Product Records";
+            if (path == "/seller/size") return "Size Records";
+            if (path == "/seller/variant") return "Variant Records";
+            if (path == "/seller/supplier") return "Supplier Records";
+            if (path == "/seller/auditlogs") return "Audit Logs";
+            if (path == "/seller/cashiersalesreports") return "Cashier Sales Reports";
+            if (path == "/seller/cashierreturnsreports") return "Cashier Returns Reports";
+            if (path == "/seller/stockclerkstockinreports") return "Stock Clerk Stock In Reports";
+            if (path == "/seller/stockclerkstockoutreports") return "Stock Clerk Stock Out Reports";
+            if (path == "/seller/stockclerkstockadjustmentreports") return "Stock Clerk Stock Adjustment Reports";
+            if (path == "/seller/stockclerkpurchaseorderreports") return "Stock Clerk Purchase Order Reports";
+            if (path == "/seller/accountingfinancialreports") return "Accounting Financial Reports";
+            if (path == "/seller/accountingexpensereports") return "Accounting Expense Reports";
+            if (path == "/seller/accountingtaxreports") return "Accounting Tax Reports";
+            if (path == "/seller/accountingdailysalesverificationreports") return "Accounting Daily Sales Verification Reports";
+            if (path == "/seller/accountingprofitlossreports") return "Accounting Profit & Loss Reports";
+            if (path == "/seller/accountingcashinoutaudit") return "Accounting Cash In/Cash Out Audit";
+            if (path == "/seller/accountingincomebreakdown") return "Accounting Income Breakdown";
+            if (path == "/seller/archive_accounting_record") return "Archived Accounting Records";
+            if (path == "/seller/archive_cashier_record") return "Archived Cashier Records";
+            if (path == "/seller/archive_stock_clerk_record") return "Archived Stock Clerk Records";
+            if (path == "/seller/archive_supplier_record") return "Archived Supplier Records";
+            if (path == "/seller/archive_category_record") return "Archived Categories";
+            if (path == "/seller/archive_color_record") return "Archived Colors";
+            if (path == "/seller/archive_product_record") return "Archived Products";
+            if (path == "/seller/archive_size_record") return "Archived Sizes";
+            if (path == "/seller/archive_variant_record") return "Archived Variants";
+            if (path == "/seller/settings") return "Settings";
+            if (path == "/seller/activitylog") return "My Activity Logs";
+            
+            return "Dashboard";
+        }
+        catch
+        {
+            return "Dashboard";
+        }
+    }
+
     private async void OnSignOut()
     {
         if (AuthState.CurrentUser is not null)
@@ -394,4 +633,3 @@
         Nav.LocationChanged -= OnLocationChanged;
     }
 }
-

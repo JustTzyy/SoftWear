@@ -1,34 +1,293 @@
-/* Supplier Records Page - SoftWear Theme */
+/* Admin Records Page - Matching Dashboard Design */
 
-.page-title {
-    font-size: 28px;
-    font-weight: 800;
-    letter-spacing: 0.5px;
-    margin: 6px 0 24px 0;
-    color: #1a1a1a;
+/* ========================================
+   Welcome Header - Match Dashboard
+======================================== */
+.welcome-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    padding: 24px 28px;
+    background: linear-gradient(135deg, #1a2332 0%, #304D6D 50%, #5C7CFA 100%);
+    border-radius: 16px;
+    color: white;
+    box-shadow: 0 4px 20px rgba(26, 35, 50, 0.3);
 }
 
-/* Success Banner */
+.welcome-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.welcome-greeting {
+    font-size: 28px;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: -0.5px;
+}
+
+.welcome-date {
+    font-size: 14px;
+    opacity: 0.85;
+    margin: 0;
+    font-weight: 400;
+}
+
+.header-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.header-actions .action-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    border: none;
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.header-actions .action-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+    transform: translateY(-2px);
+}
+
+.header-actions .action-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* ========================================
+   Dashboard Filters - Match Dashboard
+======================================== */
+.dashboard-filters {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+    padding: 16px 20px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    border: 1px solid #e5e7eb;
+    flex-wrap: wrap;
+}
+
+.search-wrapper {
+    position: relative;
+    flex: 1;
+    min-width: 200px;
+    max-width: 400px;
+}
+
+.search-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    color: #9ca3af;
+}
+
+.search-input {
+    width: 100%;
+    height: 42px;
+    padding: 0 40px 0 44px;
+    border: 2px solid #e5e7eb;
+    border-radius: 10px;
+    font-size: 14px;
+    transition: all 0.2s;
+    background: #f9fafb;
+}
+
+.search-input:hover {
+    border-color: #d1d5db;
+    background: #f3f4f6;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: #5C7CFA;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(92, 124, 250, 0.1);
+}
+
+.search-input::placeholder {
+    color: #9ca3af;
+}
+
+.clear-search-btn {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: #9ca3af;
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.clear-search-btn:hover {
+    color: #6b7280;
+    background: #f3f4f6;
+}
+
+.clear-search-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.date-filters {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.date-select,
+.date-input {
+    height: 42px;
+    padding: 0 14px;
+    border: 2px solid #e5e7eb;
+    border-radius: 10px;
+    font-size: 14px;
+    background: #f9fafb;
+    transition: all 0.2s;
+    color: #374151;
+}
+
+.date-select {
+    padding-right: 36px;
+    background-color: #f9fafb;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+}
+
+.date-input {
+    width: 130px;
+    text-align: center;
+}
+
+.date-input::placeholder {
+    color: #9ca3af;
+    font-size: 13px;
+}
+
+.date-select:hover,
+.date-input:hover {
+    border-color: #d1d5db;
+    background-color: #f3f4f6;
+}
+
+.date-select:focus,
+.date-input:focus {
+    outline: none;
+    border-color: #5C7CFA;
+    background-color: white;
+    box-shadow: 0 0 0 3px rgba(92, 124, 250, 0.1);
+}
+
+.date-separator {
+    color: #9ca3af;
+    font-size: 13px;
+}
+
+.filter-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 42px;
+    padding: 0 18px;
+    border: none;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #5C7CFA 0%, #4c6ef5 100%);
+    color: white;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 12px rgba(92, 124, 250, 0.3);
+}
+
+.filter-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(92, 124, 250, 0.4);
+}
+
+.filter-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.clear-btn {
+    width: 42px;
+    height: 42px;
+    border: 2px solid #e5e7eb;
+    border-radius: 10px;
+    background: #f9fafb;
+    color: #6b7280;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.clear-btn:hover {
+    background: #fee2e2;
+    border-color: #fecaca;
+}
+
+.clear-btn:hover svg {
+    color: #ef4444;
+}
+
+.clear-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* ========================================
+   Success Banner
+======================================== */
 .success-banner {
     display: flex;
     align-items: center;
     gap: 12px;
-    background: #FFFFFF;
-    border: 1px solid #304D6D;
-    border-radius: 8px;
-    padding: 12px 16px;
+    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+    border: 1px solid #6ee7b7;
+    border-radius: 12px;
+    padding: 14px 18px;
     margin-bottom: 24px;
-    color: #1a1a1a;
+    color: #065f46;
     font-size: 14px;
     font-weight: 500;
     animation: slideDown 0.3s ease-out;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
 }
 
 .success-icon {
     width: 20px;
     height: 20px;
-    color: #4CAF50;
+    color: #10b981;
     flex-shrink: 0;
 }
 
@@ -43,277 +302,278 @@
     }
 }
 
-.colors-container {
-    background: #FFFFFF;
-    border-radius: 12px;
-    padding: 24px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-    border: 1px solid rgba(0, 0, 0, 0.05);
+/* ========================================
+   Content Card - Match Dashboard
+======================================== */
+.content-card {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    border: 1px solid #e5e7eb;
+    overflow: hidden;
 }
 
-/* Search and Actions Row */
-.search-actions-row {
+.card-header {
     display: flex;
-    gap: 16px;
-    align-items: stretch;
-    margin-bottom: 24px;
-    flex-wrap: wrap;
-}
-
-.search-wrapper {
-    flex: 1;
-    min-width: 300px;
-    position: relative;
-    display: flex;
+    justify-content: space-between;
     align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid #e5e7eb;
+    background: #f9fafb;
 }
 
-.search-icon {
-    position: absolute;
-    left: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 18px;
-    height: 18px;
-    color: #4a4a4a;
-    pointer-events: none;
+.card-title-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
-.search-input {
-    width: 100% !important;
-    height: 40px !important;
-    padding-left: 44px !important;
-    padding-right: 16px !important;
-    border: 1px solid #82A0BC !important;
-    border-radius: 8px !important;
-    font-size: 14px !important;
-    color: #2d2d2d !important;
-    background: #FFFFFF !important;
-    transition: border-color 0.2s, box-shadow 0.2s !important;
+.card-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1a1a1a;
+    margin: 0;
 }
 
-.search-input:focus {
-    outline: none !important;
-    border-color: #A7CCED !important;
-    box-shadow: 0 0 0 3px rgba(167, 204, 237, 0.15) !important;
+.card-subtitle {
+    font-size: 13px;
+    color: #9ca3af;
 }
 
-.action-buttons {
+.card-actions {
     display: flex;
     gap: 12px;
-    align-items: stretch;
 }
 
-.archive-btn,
-.add-supplier-btn {
+.card-action-btn {
     display: flex;
     align-items: center;
     gap: 8px;
-    height: 40px;
-    padding: 0 20px;
-    border-radius: 8px;
-    font-weight: 600;
+    padding: 12px 20px;
+    border-radius: 12px;
     font-size: 14px;
+    font-weight: 600;
     cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s;
-    border: none;
+    transition: all 0.2s ease;
 }
 
-.archive-btn {
-    background: #6B7280;
-    color: #FFFFFF;
-}
-
-.archive-btn:hover {
-    background: #4B5563;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(107, 114, 128, 0.3);
-}
-
-.add-supplier-btn {
-    background: #A2B9CD;
-    color: #304D6D;
-    box-shadow: 0 4px 12px rgba(167, 204, 237, 0.3);
-}
-
-.add-supplier-btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 6px 16px rgba(167, 204, 237, 0.4);
-}
-
-.btn-icon {
+.card-action-btn svg {
     width: 18px;
     height: 18px;
-    stroke: currentColor;
+    flex-shrink: 0;
 }
 
-/* Table Container */
-.table-container {
-    overflow-x: auto;
-    margin-bottom: 24px;
-    border-radius: 8px;
-    background: #FFFFFF;
+.card-action-btn span {
+    white-space: nowrap;
 }
 
-.table-header {
-    font-size: 18px;
-    font-weight: 700;
-    color: #2d2d2d;
-    margin-bottom: 16px;
+.card-action-btn.secondary {
+    background: white;
+    border: 1px solid #e5e7eb;
+    color: #374151;
 }
 
+.card-action-btn.secondary:hover {
+    background: #eef2ff;
+    border-color: #c7d2fe;
+    color: #5C7CFA;
+    transform: translateY(-2px);
+}
+
+.card-action-btn.primary {
+    background: linear-gradient(135deg, #5C7CFA 0%, #4c6ef5 100%);
+    border: none;
+    color: white;
+}
+
+.card-action-btn.primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(92, 124, 250, 0.4);
+}
+
+.card-body {
+    padding: 0;
+}
+
+/* ========================================
+   Admin Table - Match ActivityLog Style
+======================================== */
+.admin-table,
 .suppliers-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 14px;
 }
 
+.admin-table thead,
 .suppliers-table thead {
-    background: #A2B9CD;
+    background: linear-gradient(135deg, #1a2332 0%, #304D6D 100%);
 }
 
+.admin-table th,
 .suppliers-table th {
     padding: 14px 20px;
     text-align: left;
-    font-weight: 700;
-    color: #2d2d2d;
+    font-weight: 600;
+    color: white;
     font-size: 13px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 
+.admin-table tbody tr,
 .suppliers-table tbody tr {
-    transition: background 0.2s;
+    transition: all 0.2s;
+    border-bottom: 1px solid #e5e7eb;
 }
 
+.admin-table tbody tr:last-child,
+.suppliers-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.admin-table tbody tr:hover,
 .suppliers-table tbody tr:hover {
     background: #E0E0E0;
 }
 
+.admin-table tbody tr:nth-child(even),
 .suppliers-table tbody tr:nth-child(even) {
     background: #F9F9F9;
 }
 
+.admin-table tbody tr:nth-child(even):hover,
 .suppliers-table tbody tr:nth-child(even):hover {
     background: #E0E0E0;
 }
 
+.admin-table td,
 .suppliers-table td {
     padding: 16px 20px;
     color: #2d2d2d;
+    vertical-align: middle;
+}
+
+/* Column alignments */
+.admin-table th:first-child,
+.admin-table td:first-child,
+.suppliers-table th:first-child,
+.suppliers-table td:first-child {
+    text-align: center;
+    width: 80px;
+}
+
+.admin-table th:last-child,
+.admin-table td:last-child,
+.suppliers-table th:last-child,
+.suppliers-table td:last-child {
+    text-align: center;
+    width: 120px;
 }
 
 .clickable-row {
     cursor: pointer;
 }
 
+.user-name,
 .supplier-name {
     font-weight: 600;
-    color: #2d2d2d;
-}
-
-.loading-cell,
-.empty-cell {
-    text-align: center;
-    padding: 48px 16px;
-    color: #4a4a4a;
-    font-size: 14px;
-}
-
-.loading-cell {
-    color: #A7CCED;
-    font-weight: 600;
+    color: #1a1a1a;
 }
 
 .actions-cell {
     display: flex;
     gap: 8px;
     align-items: center;
+    justify-content: center;
 }
 
-.action-btn {
-    width: 32px;
-    height: 32px;
+.actions-cell .action-btn {
+    width: 34px;
+    height: 34px;
     padding: 0;
     border: none;
-    border-radius: 6px;
+    border-radius: 8px;
     background: transparent;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.2s, transform 0.2s;
+    transition: all 0.2s ease;
 }
 
-.action-btn svg {
-    width: 16px;
-    height: 16px;
-    stroke: currentColor;
+.actions-cell .action-btn svg {
+    width: 18px;
+    height: 18px;
+    stroke-width: 2;
 }
 
-.edit-btn {
-    color: #10B981;
+.actions-cell .edit-btn {
+    color: #5C7CFA;
 }
 
-.edit-btn:hover {
-    background: rgba(16, 185, 129, 0.1);
+.actions-cell .edit-btn:hover {
+    background: rgba(92, 124, 250, 0.1);
     transform: scale(1.1);
 }
 
-.delete-btn {
-    color: #e74c3c;
+.actions-cell .delete-btn {
+    color: #ef4444;
 }
 
-.delete-btn:hover {
-    background: rgba(231, 76, 60, 0.1);
+.actions-cell .delete-btn:hover {
+    background: rgba(239, 68, 68, 0.1);
     transform: scale(1.1);
 }
 
-.status-badge {
-    padding: 4px 12px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 700;
+/* Loading and Empty States */
+.loading-cell,
+.empty-cell {
+    text-align: center;
+    padding: 60px 20px;
+    color: #6b7280;
+    font-size: 14px;
 }
 
-.status-badge.active {
-    background: #10B981;
-    color: #FFFFFF;
+.loading-cell {
+    color: #5C7CFA;
+    font-weight: 600;
 }
 
-.status-badge.inactive {
-    background: #6B7280;
-    color: #FFFFFF;
-}
-
-/* Pagination */
+/* ========================================
+   Pagination - Match Dashboard
+======================================== */
 .pagination {
     display: flex;
     justify-content: center;
     align-items: center;
     gap: 8px;
-    padding: 16px 0;
+    padding: 20px;
+    border-top: 1px solid #e5e7eb;
+    background: #f9fafb;
 }
 
 .page-btn {
     min-width: 36px;
     height: 36px;
     padding: 0 12px;
-    border: none;
-    border-radius: 6px;
-    background: #FFFFFF;
-    color: #2d2d2d;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: white;
+    color: #374151;
     font-weight: 600;
     font-size: 14px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.2s ease;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
 .page-btn:hover:not(:disabled) {
-    background: #A2B9CD;
+    background: #eef2ff;
+    border-color: #c7d2fe;
+    color: #5C7CFA;
 }
 
 .page-btn:disabled {
@@ -322,23 +582,26 @@
 }
 
 .page-btn.active {
-    background: #A2B9CD;
-    color: #304D6D;
-    box-shadow: 0 2px 8px rgba(167, 204, 237, 0.3);
+    background: linear-gradient(135deg, #5C7CFA 0%, #4c6ef5 100%);
+    border-color: #5C7CFA;
+    color: white;
+    box-shadow: 0 2px 8px rgba(92, 124, 250, 0.3);
 }
 
 .page-btn svg {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
 }
 
 .page-ellipsis {
     padding: 0 8px;
-    color: #6a6a6a;
-    font-size: 14px;
+    color: #9ca3af;
+    font-weight: 600;
 }
 
-/* Modal Styles */
+/* ========================================
+   Modal Styles - User Details
+======================================== */
 .modal-overlay {
     position: fixed;
     top: 0;
@@ -346,91 +609,137 @@
     right: 0;
     bottom: 0;
     background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 1000;
     padding: 20px;
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
 .modal-container {
-    background: #FFFFFF;
-    border-radius: 12px;
+    background: white;
+    border-radius: 16px;
     width: 100%;
-    max-width: 600px;
+    max-width: 800px;
     max-height: 90vh;
-    overflow-y: auto;
-    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15);
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .modal-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 24px 28px;
-    background: #A2B9CD;
+    padding: 20px 24px;
+    background: linear-gradient(135deg, #1a2332 0%, #304D6D 50%, #5C7CFA 100%);
+    color: white;
 }
 
 .modal-title {
     display: flex;
     align-items: center;
     gap: 12px;
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 700;
-    color: #304D6D;
 }
 
 .modal-title-icon {
     width: 24px;
     height: 24px;
-    color: #304D6D;
-    stroke: currentColor;
 }
 
 .modal-close {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 8px 12px;
+    padding: 8px 14px;
     border: none;
-    background: transparent;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
     cursor: pointer;
-    border-radius: 8px;
-    transition: all 0.2s ease;
-    color: #4a4a4a;
+    color: white;
     font-size: 14px;
     font-weight: 500;
+    transition: all 0.2s ease;
 }
 
 .modal-close:hover {
-    background: rgba(48, 77, 109, 0.1);
-    color: #304D6D;
+    background: rgba(255, 255, 255, 0.25);
 }
 
 .modal-close svg {
-    width: 18px;
-    height: 18px;
-    stroke: currentColor;
+    width: 16px;
+    height: 16px;
 }
 
 .modal-content {
-    padding: 32px 28px;
-    display: flex;
-    flex-direction: column;
+    padding: 28px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 24px;
     overflow-y: auto;
     flex: 1;
-    background: #FAFAFA;
+    background: #f9fafb;
+}
+
+.details-column {
+    display: flex;
+    flex-direction: column;
+}
+
+.details-section {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    border: 1px solid #e5e7eb;
+}
+
+.details-section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.section-icon-emoji {
+    font-size: 20px;
+    line-height: 1;
+}
+
+.section-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1a1a1a;
 }
 
 .details-list {
     display: flex;
     flex-direction: column;
     gap: 16px;
-    background: #FFFFFF;
-    border-radius: 12px;
-    padding: 24px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .detail-item {
@@ -443,38 +752,62 @@
 .detail-label {
     font-size: 14px;
     font-weight: 500;
-    color: #6B7280;
-    min-width: 140px;
+    color: #6b7280;
+    flex-shrink: 0;
 }
 
 .detail-value {
     font-size: 14px;
     font-weight: 400;
-    color: #1F2937;
+    color: #1a1a1a;
     text-align: right;
-    flex: 1;
 }
 
-/* Add/Update Modal */
-.add-supplier-modal {
-    background: #FFFFFF;
+.status-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 9999px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: capitalize;
+}
+
+.status-badge.active {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.status-badge.inactive {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+/* ========================================
+   Add/Update Admin Modal - Match Dashboard
+======================================== */
+.add-admin-modal {
+    background: white;
     border-radius: 16px;
     width: 100%;
-    max-width: 600px;
+    max-width: 800px;
     max-height: 90vh;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
     overflow: hidden;
-    border: 1px solid #E0E0E0;
+    animation: slideUp 0.3s ease-out;
+}
+
+.add-admin-modal .modal-header {
+    padding: 24px 28px;
+    border-bottom: none;
 }
 
 .modal-title-text {
-    font-size: 26px;
+    font-size: 22px;
     font-weight: 700;
-    color: #304D6D;
+    color: white;
     margin: 0;
-    letter-spacing: -0.5px;
 }
 
 .modal-close-btn {
@@ -482,44 +815,84 @@
     height: 40px;
     padding: 0;
     border: none;
-    background: transparent;
-    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
+    color: white;
     transition: all 0.2s ease;
-    color: #304D6D;
 }
 
 .modal-close-btn:hover {
-    background: rgba(48, 77, 109, 0.1);
-    transform: scale(1.05);
+    background: rgba(255, 255, 255, 0.25);
+    transform: rotate(90deg);
 }
 
 .modal-close-btn svg {
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
+}
+
+.modal-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid #e5e7eb;
+    background: #f9fafb;
+}
+
+.modal-tab {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 28px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    color: #6b7280;
+    border-bottom: 3px solid transparent;
+    transition: all 0.2s ease;
+    position: relative;
+    bottom: -1px;
+}
+
+.modal-tab:hover {
+    color: #374151;
+    background: #f3f4f6;
+}
+
+.modal-tab.active {
+    color: #5C7CFA;
+    border-bottom-color: #5C7CFA;
+    background: white;
+}
+
+.tab-icon {
+    width: 18px;
+    height: 18px;
 }
 
 .modal-body {
-    padding: 36px 32px;
+    padding: 28px;
     padding-bottom: 0;
     overflow-y: auto;
     flex: 1;
-    background: #FAFAFA;
+    background: #f9fafb;
 }
 
 .form-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 24px;
+    gap: 20px;
 }
 
 .form-field {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
 }
 
 .form-field.full-width {
@@ -528,204 +901,466 @@
 
 .field-label {
     font-size: 12px;
-    font-weight: 700;
-    color: #304D6D;
+    font-weight: 600;
+    color: #374151;
     text-transform: uppercase;
-    letter-spacing: 0.8px;
-    margin-bottom: 2px;
+    letter-spacing: 0.5px;
 }
 
-.required {
-    color: #DC3545;
+.required-asterisk {
+    color: #ef4444;
+    font-weight: bold;
+    margin-left: 2px;
 }
 
-/* Style ALL inputs and textareas - targeting both regular and Blazor components */
+/* Form Input Styles - Match Dashboard */
+/* Target ALL inputs including Blazor InputText, InputNumber components */
 .form-input,
+.form-field input,
+.form-field select,
+.form-field .form-input,
+.add-admin-modal input,
+.add-admin-modal select,
+.add-admin-modal .form-field input,
+.add-admin-modal .form-field select,
+.add-admin-modal input[type="text"],
+.add-admin-modal input[type="email"],
+.add-admin-modal input[type="tel"],
+.add-admin-modal input[type="date"],
+.add-admin-modal input[type="number"],
+.add-admin-modal input[type="password"],
+.modal-body input,
+.modal-body select,
+.modal-body .form-field input,
+.modal-body .form-field select,
 input.form-input,
-.form-field input[type="text"],
-.form-field input.form-input,
-::deep .form-input,
-::deep input.form-input {
+input.valid,
+input.invalid,
+input.modified {
     width: 100% !important;
-    padding: 14px 18px !important;
-    border: 2px solid #82A0BC !important;
+    height: 42px !important;
+    padding: 0 14px !important;
+    border: 2px solid #e5e7eb !important;
     border-radius: 10px !important;
-    font-size: 15px !important;
-    color: #2d2d2d !important;
-    background: #FFFFFF !important;
-    transition: all 0.25s ease !important;
-    font-family: inherit !important;
+    font-size: 14px !important;
+    color: #374151 !important;
+    background: #f9fafb !important;
+    transition: all 0.2s ease !important;
     box-sizing: border-box !important;
+    font-family: inherit !important;
 }
 
-.form-input:hover,
-input.form-input:hover,
-.form-field input[type="text"]:hover,
-::deep .form-input:hover {
-    border-color: #A7CCED !important;
-    background: #F5F5F5 !important;
+/* Blazor validation states */
+.form-field input.valid,
+.form-field input.modified.valid {
+    border-color: #10b981 !important;
+}
+
+.form-field input.invalid,
+.form-field input.modified.invalid {
+    border-color: #ef4444 !important;
+}
+
+.form-input:hover:not(:disabled),
+.form-field input:hover:not(:disabled),
+.add-admin-modal input:hover:not(:disabled),
+.add-admin-modal select:hover:not(:disabled),
+.modal-body input:hover:not(:disabled),
+.modal-body select:hover:not(:disabled) {
+    border-color: #d1d5db !important;
+    background: #f3f4f6 !important;
 }
 
 .form-input:focus,
-input.form-input:focus,
-.form-field input[type="text"]:focus,
-::deep .form-input:focus {
+.form-field input:focus,
+.add-admin-modal input:focus,
+.add-admin-modal select:focus,
+.modal-body input:focus,
+.modal-body select:focus {
     outline: none !important;
-    border-color: #A7CCED !important;
-    background: #FFFFFF !important;
-    box-shadow: 0 0 0 4px rgba(167, 204, 237, 0.12), 0 2px 8px rgba(167, 204, 237, 0.08) !important;
+    border-color: #5C7CFA !important;
+    background: white !important;
+    box-shadow: 0 0 0 3px rgba(92, 124, 250, 0.1) !important;
 }
 
-.form-textarea,
-textarea.form-textarea,
-.form-field textarea,
-::deep .form-textarea,
-::deep textarea.form-textarea {
-    width: 100% !important;
-    padding: 14px 18px !important;
-    border: 2px solid #82A0BC !important;
-    border-radius: 10px !important;
-    font-size: 15px !important;
-    color: #2d2d2d !important;
-    background: #FFFFFF !important;
-    transition: all 0.25s ease !important;
-    font-family: inherit !important;
-    box-sizing: border-box !important;
-    resize: vertical !important;
-    min-height: 80px !important;
-}
-
-.form-textarea:hover,
-textarea.form-textarea:hover,
-.form-field textarea:hover,
-::deep .form-textarea:hover {
-    border-color: #A7CCED !important;
-    background: #F5F5F5 !important;
-}
-
-.form-textarea:focus,
-textarea.form-textarea:focus,
-.form-field textarea:focus,
-::deep .form-textarea:focus {
-    outline: none !important;
-    border-color: #A7CCED !important;
-    background: #FFFFFF !important;
-    box-shadow: 0 0 0 4px rgba(167, 204, 237, 0.12), 0 2px 8px rgba(167, 204, 237, 0.08) !important;
-}
-
-.form-input[readonly] {
-    background: #F5F7FA !important;
+.form-input:disabled,
+.form-field input:disabled,
+.add-admin-modal input:disabled,
+.add-admin-modal select:disabled,
+.modal-body input:disabled,
+.modal-body select:disabled {
+    background: #f3f4f6 !important;
+    color: #9ca3af !important;
     cursor: not-allowed !important;
+    border-color: #e5e7eb !important;
 }
 
-/* Universal styling for ALL inputs in the modal */
-.add-supplier-modal input[type="text"],
-.add-supplier-modal input:not([type="submit"]):not([type="button"]):not([type="color"]):not([type="email"]),
-.add-supplier-modal textarea,
-.add-supplier-modal .form-input,
-.add-supplier-modal .form-textarea {
+.form-input::placeholder,
+.form-field input::placeholder,
+.add-admin-modal input::placeholder,
+.modal-body input::placeholder {
+    color: #9ca3af !important;
+}
+
+/* Select Dropdown Styling */
+.add-admin-modal select,
+.modal-body select,
+.form-field select,
+.province-select,
+.city-select,
+.sex-select,
+select.form-input {
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    background-color: #f9fafb !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 9L1 4h10z'/%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 14px center !important;
+    padding-right: 40px !important;
+    cursor: pointer !important;
+}
+
+/* Date Input Styling */
+.add-admin-modal input[type="date"],
+.modal-body input[type="date"],
+.form-field input[type="date"] {
+    padding-right: 14px !important;
+}
+
+/* Number Input Styling - Remove Spinners */
+.add-admin-modal input[type="number"],
+.modal-body input[type="number"],
+.form-field input[type="number"] {
+    -moz-appearance: textfield !important;
+    appearance: textfield !important;
+}
+
+.add-admin-modal input[type="number"]::-webkit-outer-spin-button,
+.add-admin-modal input[type="number"]::-webkit-inner-spin-button,
+.modal-body input[type="number"]::-webkit-outer-spin-button,
+.modal-body input[type="number"]::-webkit-inner-spin-button,
+.form-field input[type="number"]::-webkit-outer-spin-button,
+.form-field input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none !important;
+    margin: 0 !important;
+}
+
+/* Deep selectors for Blazor CSS isolation */
+::deep .form-field input,
+::deep .form-field select,
+::deep .form-grid input,
+::deep .form-grid select,
+::deep input.form-input,
+::deep select.form-input {
     width: 100% !important;
-    padding: 14px 18px !important;
-    border: 2px solid #82A0BC !important;
+    height: 42px !important;
+    padding: 0 14px !important;
+    border: 2px solid #e5e7eb !important;
     border-radius: 10px !important;
-    font-size: 15px !important;
-    color: #2d2d2d !important;
-    background: #FFFFFF !important;
-    transition: all 0.25s ease !important;
-    font-family: inherit !important;
+    font-size: 14px !important;
+    color: #374151 !important;
+    background: #f9fafb !important;
+    transition: all 0.2s ease !important;
     box-sizing: border-box !important;
+    font-family: inherit !important;
 }
 
-.add-supplier-modal input[type="text"]:hover,
-.add-supplier-modal input:not([type="submit"]):not([type="button"]):not([type="color"]):not([type="email"]):hover,
-.add-supplier-modal textarea:hover {
-    border-color: #A7CCED !important;
-    background: #F5F5F5 !important;
+::deep .form-field input:hover:not(:disabled),
+::deep .form-field select:hover:not(:disabled) {
+    border-color: #d1d5db !important;
+    background: #f3f4f6 !important;
 }
 
-.add-supplier-modal input[type="text"]:focus,
-.add-supplier-modal input:not([type="submit"]):not([type="button"]):not([type="color"]):not([type="email"]):focus,
-.add-supplier-modal textarea:focus {
+::deep .form-field input:focus,
+::deep .form-field select:focus {
     outline: none !important;
-    border-color: #A7CCED !important;
-    background: #FFFFFF !important;
-    box-shadow: 0 0 0 4px rgba(167, 204, 237, 0.12), 0 2px 8px rgba(167, 204, 237, 0.08) !important;
+    border-color: #5C7CFA !important;
+    background: white !important;
+    box-shadow: 0 0 0 3px rgba(92, 124, 250, 0.1) !important;
 }
 
-.modal-footer {
-    padding: 24px 32px;
-    border-top: 2px solid #E0E0E0;
-    margin-top: 24px;
-    background: #FAFAFA;
+::deep .form-field input:disabled,
+::deep .form-field select:disabled {
+    background: #f3f4f6 !important;
+    color: #9ca3af !important;
+    cursor: not-allowed !important;
+    border-color: #e5e7eb !important;
+}
+
+::deep .form-field select {
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 9L1 4h10z'/%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 14px center !important;
+    padding-right: 40px !important;
+    cursor: pointer !important;
+}
+
+/* Modal Footer */
+.add-admin-modal .modal-footer {
+    padding: 20px 28px;
+    border-top: 1px solid #e5e7eb;
+    margin-top: 20px;
+    background: white;
     display: flex;
     justify-content: flex-end;
-    gap: 24px;
+    gap: 12px;
 }
 
 .cancel-btn {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 14px 28px;
-    border: none;
+    padding: 10px 20px;
+    border: 1px solid #e5e7eb;
     border-radius: 10px;
-    background: #FFFFFF;
-    color: #6B7280;
-    font-weight: 700;
-    font-size: 15px;
+    background: white;
+    color: #6b7280;
+    font-weight: 600;
+    font-size: 14px;
     cursor: pointer;
-    transition: all 0.25s ease;
+    transition: all 0.2s ease;
 }
 
 .cancel-btn:hover {
-    background: #F5F5F5;
-    color: #304D6D;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    background: #f9fafb;
+    border-color: #d1d5db;
 }
 
-.save-supplier-btn {
+.save-admin-btn {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 14px 28px;
+    gap: 8px;
+    padding: 10px 20px;
     border: none;
     border-radius: 10px;
-    background: #A2B9CD;
-    color: #304D6D;
-    font-weight: 700;
-    font-size: 15px;
+    background: linear-gradient(135deg, #5C7CFA 0%, #4c6ef5 100%);
+    color: white;
+    font-weight: 600;
+    font-size: 14px;
     cursor: pointer;
-    box-shadow: 0 4px 16px rgba(167, 204, 237, 0.35);
-    transition: all 0.25s ease;
+    transition: all 0.2s ease;
 }
 
-.save-supplier-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(167, 204, 237, 0.45);
+.save-admin-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(92, 124, 250, 0.4);
 }
 
-.save-supplier-btn .btn-icon {
+.save-admin-btn .btn-icon {
     width: 18px;
     height: 18px;
 }
 
-/* Validation messages */
-.add-supplier-modal .validation-message,
-::deep .validation-message {
+/* Validation Messages */
+.form-field .validation-message {
     font-size: 12px;
-    color: #c0392b;
-    margin-top: 4px;
-    padding: 6px 12px;
-    background: #FFF5F5;
-    border: 1px solid #ff6b6b;
+    color: #ef4444;
+    margin-top: 2px;
+    padding: 6px 10px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
     border-radius: 6px;
     font-weight: 500;
 }
 
-.add-supplier-modal .validation-message::before,
-::deep .validation-message::before {
+.form-field .validation-message::before {
     content: "⚠ ";
-    margin-right: 4px;
 }
 
+/* ========================================
+   Hidden Elements
+======================================== */
+.page-title {
+    display: none;
+}
+
+/* ========================================
+   Responsive Design
+======================================== */
+@media (max-width: 1024px) {
+    .dashboard-filters {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 16px;
+    }
+
+    .search-wrapper {
+        max-width: none;
+    }
+
+    .date-filters {
+        width: 100%;
+        flex-wrap: wrap;
+    }
+
+    .date-select,
+    .date-input {
+        flex: 1;
+        min-width: 120px;
+    }
+}
+
+@media (max-width: 768px) {
+    .welcome-header {
+        flex-direction: column;
+        gap: 16px;
+        text-align: center;
+        padding: 20px;
+    }
+
+    .welcome-greeting {
+        font-size: 24px;
+    }
+
+    .header-actions {
+        justify-content: center;
+    }
+
+    .dashboard-filters {
+        padding: 16px;
+    }
+
+    .date-filters {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .date-input {
+        width: 100%;
+    }
+
+    .date-separator {
+        text-align: center;
+    }
+
+    .card-header {
+        flex-direction: column;
+        gap: 16px;
+        align-items: stretch;
+    }
+
+    .card-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+
+    .card-action-btn {
+        justify-content: center;
+    }
+
+    .admin-table,
+    .suppliers-table {
+        font-size: 13px;
+    }
+
+    .admin-table th,
+    .admin-table td,
+    .suppliers-table th,
+    .suppliers-table td {
+        padding: 12px 14px;
+    }
+
+    .pagination {
+        flex-wrap: wrap;
+    }
+
+    /* Modal Responsive */
+    .modal-container,
+    .add-admin-modal {
+        max-width: 95%;
+        max-height: 95vh;
+    }
+
+    .modal-content {
+        grid-template-columns: 1fr;
+        padding: 20px;
+    }
+
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .modal-body {
+        padding: 20px;
+    }
+
+    .add-admin-modal .modal-header {
+        padding: 20px;
+    }
+
+    .add-admin-modal .modal-footer {
+        flex-direction: column-reverse;
+        padding: 16px 20px;
+    }
+
+    .cancel-btn,
+    .save-admin-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .modal-close-text {
+        display: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .welcome-greeting {
+        font-size: 20px;
+    }
+
+    .card-title {
+        font-size: 14px;
+    }
+
+    .admin-table th,
+    .admin-table td,
+    .suppliers-table th,
+    .suppliers-table td {
+        padding: 10px 12px;
+    }
+
+    .admin-table th:first-child,
+    .admin-table td:first-child,
+    .suppliers-table th:first-child,
+    .suppliers-table td:first-child {
+        width: 60px;
+    }
+
+    .admin-table th:last-child,
+    .admin-table td:last-child,
+    .suppliers-table th:last-child,
+    .suppliers-table td:last-child {
+        width: 90px;
+    }
+
+    .actions-cell .action-btn {
+        width: 30px;
+        height: 30px;
+    }
+
+    .actions-cell .action-btn svg {
+        width: 16px;
+        height: 16px;
+    }
+}
+
+/* Print Styles */
+@media print {
+    .welcome-header {
+        background: #1a2332 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    
+    .header-actions, .dashboard-filters, .card-actions, .pagination { 
+        display: none !important; 
+    }
+    
+    .content-card {
+        box-shadow: none !important;
+        border: 1px solid #ddd !important;
+    }
+}

@@ -1,0 +1,515 @@
+@page "/accounting/cashflow/petty-cash"
+@layout IT13_Final.Components.Layout.Accounting.Accounting
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IT13_Final.Services.Data.IExpenseService ExpenseService
+@inject IT13_Final.Services.Audit.IHistoryService HistoryService
+@inject IJSRuntime JSRuntime
+@using Microsoft.Data.SqlClient
+
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Petty Cash Management</h1>
+        <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+    </div>
+    <div class="header-actions">
+        <!-- Reserved for future print button -->
+    </div>
+</div>
+
+@* Search and Date Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper" style="flex: 1;">
+        <!-- Reserved for future search -->
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date" 
+               class="date-input" 
+               value="@(startDate?.ToString("yyyy-MM-dd"))" 
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@(endDate?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd"))" 
+               @onchange="HandleFromDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date" 
+               class="date-input" 
+               value="@(endDate?.ToString("yyyy-MM-dd"))" 
+               min="@(startDate?.ToString("yyyy-MM-dd"))" 
+               max="@DateTime.Today.ToString("yyyy-MM-dd")" 
+               @onchange="HandleToDateChange" />
+        <button class="filter-btn" @onclick="LoadPettyCash">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            Apply
+        </button>
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearFilters" title="Clear">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
+
+@* Summary Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Petty Cash Summary</h3>
+            <span class="card-subtitle">@totalCount total records</span>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <div class="summary-grid">
+            <div class="summary-box">
+                <div class="summary-label">Configured Fund (Guide)</div>
+                <div class="summary-value">₱@pettyCashFundLimit.ToString("N2")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Total Petty Cash Used</div>
+                <div class="summary-value" style="color: #dc3545;">₱@totalPettyCashUsed.ToString("N2")</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Estimated Remaining</div>
+                <div class="summary-value" style="color: @(estimatedRemaining >= 0 ? "#10B981" : "#dc3545");">
+                    ₱@estimatedRemaining.ToString("N2")
+                </div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Total Transactions</div>
+                <div class="summary-value">@totalCount</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Petty Cash Expenses List Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Petty Cash Expenses</h3>
+            <span class="card-subtitle">@totalCount total expenses</span>
+        </div>
+        <div class="card-actions">
+            <button class="card-action-btn primary" @onclick="OpenAddPettyCashModal">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="16"></line>
+                    <line x1="8" y1="12" x2="16" y2="12"></line>
+                </svg>
+                <span>Add Expense</span>
+            </button>
+        </div>
+    </div>
+    
+    <div class="card-body" style="padding: 0;">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Amount</th>
+                    <th>Recorded By</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="4" class="loading-cell">Loading petty cash records...</td>
+                    </tr>
+                }
+                else if (pettyCashExpenses.Count == 0)
+                {
+                    <tr>
+                        <td colspan="4" class="empty-cell">No petty cash records for this filter.</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var expense in pettyCashExpenses)
+                    {
+                        <tr>
+                            <td>
+                                <div class="timestamp-info">
+                                    <div class="timestamp-date">@expense.ExpenseDate.ToString("MMM dd, yyyy")</div>
+                                </div>
+                            </td>
+                            <td>@(expense.Description ?? "-")</td>
+                            <td style="text-align: right; font-weight: 600; color: #dc3545;">₱@expense.Amount.ToString("N2")</td>
+                            <td>@expense.CreatedByName</td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                var pageNum = i;
+                @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
+                {
+                    <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 2 || i == currentPage + 2)
+                {
+                    <span class="page-ellipsis">...</span>
+                }
+            }
+
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+<!-- Add Petty Cash Modal -->
+@if (showPettyCashModal)
+{
+    <div class="modal-overlay" @onclick="ClosePettyCashModal">
+        <div class="add-admin-modal" @onclick:stopPropagation style="max-width: 600px;">
+            <div class="modal-header">
+                <h2 class="modal-title-text">Add Petty Cash Expense</h2>
+                <button class="modal-close-btn" @onclick="ClosePettyCashModal" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="form-field">
+                        <label class="field-label">Amount *</label>
+                        <input type="number" class="form-input" @bind="pettyCashForm.Amount" step="0.01" min="0" placeholder="0.00" />
+                    </div>
+                    <div class="form-field">
+                        <label class="field-label">Date *</label>
+                        <input type="date" class="form-input" @bind="pettyCashForm.ExpenseDate" max="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                    </div>
+                    <div class="form-field full-width">
+                        <label class="field-label">Purpose / Description *</label>
+                        <textarea class="form-input" @bind="pettyCashForm.Description" rows="3" placeholder="Example: Bought marker, tape, tricycle fare..." style="resize: vertical;"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="cancel-btn" @onclick="ClosePettyCashModal" disabled="@isProcessing">Cancel</button>
+                <button class="save-admin-btn" @onclick="SavePettyCash" disabled="@isProcessing">
+                    @(isProcessing ? "Saving..." : "Add Petty Cash")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private const string PettyCashType = "Petty Cash";
+
+    private List<IT13_Final.Services.Data.ExpenseModel> pettyCashExpenses = new();
+
+    private bool isLoading = false;
+    private bool isProcessing = false;
+    private int sellerUserId = 0;
+
+    private DateTime? startDate;
+    private DateTime? endDate;
+    private string selectedDateRange = string.Empty;
+
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue;
+
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling(totalCount / (double)pageSize);
+
+    // Simple fund guidance (user can treat this as their target petty fund)
+    private decimal pettyCashFundLimit = 1500m;
+    private decimal totalPettyCashUsed = 0m;
+    private decimal estimatedRemaining => pettyCashFundLimit - totalPettyCashUsed;
+
+    // Modal state
+    private bool showPettyCashModal = false;
+    private IT13_Final.Services.Data.CreateExpenseModel pettyCashForm = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSellerUserId();
+        await LoadPettyCash();
+    }
+
+    private async Task LoadSellerUserId()
+    {
+        if (AuthState.CurrentUser != null)
+        {
+            try
+            {
+                const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+                using var conn = new SqlConnection(connectionString);
+                await conn.OpenAsync();
+
+                var sql = "SELECT user_id FROM dbo.tbl_users WHERE id = @UserId AND archived_at IS NULL";
+                using var cmd = new SqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@UserId", AuthState.CurrentUser.Id);
+
+                var result = await cmd.ExecuteScalarAsync();
+                if (result != null && result != DBNull.Value)
+                {
+                    sellerUserId = Convert.ToInt32(result);
+                }
+            }
+            catch
+            {
+                sellerUserId = 0;
+            }
+        }
+    }
+
+    private async Task LoadPettyCash()
+    {
+        if (sellerUserId <= 0)
+        {
+            await LoadSellerUserId();
+            if (sellerUserId <= 0)
+            {
+                await JSRuntime.InvokeVoidAsync("console.error", "Seller User ID not found for Petty Cash.");
+                isLoading = false;
+                StateHasChanged();
+                return;
+            }
+        }
+
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            // Petty cash is simply expenses with ExpenseType = 'Petty Cash'
+            totalCount = await ExpenseService.GetExpensesCountAsync(
+                sellerUserId,
+                searchTerm: null,
+                expenseType: PettyCashType,
+                startDate,
+                endDate
+            );
+
+            pettyCashExpenses = await ExpenseService.GetExpensesAsync(
+                sellerUserId,
+                searchTerm: null,
+                expenseType: PettyCashType,
+                startDate,
+                endDate,
+                currentPage,
+                pageSize
+            );
+
+            totalPettyCashUsed = pettyCashExpenses.Sum(e => e.Amount);
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading petty cash: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading petty cash: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleDateRangeChange()
+    {
+        var today = DateTime.Today;
+        switch (selectedDateRange)
+        {
+            case "":
+                startDate = null;
+                endDate = null;
+                break;
+            case "today":
+                startDate = today;
+                endDate = today;
+                break;
+            case "yesterday":
+                startDate = today.AddDays(-1);
+                endDate = today.AddDays(-1);
+                break;
+            case "last7days":
+                startDate = today.AddDays(-7);
+                endDate = today;
+                break;
+            case "last30days":
+                startDate = today.AddDays(-30);
+                endDate = today;
+                break;
+            case "thismonth":
+                startDate = new DateTime(today.Year, today.Month, 1);
+                endDate = today;
+                break;
+            case "thisyear":
+                startDate = new DateTime(today.Year, 1, 1);
+                endDate = today;
+                break;
+        }
+        currentPage = 1;
+        await LoadPettyCash();
+    }
+
+    private async Task HandleFromDateChange(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        {
+            startDate = date;
+            selectedDateRange = string.Empty;
+            currentPage = 1;
+            await LoadPettyCash();
+        }
+    }
+
+    private async Task HandleToDateChange(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        {
+            endDate = date;
+            selectedDateRange = string.Empty;
+            currentPage = 1;
+            await LoadPettyCash();
+        }
+    }
+
+    private string GetDateRangeText()
+    {
+        if (!startDate.HasValue && !endDate.HasValue)
+            return "All Time";
+        if (startDate.HasValue && endDate.HasValue)
+            return $"{startDate.Value:MMM d} - {endDate.Value:MMM d, yyyy}";
+        return "Custom Range";
+    }
+
+    private async Task ClearFilters()
+    {
+        startDate = null;
+        endDate = null;
+        selectedDateRange = string.Empty;
+        currentPage = 1;
+        await LoadPettyCash();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages)
+        {
+            currentPage = page;
+            await LoadPettyCash();
+        }
+    }
+
+    private void OpenAddPettyCashModal()
+    {
+        pettyCashForm = new IT13_Final.Services.Data.CreateExpenseModel
+        {
+            ExpenseType = PettyCashType,
+            ExpenseDate = DateTime.Today
+        };
+        showPettyCashModal = true;
+        StateHasChanged();
+    }
+
+    private void ClosePettyCashModal()
+    {
+        showPettyCashModal = false;
+        pettyCashForm = new IT13_Final.Services.Data.CreateExpenseModel();
+        StateHasChanged();
+    }
+
+    private async Task SavePettyCash()
+    {
+        if (AuthState.CurrentUser == null) return;
+
+        if (pettyCashForm.Amount <= 0)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Please enter a valid amount.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(pettyCashForm.Description))
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Please enter a purpose/description.");
+            return;
+        }
+
+        isProcessing = true;
+        StateHasChanged();
+
+        try
+        {
+            pettyCashForm.ExpenseType = PettyCashType;
+            var expenseId = await ExpenseService.CreateExpenseAsync(
+                sellerUserId,
+                AuthState.CurrentUser.Id,
+                pettyCashForm
+            );
+
+            if (expenseId.HasValue)
+            {
+                try
+                {
+                    await HistoryService.LogAsync(
+                        AuthState.CurrentUser.Id,
+                        "create",
+                        "Petty Cash",
+                        $"Petty cash used: ₱{pettyCashForm.Amount:N2} - {pettyCashForm.Description}"
+                    );
+                }
+                catch { }
+
+                await JSRuntime.InvokeVoidAsync("alert", "Petty cash expense recorded successfully!");
+                ClosePettyCashModal();
+                await LoadPettyCash();
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Failed to record petty cash. Please try again.");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error saving petty cash: {ex.Message}");
+        }
+        finally
+        {
+            isProcessing = false;
+            StateHasChanged();
+        }
+    }
+}
+
+
