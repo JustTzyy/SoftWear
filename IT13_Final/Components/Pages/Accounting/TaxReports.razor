@@ -182,7 +182,7 @@ else
         <div class="card-header">
             <div class="card-title-section">
                 <h3 class="card-title">Product-Level Admin Fee Details</h3>
-                <span class="card-subtitle">@productAdminFeeBreakdown.Count products</span>
+                <span class="card-subtitle">@totalCount products found</span>
             </div>
         </div>
         
@@ -198,7 +198,13 @@ else
                     </tr>
                 </thead>
                 <tbody>
-                    @if (productAdminFeeBreakdown.Count == 0)
+                    @if (isLoading)
+                    {
+                        <tr>
+                            <td colspan="5" class="loading-cell">Loading product data...</td>
+                        </tr>
+                    }
+                    else if (productAdminFeeBreakdown.Count == 0)
                     {
                         <tr>
                             <td colspan="5" class="empty-cell">No product sales for this range.</td>
@@ -220,6 +226,47 @@ else
                 </tbody>
             </table>
         </div>
+
+        @if (totalPages > 1)
+        {
+            <div style="display:flex; justify-content:center; align-items:center; gap:8px; padding:20px; border-top:1px solid #e5e7eb; background:#f9fafb;">
+                <button style="min-width:36px; height:36px; padding:0 12px; border:1px solid #e5e7eb; border-radius:8px; background:white; color:#374151; font-weight:600; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center;" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
+                    <svg style="width:16px; height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                </button>
+
+                @for (int i = 1; i <= totalPages; i++)
+                {
+                    var pageNum = i;
+                    @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
+                    {
+                        @if (i == currentPage)
+                        {
+                            <button style="min-width:36px; height:36px; padding:0 12px; border:1px solid #5C7CFA; border-radius:8px; background:linear-gradient(135deg, #5C7CFA 0%, #4c6ef5 100%); color:white; font-weight:600; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(92,124,250,0.3);" @onclick="() => GoToPage(pageNum)">
+                                @i
+                            </button>
+                        }
+                        else
+                        {
+                            <button style="min-width:36px; height:36px; padding:0 12px; border:1px solid #e5e7eb; border-radius:8px; background:white; color:#374151; font-weight:600; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center;" @onclick="() => GoToPage(pageNum)">
+                                @i
+                            </button>
+                        }
+                    }
+                    else if (i == currentPage - 2 || i == currentPage + 2)
+                    {
+                        <span style="padding:0 8px; color:#9ca3af; font-weight:600;">...</span>
+                    }
+                }
+
+                <button style="min-width:36px; height:36px; padding:0 12px; border:1px solid #e5e7eb; border-radius:8px; background:white; color:#374151; font-weight:600; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center;" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
+                    <svg style="width:16px; height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                </button>
+            </div>
+        }
     </div>
 }
 
@@ -234,6 +281,10 @@ else
     private bool isGeneratingPDF = false;
 
     private int sellerUserId = 0;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling(totalCount / (double)pageSize);
 
     private decimal totalSalesBeforeTax = 0;
     private decimal vatAmount = 0;
@@ -342,6 +393,41 @@ else
                     )";
             }
 
+            // Get total count first
+            var countSql = $@"
+                SELECT COUNT(DISTINCT CONCAT(p.name, '|', v.name))
+                FROM dbo.tbl_sales_items si
+                INNER JOIN dbo.tbl_sales s ON si.sale_id = s.id
+                INNER JOIN dbo.tbl_variants v ON si.variant_id = v.id
+                INNER JOIN dbo.tbl_products p ON v.product_id = p.id
+                INNER JOIN dbo.tbl_users u ON s.user_id = u.id
+                WHERE si.archives IS NULL
+                AND s.archives IS NULL
+                AND s.status = 'Completed'
+                {sellerFilter}
+                AND u.archived_at IS NULL
+                {dateFilter}
+                {approvedDaysFilter}";
+
+            using var countCmd = new SqlCommand(countSql, conn);
+            if (sellerUserId > 0)
+            {
+                countCmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+            }
+            if (startDate.HasValue)
+            {
+                countCmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                countCmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+            }
+
+            var countResult = await countCmd.ExecuteScalarAsync();
+            totalCount = countResult != null && countResult != DBNull.Value ? Convert.ToInt32(countResult) : 0;
+
+            // Get paginated results
+            var offset = (currentPage - 1) * pageSize;
             var productSql = $@"
                 SELECT 
                     p.name as product_name,
@@ -361,9 +447,13 @@ else
                 {dateFilter}
                 {approvedDaysFilter}
                 GROUP BY p.name, v.name
-                ORDER BY total_revenue DESC";
+                ORDER BY total_revenue DESC
+                OFFSET @Offset ROWS
+                FETCH NEXT @PageSize ROWS ONLY";
 
             using var cmd = new SqlCommand(productSql, conn);
+            cmd.Parameters.AddWithValue("@Offset", offset);
+            cmd.Parameters.AddWithValue("@PageSize", pageSize);
             if (sellerUserId > 0)
             {
                 cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
@@ -378,9 +468,6 @@ else
             }
 
             productAdminFeeBreakdown.Clear();
-            totalProductsSold = 0;
-            totalProductRevenue = 0;
-            adminFeeAmount = 0;
 
             using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
@@ -399,12 +486,10 @@ else
                     TotalRevenue = revenue,
                     AdminFee = adminFee
                 });
-
-                totalProductsSold += quantity;
-                totalProductRevenue += revenue;
-                adminFeeAmount += adminFee;
             }
 
+            // Calculate totals from all products (not just current page)
+            await CalculateTotalStats();
             totalTaxAndFees = vatAmount + adminFeeAmount;
         }
         catch (Exception ex)
@@ -416,6 +501,85 @@ else
         {
             isLoading = false;
             StateHasChanged();
+        }
+    }
+
+    private async Task CalculateTotalStats()
+    {
+        try
+        {
+            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+            using var conn = new SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            var dateFilter = "";
+            if (startDate.HasValue)
+            {
+                dateFilter += " AND CAST(s.timestamps AS DATE) >= @StartDate";
+            }
+            if (endDate.HasValue)
+            {
+                dateFilter += " AND CAST(s.timestamps AS DATE) <= @EndDate";
+            }
+
+            var sellerFilter = sellerUserId > 0 ? "AND u.user_id = @SellerUserId" : "";
+
+            var approvedDaysFilter = "";
+            if (onlyApprovedDays && sellerUserId > 0)
+            {
+                approvedDaysFilter = @"
+                    AND EXISTS (
+                        SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
+                        WHERE dsv.cashier_user_id = s.user_id
+                        AND CAST(dsv.sale_date AS DATE) = CAST(s.timestamps AS DATE)
+                        AND dsv.status = 'Approved'
+                        AND dsv.archived_at IS NULL
+                        AND dsv.seller_user_id = @SellerUserId
+                    )";
+            }
+
+            var totalSql = $@"
+                SELECT 
+                    SUM(si.quantity) as total_quantity,
+                    SUM(si.subtotal) as total_revenue
+                FROM dbo.tbl_sales_items si
+                INNER JOIN dbo.tbl_sales s ON si.sale_id = s.id
+                INNER JOIN dbo.tbl_variants v ON si.variant_id = v.id
+                INNER JOIN dbo.tbl_products p ON v.product_id = p.id
+                INNER JOIN dbo.tbl_users u ON s.user_id = u.id
+                WHERE si.archives IS NULL
+                AND s.archives IS NULL
+                AND s.status = 'Completed'
+                {sellerFilter}
+                AND u.archived_at IS NULL
+                {dateFilter}
+                {approvedDaysFilter}";
+
+            using var cmd = new SqlCommand(totalSql, conn);
+            if (sellerUserId > 0)
+            {
+                cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+            }
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+            }
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                totalProductsSold = reader.IsDBNull(0) ? 0 : reader.GetInt32(0);
+                totalProductRevenue = reader.IsDBNull(1) ? 0 : reader.GetDecimal(1);
+                adminFeeAmount = totalProductRevenue * 0.02m;
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error calculating total stats: {ex.Message}");
         }
     }
 
@@ -451,6 +615,7 @@ else
             default:
                 break;
         }
+        currentPage = 1;
         await LoadData();
     }
 
@@ -458,6 +623,7 @@ else
     {
         if (DateTime.TryParse(e.Value?.ToString(), out var date))
         {
+            currentPage = 1;
             startDate = date;
             await LoadData();
         }
@@ -467,6 +633,7 @@ else
     {
         if (DateTime.TryParse(e.Value?.ToString(), out var date))
         {
+            currentPage = 1;
             endDate = date;
             await LoadData();
         }
@@ -487,12 +654,23 @@ else
         endDate = null;
         selectedDateRange = string.Empty;
         onlyApprovedDays = true; // Keep default to only show approved daily sales verification
+        currentPage = 1;
         await LoadData();
     }
 
     private async Task HandleApprovedDaysChanged()
     {
+        currentPage = 1;
         await LoadData();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages && page != currentPage)
+        {
+            currentPage = page;
+            await LoadData();
+        }
     }
 
     private async Task PrintReport()

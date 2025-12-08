@@ -55,16 +55,16 @@
         <table class="suppliers-table">
             <thead>
                 <tr>
-                    <th>ID</th>
-                    <th>Variant</th>
-                    <th>Product</th>
-                    <th>Size</th>
-                    <th>Color</th>
-                    <th>Type</th>
-                    <th>Quantity</th>
-                    <th>Reason</th>
-                    <th>Date</th>
-                    <th>Adjusted By</th>
+                    <th style="text-align: right;">ID</th>
+                    <th style="text-align: left;">Variant</th>
+                    <th style="text-align: left;">Product</th>
+                    <th style="text-align: left;">Size</th>
+                    <th style="text-align: left;">Color</th>
+                    <th style="text-align: left;">Type</th>
+                    <th style="text-align: right;">Quantity</th>
+                    <th style="text-align: left;">Reason</th>
+                    <th style="text-align: left;">Date</th>
+                    <th style="text-align: left;">Adjusted By</th>
                 </tr>
             </thead>
             <tbody>
@@ -85,11 +85,11 @@
                     @foreach (var adjustment in stockAdjustments)
                     {
                         <tr class="clickable-row" @onclick="() => HandleRowClick(adjustment.Id)">
-                            <td>@adjustment.Id</td>
-                            <td class="supplier-name">@adjustment.VariantName</td>
-                            <td>@adjustment.ProductName</td>
-                            <td>@(string.IsNullOrEmpty(adjustment.SizeName) ? "N/A" : adjustment.SizeName)</td>
-                            <td>
+                            <td style="text-align: right;">@adjustment.Id</td>
+                            <td class="supplier-name" style="text-align: left;">@adjustment.VariantName</td>
+                            <td style="text-align: left;">@adjustment.ProductName</td>
+                            <td style="text-align: left;">@(string.IsNullOrEmpty(adjustment.SizeName) ? "N/A" : adjustment.SizeName)</td>
+                            <td style="text-align: left;">
                                 @if (!string.IsNullOrEmpty(adjustment.ColorName))
                                 {
                                     <div style="display: flex; align-items: center; gap: 6px;">
@@ -105,13 +105,13 @@
                                     <span>N/A</span>
                                 }
                             </td>
-                            <td>
+                            <td style="text-align: left;">
                                 <span class="status-badge @GetAdjustmentTypeClass(adjustment.AdjustmentType)">@adjustment.AdjustmentType</span>
                             </td>
-                            <td>@adjustment.QuantityAdjusted</td>
-                            <td>@(string.IsNullOrEmpty(adjustment.Reason) ? "N/A" : (adjustment.Reason.Length > 30 ? adjustment.Reason.Substring(0, 30) + "..." : adjustment.Reason))</td>
-                            <td>@adjustment.Timestamps.ToString("MMM dd, yyyy HH:mm")</td>
-                            <td>@(string.IsNullOrEmpty(adjustment.UserName) ? "N/A" : adjustment.UserName)</td>
+                            <td style="text-align: right;">@adjustment.QuantityAdjusted</td>
+                            <td style="text-align: left;">@(string.IsNullOrEmpty(adjustment.Reason) ? "N/A" : (adjustment.Reason.Length > 30 ? adjustment.Reason.Substring(0, 30) + "..." : adjustment.Reason))</td>
+                            <td style="text-align: left;">@adjustment.Timestamps.ToString("MMM dd, yyyy HH:mm")</td>
+                            <td style="text-align: left;">@(string.IsNullOrEmpty(adjustment.UserName) ? "N/A" : adjustment.UserName)</td>
                         </tr>
                     }
                 }

@@ -4,6 +4,7 @@
 @inject IT13_Final.Services.Data.ISalesService SalesService
 @inject IT13_Final.Services.Audit.IHistoryService HistoryService
 @inject IJSRuntime JSRuntime
+@implements IDisposable
 @using System.Linq
 @using Microsoft.Data.SqlClient
 
@@ -146,19 +147,20 @@
                     <th>Payment Method</th>
                     <th>Cashier</th>
                     <th>Date</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 @if (isLoading)
                 {
                     <tr>
-                        <td colspan="5" class="loading-cell">Loading sales...</td>
+                        <td colspan="6" class="loading-cell">Loading sales...</td>
                     </tr>
                 }
                 else if (sales.Count == 0)
                 {
                     <tr>
-                        <td colspan="5" class="empty-cell">No sales found for this filter.</td>
+                        <td colspan="6" class="empty-cell">No sales found for this filter.</td>
                     </tr>
                 }
                 else
@@ -166,7 +168,7 @@
                     @foreach (var sale in sales)
                     {
                         var cleanAmount = sale.Amount.ToString("N2");
-                        <tr>
+                        <tr class="clickable-row" @onclick="() => HandleSaleClick(sale.Id)">
                             <td>@sale.SaleNumber</td>
                             <td style="text-align: right; font-weight: 600;">₱@cleanAmount</td>
                             <td>@sale.PaymentMethod</td>
@@ -176,6 +178,15 @@
                                     <div class="timestamp-date">@sale.Timestamps.ToString("MMM dd, yyyy")</div>
                                     <div class="timestamp-time">@sale.Timestamps.ToString("HH:mm:ss")</div>
                                 </div>
+                            </td>
+                            <td class="actions-cell" @onclick:stopPropagation="true">
+                                <button class="action-btn print-row-btn" @onclick="() => HandlePrintSale(sale.Id)" title="Print Receipt">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M6 9V2h12v7"></path>
+                                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                                        <rect x="6" y="14" width="12" height="8"></rect>
+                                    </svg>
+                                </button>
                             </td>
                         </tr>
                     }
@@ -217,6 +228,106 @@
     }
 </div>
 
+@* Sale Details Modal *@
+@if (showSaleDetailsModal && selectedSale != null)
+{
+    <div class="modal-overlay" @onclick="CloseSaleDetailsModal">
+        <div class="add-admin-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Sale Details - @selectedSale.SaleNumber</h2>
+                <button class="modal-close-btn" @onclick="CloseSaleDetailsModal" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="sale-info">
+                    <div class="info-row">
+                        <span class="info-label">Sale Number:</span>
+                        <span class="info-value">@selectedSale.SaleNumber</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Date:</span>
+                        <span class="info-value">@selectedSale.Timestamps.ToString("MMM dd, yyyy HH:mm:ss")</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Cashier:</span>
+                        <span class="info-value">@selectedSale.CashierName</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Payment Method:</span>
+                        <span class="info-value">@selectedSale.PaymentMethod</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Amount Paid:</span>
+                        <span class="info-value">₱@selectedSale.AmountPaid.ToString("N2")</span>
+                    </div>
+                    @if (selectedSale.PaymentMethod == "Cash" && selectedSale.ChangeGiven > 0)
+                    {
+                        <div class="info-row">
+                            <span class="info-label">Change Given:</span>
+                            <span class="info-value">₱@selectedSale.ChangeGiven.ToString("N2")</span>
+                        </div>
+                    }
+                    @if (selectedSale.PaymentMethod == "GCash" && !string.IsNullOrEmpty(selectedSale.ReferenceNumber))
+                    {
+                        <div class="info-row">
+                            <span class="info-label">Reference Number:</span>
+                            <span class="info-value">@selectedSale.ReferenceNumber</span>
+                        </div>
+                    }
+                    <div class="info-row">
+                        <span class="info-label">Total Amount:</span>
+                        <span class="info-value total-amount">₱@selectedSale.Amount.ToString("N2")</span>
+                    </div>
+                </div>
+
+                <div class="items-section">
+                    <h4>Items Purchased</h4>
+                    <table class="items-table">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Size</th>
+                                <th>Color</th>
+                                <th>Qty</th>
+                                <th>Price</th>
+                                <th>Subtotal</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in saleItems)
+                            {
+                                <tr>
+                                    <td>@item.ProductName - @item.VariantName</td>
+                                    <td>@(item.SizeName ?? "N/A")</td>
+                                    <td>@(item.ColorName ?? "N/A")</td>
+                                    <td>@item.Quantity</td>
+                                    <td>₱@item.Price.ToString("N2")</td>
+                                    <td>₱@item.Subtotal.ToString("N2")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="save-admin-btn" @onclick="() => HandlePrintSale(selectedSale.Id)">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                        <rect x="6" y="14" width="12" height="8"></rect>
+                    </svg>
+                    <span>Print Receipt</span>
+                </button>
+                <button class="cancel-btn" @onclick="CloseSaleDetailsModal">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private List<IT13_Final.Services.Data.SaleReportModel> sales = new();
     private List<IT13_Final.Services.Data.SaleReportModel> allSalesForPrint = new();
@@ -242,6 +353,11 @@
     private decimal adminFeeAmount = 0m;
 
     private System.Threading.Timer? _searchTimer;
+    
+    // Modal state
+    private bool showSaleDetailsModal = false;
+    private IT13_Final.Services.Data.SaleReportModel? selectedSale = null;
+    private List<IT13_Final.Services.Data.SaleReportItemModel> saleItems = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -437,6 +553,114 @@
         {
             currentPage = page;
             await LoadSales();
+        }
+    }
+
+    private async Task HandleSaleClick(int saleId)
+    {
+        try
+        {
+            // For accounting, we can view any sale (pass 0 for no cashier filter)
+            selectedSale = await SalesService.GetSaleForReportAsync(saleId, 0);
+            if (selectedSale == null)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Sale not found.");
+                return;
+            }
+
+            saleItems = await SalesService.GetSaleItemsForReportAsync(saleId);
+            showSaleDetailsModal = true;
+            
+            try
+            {
+                if (AuthState.CurrentUser != null)
+                {
+                    await HistoryService.LogAsync(
+                        AuthState.CurrentUser.Id,
+                        "view",
+                        "Accounting_Sales_Report",
+                        $"Viewed sale details: {selectedSale.SaleNumber}"
+                    );
+                }
+            }
+            catch { }
+            
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading sale details: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to load sale details. Please try again.");
+        }
+    }
+
+    private void CloseSaleDetailsModal()
+    {
+        showSaleDetailsModal = false;
+        selectedSale = null;
+        saleItems.Clear();
+        StateHasChanged();
+    }
+
+    private async Task HandlePrintSale(int saleId)
+    {
+        try
+        {
+            var sale = await SalesService.GetSaleForReportAsync(saleId, 0);
+            if (sale == null)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Sale not found.");
+                return;
+            }
+
+            var items = await SalesService.GetSaleItemsForReportAsync(saleId);
+            if (items == null || items.Count == 0)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "No items found for this sale.");
+                return;
+            }
+
+            var receiptData = new
+            {
+                saleNumber = sale.SaleNumber,
+                dateTime = sale.Timestamps.ToString("MMM dd, yyyy HH:mm:ss"),
+                cashierName = sale.CashierName,
+                items = items.Select(item => new
+                {
+                    productName = item.ProductName,
+                    variantName = item.VariantName,
+                    sizeName = item.SizeName ?? "",
+                    colorName = item.ColorName ?? "",
+                    quantity = item.Quantity,
+                    subtotal = item.Subtotal
+                }).ToArray(),
+                totalAmount = sale.Amount,
+                paymentMethod = sale.PaymentMethod,
+                amountPaid = sale.AmountPaid,
+                changeGiven = sale.ChangeGiven,
+                referenceNumber = sale.ReferenceNumber
+            };
+
+            await JSRuntime.InvokeVoidAsync("printReceipt", receiptData);
+            
+            try
+            {
+                if (AuthState.CurrentUser != null)
+                {
+                    await HistoryService.LogAsync(
+                        AuthState.CurrentUser.Id,
+                        "print",
+                        "Accounting_Sales_Report",
+                        $"Printed receipt for sale: {sale.SaleNumber}"
+                    );
+                }
+            }
+            catch { }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error printing sale: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to print receipt. Please try again.");
         }
     }
 

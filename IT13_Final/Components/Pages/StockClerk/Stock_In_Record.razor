@@ -47,13 +47,13 @@
         <table class="suppliers-table">
             <thead>
                 <tr>
-                    <th>ID</th>
-                    <th>Variant</th>
-                    <th>Product</th>
-                    <th>Quantity</th>
-                    <th>Cost Price</th>
-                    <th>Supplier</th>
-                    <th>Date</th>
+                    <th style="text-align: right;">ID</th>
+                    <th style="text-align: left;">Variant</th>
+                    <th style="text-align: left;">Product</th>
+                    <th style="text-align: right;">Quantity</th>
+                    <th style="text-align: right;">Cost Price</th>
+                    <th style="text-align: left;">Supplier</th>
+                    <th style="text-align: left;">Date</th>
                 </tr>
             </thead>
             <tbody>
@@ -74,13 +74,13 @@
                     @foreach (var stockIn in stockIns)
                     {
                         <tr class="clickable-row" @onclick="() => HandleRowClick(stockIn.Id)">
-                            <td>@stockIn.Id</td>
-                            <td class="supplier-name">@stockIn.VariantName</td>
-                            <td>@stockIn.ProductName</td>
-                            <td>@stockIn.QuantityAdded</td>
-                            <td>@stockIn.CostPrice.ToString("N2")</td>
-                            <td>@(string.IsNullOrEmpty(stockIn.SupplierName) ? "N/A" : stockIn.SupplierName)</td>
-                            <td>@stockIn.Timestamps.ToString("MMM dd, yyyy HH:mm")</td>
+                            <td style="text-align: right;">@stockIn.Id</td>
+                            <td class="supplier-name" style="text-align: left;">@stockIn.VariantName</td>
+                            <td style="text-align: left;">@stockIn.ProductName</td>
+                            <td style="text-align: right;">@stockIn.QuantityAdded</td>
+                            <td style="text-align: right;">@stockIn.CostPrice.ToString("N2")</td>
+                            <td style="text-align: left;">@(string.IsNullOrEmpty(stockIn.SupplierName) ? "N/A" : stockIn.SupplierName)</td>
+                            <td style="text-align: left;">@stockIn.Timestamps.ToString("MMM dd, yyyy HH:mm")</td>
                         </tr>
                     }
                 }

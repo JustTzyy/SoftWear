@@ -518,49 +518,15 @@ namespace IT13_Final.Services.Data
 
             // Get low stock items count
             var lowStockSql = @"
-                WITH StockInAggregated AS (
-                    SELECT si.variant_id, si.size_id, si.color_id, SUM(si.quantity_added) as total_in
-                    FROM dbo.tbl_stock_in si INNER JOIN dbo.tbl_variants v ON si.variant_id = v.id
-                    WHERE si.archives IS NULL AND v.user_id = @UserId
-                    GROUP BY si.variant_id, si.size_id, si.color_id
-                ),
-                StockOutAggregated AS (
-                    SELECT so.variant_id, so.size_id, so.color_id, SUM(so.quantity_removed) as total_out
-                    FROM dbo.tbl_stock_out so INNER JOIN dbo.tbl_variants v ON so.variant_id = v.id
-                    WHERE so.archives IS NULL AND v.user_id = @UserId
-                    GROUP BY so.variant_id, so.size_id, so.color_id
-                ),
-                StockAdjustmentsAggregated AS (
-                    SELECT sa.variant_id, sa.size_id, sa.color_id,
-                        SUM(CASE WHEN sa.adjustment_type = 'Increase' THEN sa.quantity_adjusted
-                                 WHEN sa.adjustment_type = 'Decrease' THEN -sa.quantity_adjusted ELSE 0 END) as total_adjustment
-                    FROM dbo.tbl_stock_adjustments sa INNER JOIN dbo.tbl_variants v ON sa.variant_id = v.id
-                    WHERE sa.archives IS NULL AND v.user_id = @UserId
-                    GROUP BY sa.variant_id, sa.size_id, sa.color_id
-                ),
-                InventoryCombined AS (
-                    SELECT COALESCE(si.variant_id, COALESCE(so.variant_id, sa.variant_id)) as variant_id,
-                           COALESCE(si.size_id, COALESCE(so.size_id, sa.size_id)) as size_id,
-                           COALESCE(si.color_id, COALESCE(so.color_id, sa.color_id)) as color_id,
-                           COALESCE(si.total_in, 0) - COALESCE(so.total_out, 0) + COALESCE(sa.total_adjustment, 0) as current_stock
-                    FROM StockInAggregated si
-                    FULL OUTER JOIN StockOutAggregated so ON si.variant_id = so.variant_id 
-                        AND (si.size_id = so.size_id OR (si.size_id IS NULL AND so.size_id IS NULL))
-                        AND (si.color_id = so.color_id OR (si.color_id IS NULL AND so.color_id IS NULL))
-                    FULL OUTER JOIN StockAdjustmentsAggregated sa
-                        ON COALESCE(si.variant_id, so.variant_id) = sa.variant_id
-                        AND (COALESCE(si.size_id, so.size_id) = sa.size_id OR (COALESCE(si.size_id, so.size_id) IS NULL AND sa.size_id IS NULL))
-                        AND (COALESCE(si.color_id, so.color_id) = sa.color_id OR (COALESCE(si.color_id, so.color_id) IS NULL AND sa.color_id IS NULL))
-                )
-                SELECT COUNT(DISTINCT CONCAT(ic.variant_id, '-', COALESCE(CAST(ic.size_id AS NVARCHAR), ''), '-', COALESCE(CAST(ic.color_id AS NVARCHAR), '')))
-                FROM InventoryCombined ic
-                INNER JOIN dbo.tbl_variants v ON ic.variant_id = v.id
-                LEFT JOIN dbo.tbl_inventories i ON ic.variant_id = i.variant_id 
-                    AND (ic.size_id = i.size_id OR (ic.size_id IS NULL AND i.size_id IS NULL))
-                    AND (ic.color_id = i.color_id OR (ic.color_id IS NULL AND i.color_id IS NULL))
-                    AND i.archives IS NULL
-                WHERE v.user_id = @UserId AND v.archived_at IS NULL 
-                    AND ic.current_stock <= COALESCE(i.reorder_level, 0)";
+                SELECT COUNT(*)
+                FROM dbo.tbl_inventories i
+                INNER JOIN dbo.tbl_variants v ON i.variant_id = v.id
+                WHERE i.archives IS NULL 
+                    AND v.user_id = @UserId 
+                    AND v.archived_at IS NULL 
+                    AND i.reorder_level IS NOT NULL
+                    AND i.reorder_level > 0
+                    AND i.current_stock <= i.reorder_level";
 
             // Get total products count
             var totalProductsSql = @"
@@ -651,55 +617,21 @@ namespace IT13_Final.Services.Data
             await conn.OpenAsync(ct);
 
             var sql = @"
-                WITH StockInAggregated AS (
-                    SELECT si.variant_id, si.size_id, si.color_id, SUM(si.quantity_added) as total_in
-                    FROM dbo.tbl_stock_in si INNER JOIN dbo.tbl_variants v ON si.variant_id = v.id
-                    WHERE si.archives IS NULL AND v.user_id = @UserId
-                    GROUP BY si.variant_id, si.size_id, si.color_id
-                ),
-                StockOutAggregated AS (
-                    SELECT so.variant_id, so.size_id, so.color_id, SUM(so.quantity_removed) as total_out
-                    FROM dbo.tbl_stock_out so INNER JOIN dbo.tbl_variants v ON so.variant_id = v.id
-                    WHERE so.archives IS NULL AND v.user_id = @UserId
-                    GROUP BY so.variant_id, so.size_id, so.color_id
-                ),
-                StockAdjustmentsAggregated AS (
-                    SELECT sa.variant_id, sa.size_id, sa.color_id,
-                        SUM(CASE WHEN sa.adjustment_type = 'Increase' THEN sa.quantity_adjusted
-                                 WHEN sa.adjustment_type = 'Decrease' THEN -sa.quantity_adjusted ELSE 0 END) as total_adjustment
-                    FROM dbo.tbl_stock_adjustments sa INNER JOIN dbo.tbl_variants v ON sa.variant_id = v.id
-                    WHERE sa.archives IS NULL AND v.user_id = @UserId
-                    GROUP BY sa.variant_id, sa.size_id, sa.color_id
-                ),
-                InventoryCombined AS (
-                    SELECT COALESCE(si.variant_id, COALESCE(so.variant_id, sa.variant_id)) as variant_id,
-                           COALESCE(si.size_id, COALESCE(so.size_id, sa.size_id)) as size_id,
-                           COALESCE(si.color_id, COALESCE(so.color_id, sa.color_id)) as color_id,
-                           COALESCE(si.total_in, 0) - COALESCE(so.total_out, 0) + COALESCE(sa.total_adjustment, 0) as current_stock
-                    FROM StockInAggregated si
-                    FULL OUTER JOIN StockOutAggregated so ON si.variant_id = so.variant_id 
-                        AND (si.size_id = so.size_id OR (si.size_id IS NULL AND so.size_id IS NULL))
-                        AND (si.color_id = so.color_id OR (si.color_id IS NULL AND so.color_id IS NULL))
-                    FULL OUTER JOIN StockAdjustmentsAggregated sa
-                        ON COALESCE(si.variant_id, so.variant_id) = sa.variant_id
-                        AND (COALESCE(si.size_id, so.size_id) = sa.size_id OR (COALESCE(si.size_id, so.size_id) IS NULL AND sa.size_id IS NULL))
-                        AND (COALESCE(si.color_id, so.color_id) = sa.color_id OR (COALESCE(si.color_id, so.color_id) IS NULL AND sa.color_id IS NULL))
-                )
-                SELECT TOP (@TopCount) ic.variant_id, p.name as product_name, v.name as variant_name,
+                SELECT TOP (@TopCount) i.variant_id, p.name as product_name, v.name as variant_name,
                        sz.name as size_name, c.name as color_name,
-                       ic.current_stock, COALESCE(i.reorder_level, 0) as reorder_level
-                FROM InventoryCombined ic
-                INNER JOIN dbo.tbl_variants v ON ic.variant_id = v.id
+                       i.current_stock, i.reorder_level
+                FROM dbo.tbl_inventories i
+                INNER JOIN dbo.tbl_variants v ON i.variant_id = v.id
                 INNER JOIN dbo.tbl_products p ON v.product_id = p.id
-                LEFT JOIN dbo.tbl_sizes sz ON ic.size_id = sz.id
-                LEFT JOIN dbo.tbl_colors c ON ic.color_id = c.id
-                LEFT JOIN dbo.tbl_inventories i ON ic.variant_id = i.variant_id 
-                    AND (ic.size_id = i.size_id OR (ic.size_id IS NULL AND i.size_id IS NULL))
-                    AND (ic.color_id = i.color_id OR (ic.color_id IS NULL AND i.color_id IS NULL))
-                    AND i.archives IS NULL
-                WHERE v.user_id = @UserId AND v.archived_at IS NULL 
-                    AND ic.current_stock <= COALESCE(i.reorder_level, 0)
-                ORDER BY ic.current_stock ASC";
+                LEFT JOIN dbo.tbl_sizes sz ON i.size_id = sz.id
+                LEFT JOIN dbo.tbl_colors c ON i.color_id = c.id
+                WHERE i.archives IS NULL 
+                    AND v.user_id = @UserId 
+                    AND v.archived_at IS NULL 
+                    AND i.reorder_level IS NOT NULL
+                    AND i.reorder_level > 0
+                    AND i.current_stock <= i.reorder_level
+                ORDER BY i.current_stock ASC";
 
             using var cmd = new SqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@UserId", userId);
@@ -716,7 +648,7 @@ namespace IT13_Final.Services.Data
                     SizeName = reader.IsDBNull(3) ? null : reader.GetString(3),
                     ColorName = reader.IsDBNull(4) ? null : reader.GetString(4),
                     CurrentStock = reader.GetInt32(5),
-                    ReorderLevel = reader.GetInt32(6)
+                    ReorderLevel = reader.IsDBNull(6) ? 0 : reader.GetInt32(6)
                 });
             }
 

@@ -47,12 +47,12 @@
         <table class="suppliers-table">
             <thead>
                 <tr>
-                    <th>ID</th>
-                    <th>Variant</th>
-                    <th>Product</th>
-                    <th>Quantity</th>
-                    <th>Reason</th>
-                    <th>Date</th>
+                    <th style="text-align: right;">ID</th>
+                    <th style="text-align: left;">Variant</th>
+                    <th style="text-align: left;">Product</th>
+                    <th style="text-align: right;">Quantity</th>
+                    <th style="text-align: left;">Reason</th>
+                    <th style="text-align: left;">Date</th>
                 </tr>
             </thead>
             <tbody>
@@ -73,12 +73,12 @@
                     @foreach (var stockOut in stockOuts)
                     {
                         <tr class="clickable-row" @onclick="() => HandleRowClick(stockOut.Id)">
-                            <td>@stockOut.Id</td>
-                            <td class="supplier-name">@stockOut.VariantName</td>
-                            <td>@stockOut.ProductName</td>
-                            <td>@stockOut.QuantityRemoved</td>
-                            <td>@(string.IsNullOrEmpty(stockOut.Reason) ? "N/A" : stockOut.Reason)</td>
-                            <td>@stockOut.Timestamps.ToString("MMM dd, yyyy HH:mm")</td>
+                            <td style="text-align: right;">@stockOut.Id</td>
+                            <td class="supplier-name" style="text-align: left;">@stockOut.VariantName</td>
+                            <td style="text-align: left;">@stockOut.ProductName</td>
+                            <td style="text-align: right;">@stockOut.QuantityRemoved</td>
+                            <td style="text-align: left;">@(string.IsNullOrEmpty(stockOut.Reason) ? "N/A" : stockOut.Reason)</td>
+                            <td style="text-align: left;">@stockOut.Timestamps.ToString("MMM dd, yyyy HH:mm")</td>
                         </tr>
                     }
                 }

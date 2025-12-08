@@ -132,12 +132,12 @@
         <table class="admin-table">
             <thead>
                 <tr>
-                    <th>Product</th>
-                    <th>Variant</th>
-                    <th>Quantity</th>
-                    <th>Reason</th>
-                    <th>Date</th>
-                    <th>Actions</th>
+                    <th style="text-align: left;">Product</th>
+                    <th style="text-align: left;">Variant</th>
+                    <th style="text-align: right;">Quantity</th>
+                    <th style="text-align: left;">Reason</th>
+                    <th style="text-align: left;">Date</th>
+                    <th style="text-align: center;">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -158,10 +158,10 @@
                     @foreach (var stockOut in stockOuts)
                     {
                         <tr class="clickable-row" @onclick="() => HandleStockOutClick(stockOut.Id)">
-                            <td class="sale-number">@stockOut.ProductName</td>
-                            <td>@stockOut.VariantName</td>
-                            <td>@stockOut.QuantityRemoved</td>
-                            <td>@(stockOut.Reason ?? "N/A")</td>
+                            <td class="sale-number" style="text-align: left;">@stockOut.ProductName</td>
+                            <td style="text-align: left;">@stockOut.VariantName</td>
+                            <td style="text-align: right;">@stockOut.QuantityRemoved</td>
+                            <td style="text-align: left;">@(stockOut.Reason ?? "N/A")</td>
                             <td>
                                 <div class="timestamp-info">
                                     <div class="timestamp-date">@stockOut.Timestamps.ToString("MMM dd, yyyy")</div>

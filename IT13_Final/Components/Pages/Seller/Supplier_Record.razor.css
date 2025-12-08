@@ -695,9 +695,6 @@
 
 .modal-content {
     padding: 28px;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
     overflow-y: auto;
     flex: 1;
     background: #f9fafb;

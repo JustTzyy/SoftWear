@@ -145,13 +145,13 @@
         <table class="admin-table">
             <thead>
                 <tr>
-                    <th>Product</th>
-                    <th>Variant</th>
-                    <th>Adjustment Type</th>
-                    <th>Quantity</th>
-                    <th>Reason</th>
-                    <th>Date</th>
-                    <th>Actions</th>
+                    <th style="text-align: left;">Product</th>
+                    <th style="text-align: left;">Variant</th>
+                    <th style="text-align: left;">Adjustment Type</th>
+                    <th style="text-align: right;">Quantity</th>
+                    <th style="text-align: left;">Reason</th>
+                    <th style="text-align: left;">Date</th>
+                    <th style="text-align: center;">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -172,13 +172,13 @@
                     @foreach (var adjustment in stockAdjustments)
                     {
                         <tr class="clickable-row" @onclick="() => HandleStockAdjustmentClick(adjustment.Id)">
-                            <td class="sale-number">@adjustment.ProductName</td>
-                            <td>@adjustment.VariantName</td>
-                            <td>
-                                <span class="status-badge @(adjustment.AdjustmentType == "Increase" ? "status-approved" : "status-cancelled")">@adjustment.AdjustmentType</span>
+                            <td class="sale-number" style="text-align: left;">@adjustment.ProductName</td>
+                            <td style="text-align: left;">@adjustment.VariantName</td>
+                            <td style="text-align: left;">
+                                <span style="color: @(adjustment.AdjustmentType == "Increase" ? "#10b981" : "#f43f5e"); font-weight: 600;">@adjustment.AdjustmentType</span>
                             </td>
-                            <td>@adjustment.QuantityAdjusted</td>
-                            <td>@(adjustment.Reason ?? "N/A")</td>
+                            <td style="text-align: right;">@adjustment.QuantityAdjusted</td>
+                            <td style="text-align: left;">@(adjustment.Reason ?? "N/A")</td>
                             <td>
                                 <div class="timestamp-info">
                                     <div class="timestamp-date">@adjustment.Timestamps.ToString("MMM dd, yyyy")</div>
@@ -284,7 +284,7 @@
                     <div class="info-row">
                         <span class="info-label">Adjustment Type:</span>
                         <span class="info-value">
-                            <span class="status-badge @(selectedStockAdjustment.AdjustmentType == "Increase" ? "status-approved" : "status-cancelled")">@selectedStockAdjustment.AdjustmentType</span>
+                            <span style="color: @(selectedStockAdjustment.AdjustmentType == "Increase" ? "#10b981" : "#f43f5e"); font-weight: 600;">@selectedStockAdjustment.AdjustmentType</span>
                         </span>
                     </div>
                     <div class="info-row">

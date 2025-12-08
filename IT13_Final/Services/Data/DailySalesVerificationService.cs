@@ -60,7 +60,8 @@ namespace IT13_Final.Services.Data
         Task<DailySalesVerificationDetailsModel?> GetDailySalesDetailsForAccountingAsync(int cashierUserId, DateTime saleDate, int sellerUserId, CancellationToken ct = default);
         Task<bool> ApproveDailySalesAsync(int cashierUserId, DateTime saleDate, int approvedByUserId, int sellerUserId, CancellationToken ct = default);
         Task<bool> RejectDailySalesAsync(int cashierUserId, DateTime saleDate, int rejectedByUserId, int sellerUserId, CancellationToken ct = default);
-        Task<List<DailySalesVerificationModel>> GetAllDailySalesVerificationsForReportAsync(int sellerUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, string? status = null, CancellationToken ct = default);
+        Task<List<DailySalesVerificationModel>> GetAllDailySalesVerificationsForReportAsync(int sellerUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, string? status = null, int page = 1, int pageSize = 10, CancellationToken ct = default);
+        Task<int> GetAllDailySalesVerificationsCountForReportAsync(int sellerUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, string? status = null, CancellationToken ct = default);
     }
 
     public class DailySalesVerificationService : IDailySalesVerificationService
@@ -760,9 +761,10 @@ namespace IT13_Final.Services.Data
             return true;
         }
 
-        public async Task<List<DailySalesVerificationModel>> GetAllDailySalesVerificationsForReportAsync(int sellerUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, string? status = null, CancellationToken ct = default)
+        public async Task<List<DailySalesVerificationModel>> GetAllDailySalesVerificationsForReportAsync(int sellerUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, string? status = null, int page = 1, int pageSize = 10, CancellationToken ct = default)
         {
             var reports = new List<DailySalesVerificationModel>();
+            var offset = (page - 1) * pageSize;
 
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
@@ -875,10 +877,14 @@ namespace IT13_Final.Services.Data
             }
 
             sql += @"
-                ORDER BY ds.sale_date DESC, cashier_name";
+                ORDER BY ds.sale_date DESC, cashier_name
+                OFFSET @Offset ROWS
+                FETCH NEXT @PageSize ROWS ONLY";
 
             using var cmd = new SqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+            cmd.Parameters.AddWithValue("@Offset", offset);
+            cmd.Parameters.AddWithValue("@PageSize", pageSize);
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -925,6 +931,83 @@ namespace IT13_Final.Services.Data
             }
 
             return reports;
+        }
+
+        public async Task<int> GetAllDailySalesVerificationsCountForReportAsync(int sellerUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, string? status = null, CancellationToken ct = default)
+        {
+            using var conn = new SqlConnection(_connectionString);
+            await conn.OpenAsync(ct);
+
+            var sql = @"
+                WITH DailySales AS (
+                    SELECT 
+                        s.user_id as cashier_user_id,
+                        CAST(s.timestamps AS DATE) as sale_date
+                    FROM dbo.tbl_sales s
+                    INNER JOIN dbo.tbl_users u ON s.user_id = u.id
+                    LEFT JOIN dbo.tbl_payments p ON s.id = p.sale_id AND p.archives IS NULL
+                    WHERE s.archives IS NULL 
+                    AND s.status = 'Completed'
+                    AND u.user_id = @SellerUserId
+                    AND u.archived_at IS NULL";
+
+            if (startDate.HasValue)
+            {
+                sql += " AND CAST(s.timestamps AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                sql += " AND CAST(s.timestamps AS DATE) <= @EndDate";
+            }
+
+            sql += @"
+                    GROUP BY s.user_id, CAST(s.timestamps AS DATE)
+                )
+                SELECT COUNT(DISTINCT CONCAT(ds.cashier_user_id, '_', ds.sale_date))
+                FROM DailySales ds
+                INNER JOIN dbo.tbl_users u ON ds.cashier_user_id = u.id
+                LEFT JOIN dbo.tbl_daily_sales_verifications dsv ON ds.cashier_user_id = dsv.cashier_user_id 
+                    AND ds.sale_date = dsv.sale_date 
+                    AND dsv.seller_user_id = @SellerUserId
+                    AND dsv.archived_at IS NULL
+                WHERE 1=1";
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                sql += @" AND (u.name LIKE @SearchTerm OR u.fname LIKE @SearchTerm OR u.lname LIKE @SearchTerm)";
+            }
+
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                sql += " AND COALESCE(dsv.status, 'Pending') = @Status";
+            }
+
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
+            }
+
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+            }
+
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                cmd.Parameters.AddWithValue("@Status", status);
+            }
+
+            var result = await cmd.ExecuteScalarAsync(ct);
+            return result != null && result != DBNull.Value ? Convert.ToInt32(result) : 0;
         }
     }
 }

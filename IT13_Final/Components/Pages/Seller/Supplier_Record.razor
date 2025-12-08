@@ -251,7 +251,7 @@
                     </div>
                     <div class="detail-item">
                         <span class="detail-label">STATUS:</span>
-                        <span class="detail-value status-badge @(supplierDetails.Status.ToUpper() == "ACTIVE" ? "active" : "inactive")">@supplierDetails.Status</span>
+                        <span class="detail-value">@supplierDetails.Status</span>
                     </div>
                     <div class="detail-item">
                         <span class="detail-label">STREET ADDRESS:</span>
@@ -283,7 +283,7 @@
 @if (showAddSupplierModal)
 {
     <div class="modal-overlay" @onclick="CloseAddSupplierModal">
-        <div class="add-supplier-modal" @onclick:stopPropagation>
+        <div class="add-admin-modal" @onclick:stopPropagation>
             <div class="modal-header">
                 <h2 class="modal-title-text">Add Supplier</h2>
                 <button class="modal-close-btn" @onclick="CloseAddSupplierModal">
@@ -348,7 +348,7 @@
 
                     <div class="modal-footer">
                         <button type="button" class="cancel-btn" @onclick="CloseAddSupplierModal">Cancel</button>
-                        <button type="submit" class="save-supplier-btn">
+                        <button type="submit" class="save-admin-btn">
                             <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
                                 <polyline points="17 21 17 13 7 13 7 21"></polyline>
@@ -367,7 +367,7 @@
 @if (showUpdateSupplierModal)
 {
     <div class="modal-overlay" @onclick="CloseUpdateSupplierModal">
-        <div class="add-supplier-modal" @onclick:stopPropagation>
+        <div class="add-admin-modal" @onclick:stopPropagation>
             <div class="modal-header">
                 <h2 class="modal-title-text">Update Supplier</h2>
                 <button class="modal-close-btn" @onclick="CloseUpdateSupplierModal">
@@ -432,7 +432,7 @@
 
                     <div class="modal-footer">
                         <button type="button" class="cancel-btn" @onclick="CloseUpdateSupplierModal">Cancel</button>
-                        <button type="submit" class="save-supplier-btn">
+                        <button type="submit" class="save-admin-btn">
                             <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
                                 <polyline points="17 21 17 13 7 13 7 21"></polyline>

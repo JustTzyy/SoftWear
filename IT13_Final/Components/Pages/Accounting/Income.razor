@@ -183,36 +183,36 @@ else
         </div>
     </div>
 
-    @* By Seller Card *@
+    @* By Cashier Card *@
     <div class="content-card">
         <div class="card-header">
             <div class="card-title-section">
-                <h3 class="card-title">By Seller</h3>
-                <span class="card-subtitle">@incomeData.BySeller.Count sellers</span>
+                <h3 class="card-title">By Cashier</h3>
+                <span class="card-subtitle">@incomeData.BySeller.Count cashiers</span>
             </div>
         </div>
         <div class="card-body">
             @if (incomeData.BySeller.Count == 0)
             {
-                <div class="empty-cell">No seller data available</div>
+                <div class="empty-cell">No cashier data available</div>
             }
             else
             {
                 <table class="admin-table">
                     <thead>
                         <tr>
-                            <th>Seller</th>
+                            <th>Cashier</th>
                             <th>Amount</th>
                             <th>Transactions</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var seller in incomeData.BySeller)
+                        @foreach (var cashier in incomeData.BySeller)
                         {
                             <tr>
-                                <td>@seller.SellerName</td>
-                                <td style="text-align: right; font-weight: 600;">₱@seller.TotalIncome.ToString("N2")</td>
-                                <td style="text-align: right;">@seller.TransactionCount</td>
+                                <td>@cashier.SellerName</td>
+                                <td style="text-align: right; font-weight: 600;">₱@cashier.TotalIncome.ToString("N2")</td>
+                                <td style="text-align: right;">@cashier.TransactionCount</td>
                             </tr>
                         }
                     </tbody>
@@ -597,9 +597,9 @@ else
                 items = c.ItemCount.ToString()
             }).ToArray();
 
-            var sellers = incomeData.BySeller.Select(s => new
+            var cashiers = incomeData.BySeller.Select(s => new
             {
-                seller = s.SellerName,
+                cashier = s.SellerName,
                 amount = s.TotalIncome.ToString("N2"),
                 transactions = s.TransactionCount.ToString()
             }).ToArray();
@@ -615,7 +615,7 @@ else
                 "generateAndPrintIncomePDF",
                 summary,
                 categories,
-                sellers,
+                cashiers,
                 payments,
                 userName,
                 rangeTextFrom,
