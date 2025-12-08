@@ -151,15 +151,15 @@
         <table class="admin-table">
             <thead>
                 <tr>
-                    <th>Product</th>
-                    <th>Variant</th>
-                    <th>Size</th>
-                    <th>Color</th>
-                    <th>Current Stock</th>
-                    <th>Reorder Level</th>
-                    <th>Status</th>
-                    <th>Last Updated</th>
-                    <th>Actions</th>
+                    <th style="text-align: left;">Product</th>
+                    <th style="text-align: left;">Variant</th>
+                    <th style="text-align: left;">Size</th>
+                    <th style="text-align: left;">Color</th>
+                    <th style="text-align: right;">Current Stock</th>
+                    <th style="text-align: right;">Reorder Level</th>
+                    <th style="text-align: left;">Status</th>
+                    <th style="text-align: left;">Last Updated</th>
+                    <th style="text-align: center;">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -180,10 +180,10 @@
                     @foreach (var inventory in inventories)
                     {
                         <tr class="clickable-row" @onclick="() => HandleRowClick(inventory.VariantId, inventory.SizeId, inventory.ColorId)">
-                            <td class="sale-number">@inventory.ProductName</td>
-                            <td>@inventory.VariantName</td>
-                            <td>@(string.IsNullOrEmpty(inventory.SizeName) ? "N/A" : inventory.SizeName)</td>
-                            <td>
+                            <td class="sale-number" style="text-align: left;">@inventory.ProductName</td>
+                            <td style="text-align: left;">@inventory.VariantName</td>
+                            <td style="text-align: left;">@(string.IsNullOrEmpty(inventory.SizeName) ? "N/A" : inventory.SizeName)</td>
+                            <td style="text-align: left;">
                                 @if (!string.IsNullOrEmpty(inventory.ColorName))
                                 {
                                     <div style="display: flex; align-items: center; gap: 6px;">
@@ -199,10 +199,10 @@
                                     <span>N/A</span>
                                 }
                             </td>
-                            <td>
+                            <td style="text-align: right;">
                                 <span class="stock-value @(inventory.CurrentStock <= inventory.ReorderLevel ? "low-stock" : "")">@inventory.CurrentStock</span>
                             </td>
-                            <td>@inventory.ReorderLevel</td>
+                            <td style="text-align: right;">@inventory.ReorderLevel</td>
                             <td>
                                 @if (inventory.CurrentStock <= inventory.ReorderLevel)
                                 {

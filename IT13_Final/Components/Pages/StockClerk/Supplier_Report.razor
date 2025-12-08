@@ -136,13 +136,13 @@
         <table class="admin-table">
             <thead>
                 <tr>
-                    <th>Company Name</th>
-                    <th>Contact Person</th>
-                    <th>Email</th>
-                    <th>Contact Number</th>
-                    <th>Status</th>
-                    <th>Date Created</th>
-                    <th>Actions</th>
+                    <th style="text-align: left;">Company Name</th>
+                    <th style="text-align: left;">Contact Person</th>
+                    <th style="text-align: left;">Email</th>
+                    <th style="text-align: left;">Contact Number</th>
+                    <th style="text-align: left;">Status</th>
+                    <th style="text-align: left;">Date Created</th>
+                    <th style="text-align: center;">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -163,12 +163,12 @@
                     @foreach (var supplier in suppliers)
                     {
                         <tr class="clickable-row" @onclick="() => HandleSupplierClick(supplier.Id)">
-                            <td class="sale-number">@supplier.CompanyName</td>
-                            <td>@(supplier.ContactPerson ?? "N/A")</td>
-                            <td>@(supplier.Email ?? "N/A")</td>
-                            <td>@(supplier.ContactNumber ?? "N/A")</td>
-                            <td>
-                                <span class="status-badge @(supplier.Status.ToLower() == "active" ? "status-approved" : "status-cancelled")">@supplier.Status</span>
+                            <td class="sale-number" style="text-align: left;">@supplier.CompanyName</td>
+                            <td style="text-align: left;">@(supplier.ContactPerson ?? "N/A")</td>
+                            <td style="text-align: left;">@(supplier.Email ?? "N/A")</td>
+                            <td style="text-align: left;">@(supplier.ContactNumber ?? "N/A")</td>
+                            <td style="text-align: left;">
+                                <span style="color: @(supplier.Status.ToLower() == "active" ? "#10b981" : "#f43f5e"); font-weight: 600;">@supplier.Status</span>
                             </td>
                             <td>
                                 <div class="timestamp-info">
@@ -259,7 +259,7 @@
                     <div class="info-row">
                         <span class="info-label">Status:</span>
                         <span class="info-value">
-                            <span class="status-badge @(selectedSupplier.Status.ToLower() == "active" ? "status-approved" : "status-cancelled")">@selectedSupplier.Status</span>
+                            <span style="color: @(selectedSupplier.Status.ToLower() == "active" ? "#10b981" : "#f43f5e"); font-weight: 600;">@selectedSupplier.Status</span>
                         </span>
                     </div>
                     @if (!string.IsNullOrEmpty(selectedSupplier.Street))
@@ -335,10 +335,42 @@
     private System.Threading.Timer? _searchTimer;
     private bool showSupplierDetailsModal = false;
     private IT13_Final.Services.Data.SupplierDetailsModel? selectedSupplier = null;
+    private int sellerUserId = 0;
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadSuppliers();
+        await LoadSellerUserId();
+        if (sellerUserId > 0)
+        {
+            await LoadSuppliers();
+        }
+    }
+
+    private async Task LoadSellerUserId()
+    {
+        if (AuthState.CurrentUser != null)
+        {
+            try
+            {
+                const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+                using var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString);
+                await conn.OpenAsync();
+
+                var sql = "SELECT user_id FROM dbo.tbl_users WHERE id = @UserId AND archived_at IS NULL";
+                using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@UserId", AuthState.CurrentUser.Id);
+
+                var result = await cmd.ExecuteScalarAsync();
+                if (result != null && result != DBNull.Value)
+                {
+                    sellerUserId = Convert.ToInt32(result);
+                }
+            }
+            catch
+            {
+                sellerUserId = 0;
+            }
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -363,11 +395,15 @@
 
         try
         {
-            var stockClerkUserId = AuthState.CurrentUser?.Id ?? 0;
-            if (stockClerkUserId > 0)
+            if (sellerUserId <= 0)
             {
-                totalCount = await SupplierService.GetSuppliersCountAsync(stockClerkUserId, searchTerm, startDate, endDate);
-                suppliers = await SupplierService.GetSuppliersAsync(stockClerkUserId, searchTerm, startDate, endDate, currentPage, pageSize);
+                await LoadSellerUserId();
+            }
+
+            if (sellerUserId > 0)
+            {
+                totalCount = await SupplierService.GetSuppliersCountAsync(sellerUserId, searchTerm, startDate, endDate);
+                suppliers = await SupplierService.GetSuppliersAsync(sellerUserId, searchTerm, startDate, endDate, currentPage, pageSize);
 
                 if (currentPage > totalPages && totalPages > 0)
                 {
@@ -530,14 +566,18 @@
     {
         try
         {
-            var stockClerkUserId = AuthState.CurrentUser?.Id ?? 0;
-            if (stockClerkUserId == 0)
+            if (sellerUserId <= 0)
+            {
+                await LoadSellerUserId();
+            }
+
+            if (sellerUserId == 0)
             {
                 await JSRuntime.InvokeVoidAsync("alert", "User not authenticated. Please log in again.");
                 return;
             }
 
-            selectedSupplier = await SupplierService.GetSupplierDetailsAsync(supplierId, stockClerkUserId);
+            selectedSupplier = await SupplierService.GetSupplierDetailsAsync(supplierId, sellerUserId);
             if (selectedSupplier == null)
             {
                 await JSRuntime.InvokeVoidAsync("alert", "Supplier not found or you don't have permission to access it.");
@@ -565,14 +605,18 @@
     {
         try
         {
-            var stockClerkUserId = AuthState.CurrentUser?.Id ?? 0;
-            if (stockClerkUserId == 0)
+            if (sellerUserId <= 0)
+            {
+                await LoadSellerUserId();
+            }
+
+            if (sellerUserId == 0)
             {
                 await JSRuntime.InvokeVoidAsync("alert", "User not authenticated. Please log in again.");
                 return;
             }
 
-            var supplier = await SupplierService.GetSupplierDetailsAsync(supplierId, stockClerkUserId);
+            var supplier = await SupplierService.GetSupplierDetailsAsync(supplierId, sellerUserId);
             if (supplier == null)
             {
                 await JSRuntime.InvokeVoidAsync("alert", "Supplier not found or you don't have permission to access it.");
@@ -610,10 +654,14 @@
             isGeneratingPDF = true;
             StateHasChanged();
 
-            var stockClerkUserId = AuthState.CurrentUser?.Id ?? 0;
-            if (stockClerkUserId > 0)
+            if (sellerUserId <= 0)
             {
-                allSuppliersForPrint = await SupplierService.GetSuppliersAsync(stockClerkUserId, searchTerm, startDate, endDate, 1, 10000);
+                await LoadSellerUserId();
+            }
+
+            if (sellerUserId > 0)
+            {
+                allSuppliersForPrint = await SupplierService.GetSuppliersAsync(sellerUserId, searchTerm, startDate, endDate, 1, 10000);
                 
                 await JSRuntime.InvokeVoidAsync("generateAndPrintSupplierReport", 
                     allSuppliersForPrint.Select(s => new {

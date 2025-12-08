@@ -86,11 +86,7 @@
                     </a>
                     <a class="@GetSubNavItemClass("/stockclerk/Purchase_Order_Completed_Report")" href="/stockclerk/Purchase_Order_Completed_Report">
                         <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/stockclerk/Purchase_Order_Completed_Report")"></span>
-                        <span>PO Completed</span>
-                    </a>
-                    <a class="@GetSubNavItemClass("/stockclerk/Purchase_Order_Cancelled_Report")" href="/stockclerk/Purchase_Order_Cancelled_Report">
-                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/stockclerk/Purchase_Order_Cancelled_Report")"></span>
-                        <span>PO Cancelled</span>
+                        <span>Purchase Orders</span>
                     </a>
                 </div>
             }
@@ -330,8 +326,7 @@
             if (path == "/stockclerk/stock_out_report") return "Stock Out Report";
             if (path == "/stockclerk/stock_adjustment_report") return "Stock Adjustment Report";
             if (path == "/stockclerk/supplier_report") return "Supplier Report";
-            if (path == "/stockclerk/purchase_order_completed_report") return "Purchase Order Completed Report";
-            if (path == "/stockclerk/purchase_order_cancelled_report") return "Purchase Order Cancelled Report";
+            if (path == "/stockclerk/purchase_order_completed_report" || path == "/stockclerk/purchase_order_cancelled_report") return "Purchase Order Reports";
             if (path == "/stockclerk/settings") return "Settings";
             if (path == "/stockclerk/activitylog") return "My Activity Logs";
             

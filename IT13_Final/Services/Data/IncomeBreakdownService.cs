@@ -173,26 +173,27 @@ namespace IT13_Final.Services.Data
 
             result.NetIncome = result.TotalGrossSales - result.TotalReturns;
 
-            // Get income by seller
-            var bySellerSellerFilter = sellerUserId > 0 ? "AND u.user_id = @SellerUserId" : "";
-            var bySellerSql = $@"
+            // Get income by cashier (grouped by cashier who made the sale)
+            // Ensure cashiers belong to the same seller as the accounting user
+            var byCashierSellerFilter = sellerUserId > 0 ? "AND u.user_id = @SellerUserId" : "";
+            var byCashierSql = $@"
                 SELECT 
-                    s.user_id as seller_id,
-                    COALESCE(u.name, (LTRIM(RTRIM(ISNULL(u.fname,''))) + ' ' + LTRIM(RTRIM(ISNULL(u.lname,''))))) as seller_name,
+                    s.user_id as cashier_id,
+                    COALESCE(u.name, (LTRIM(RTRIM(ISNULL(u.fname,''))) + ' ' + LTRIM(RTRIM(ISNULL(u.lname,''))))) as cashier_name,
                     COALESCE(SUM(s.amount), 0) as total_income,
                     COUNT(DISTINCT s.id) as transaction_count
                 FROM dbo.tbl_sales s
                 INNER JOIN dbo.tbl_users u ON s.user_id = u.id
                 WHERE s.archives IS NULL 
                 AND s.status = 'Completed'
-                {bySellerSellerFilter}
+                {byCashierSellerFilter}
                 AND u.archived_at IS NULL
                 {dateFilter}
                 {approvedDaysFilter}
                 GROUP BY s.user_id, u.name, u.fname, u.lname
                 ORDER BY total_income DESC";
 
-            using (var cmd = new SqlCommand(bySellerSql, conn))
+            using (var cmd = new SqlCommand(byCashierSql, conn))
             {
                 if (sellerUserId > 0)
                 {

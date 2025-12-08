@@ -220,55 +220,6 @@ else
     </div>
     }
 
-    @* Quick Actions *@
-    @if (showQuickActions)
-    {
-    <div class="quick-actions">
-        <button class="quick-action-btn" @onclick='() => Nav.NavigateTo("/seller/CashierSalesReports")'>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                <polyline points="14 2 14 8 20 8"></polyline>
-                <line x1="16" y1="13" x2="8" y2="13"></line>
-                <line x1="16" y1="17" x2="8" y2="17"></line>
-            </svg>
-            <span>Sales Reports</span>
-        </button>
-        <button class="quick-action-btn" @onclick='() => Nav.NavigateTo("/seller/Product")'>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-            </svg>
-            <span>Products</span>
-        </button>
-        <button class="quick-action-btn" @onclick='() => Nav.NavigateTo("/seller/StockClerkStockInReports")'>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10l-6-4"></path>
-            </svg>
-            <span>Stock In</span>
-        </button>
-        <button class="quick-action-btn" @onclick='() => Nav.NavigateTo("/seller/AccountingDailySalesVerificationReports")'>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                <polyline points="22 4 12 14.01 9 11.01"></polyline>
-            </svg>
-            <span>Verify Sales</span>
-        </button>
-        <button class="quick-action-btn" @onclick='() => Nav.NavigateTo("/seller/AccountingTaxReports")'>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M4 4h16v16H4z"></path>
-                <path d="M8 8h8M8 12h5"></path>
-            </svg>
-            <span>Tax Reports</span>
-        </button>
-        <button class="quick-action-btn" @onclick='() => Nav.NavigateTo("/seller/StockClerkPurchaseOrderReports")'>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
-                <line x1="3" y1="6" x2="21" y2="6"></line>
-                <path d="M16 10a4 4 0 0 1-8 0"></path>
-            </svg>
-            <span>Purchase Orders</span>
-        </button>
-    </div>
-    }
 
     @* Main Charts Row *@
     @if (showSalesChart || showTaxChart)
@@ -371,7 +322,8 @@ else
             <div class="chart-body">
                 @{
                     var totalAllExpenses = totalExpensesAmount + supplierPaymentsTotal;
-                    var netAfterAll = netIncome - supplierPaymentsTotal;
+                    // netIncome already includes expenses and supplier payments, so use it directly
+                    var netAfterAll = netIncome;
                     var finMax = Math.Max((double)totalIncome, Math.Max((double)totalAllExpenses, Math.Max((double)supplierPaymentsTotal, Math.Abs((double)netAfterAll))));
                     if (finMax <= 0) finMax = 1;
                 }
@@ -731,7 +683,7 @@ else
     }
 
     @* No Results Message *@
-    @if (!string.IsNullOrWhiteSpace(searchTerm) && !showKpiSection && !showQuickActions && !showSalesChart && !showTaxChart && !showStatsGrid && !showStockChart && !showTopProducts && !showLowStock && !showCashierPerformance)
+    @if (!string.IsNullOrWhiteSpace(searchTerm) && !showKpiSection && !showSalesChart && !showTaxChart && !showStatsGrid && !showStockChart && !showTopProducts && !showLowStock && !showCashierPerformance)
     {
         <div class="no-results-state">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width: 64px; height: 64px; margin-bottom: 16px; opacity: 0.5;">
@@ -795,7 +747,6 @@ else
 
     // Search visibility flags
     private bool showKpiSection => IsSearchMatch("sales", "income", "net", "expense", "return", "supplier", "payment", "financial");
-    private bool showQuickActions => IsSearchMatch("sales", "report", "product", "stock", "verify", "tax", "purchase", "order");
     private bool showSalesChart => IsSearchMatch("daily", "sales", "trend", "chart", "revenue");
     private bool showTaxChart => IsSearchMatch("tax", "fee", "vat", "admin", "breakdown");
     private bool showStatsGrid => IsSearchMatch("stock", "in", "out", "adjustment", "low", "product", "verification", "pending");
@@ -1014,7 +965,7 @@ else
             var lowStockTask = InventoryService.GetLowStockItemsAsync(sellerUserId, 10);
             var incomeTask = IncomeBreakdownService.GetIncomeBreakdownAsync(sellerUserId, startDate, endDate, true);
             var expenseTask = ExpenseService.GetTotalExpensesAsync(sellerUserId, startDate, endDate);
-            var verificationTask = DailySalesVerificationService.GetAllDailySalesVerificationsForReportAsync(sellerUserId, null, startDate, endDate, null);
+            var verificationTask = DailySalesVerificationService.GetAllDailySalesVerificationsForReportAsync(sellerUserId, null, startDate, endDate, null, 1, 10000);
 
             await Task.WhenAll(statsTask, lowStockTask, incomeTask, expenseTask, verificationTask);
 
@@ -1024,9 +975,16 @@ else
             var income = await incomeTask;
             totalIncome = income.TotalGrossSales;
             totalReturnsAmount = income.TotalReturns;
-            netIncome = income.NetIncome;
+            var grossIncome = income.NetIncome; // Gross Sales - Returns
             
             totalExpensesAmount = await expenseTask;
+            
+            // Load supplier payments first to calculate net income correctly
+            await LoadSupplierPayments();
+            
+            // Net Income = (Gross Sales - Returns) - Total Expenses - Supplier Payments
+            // This matches the Accounting dashboard's Net Profit calculation
+            netIncome = grossIncome - totalExpensesAmount - supplierPaymentsTotal;
 
             var verifications = await verificationTask;
             verificationsApproved = verifications.Count(v => v.Status == "Approved");
@@ -1044,9 +1002,6 @@ else
 
             // Load cashier performance (using cashier IDs)
             await LoadCashierPerformance(cashierIds);
-
-            // Load supplier payments
-            await LoadSupplierPayments();
 
             // Calculate Tax & Fees (based on total sales)
             vatAmount = totalIncome * 0.12m;         // 12% VAT on sales
@@ -1782,7 +1737,7 @@ else
                     totalReturns = totalReturnsAmount.ToString("N2"),
                     totalExpenses = totalExpensesAmount.ToString("N2"),
                     supplierPayments = supplierPaymentsTotal.ToString("N2"),
-                    netIncome = (netIncome - supplierPaymentsTotal).ToString("N2"),
+                    netIncome = netIncome.ToString("N2"),
                     vatAmount = vatAmount.ToString("N2"),
                     adminFee = adminFeeAmount.ToString("N2"),
                     totalTaxAndFees = totalTaxAndFees.ToString("N2")

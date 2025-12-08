@@ -1,15 +1,18 @@
 @page "/stockclerk/Purchase_Order_Completed_Report"
+@page "/stockclerk/Purchase_Order_Cancelled_Report"
 @layout IT13_Final.Components.Layout.StockClerk.StockClerk
 @inject IT13_Final.Services.Auth.AuthState AuthState
 @inject IT13_Final.Services.Data.IPurchaseOrderService PurchaseOrderService
 @inject IJSRuntime JSRuntime
+@inject NavigationManager Nav
 @implements IDisposable
 @using System.Linq
+@using Microsoft.Data.SqlClient
 
 @* Welcome Header *@
 <div class="welcome-header">
     <div class="welcome-content">
-        <h1 class="welcome-greeting">Purchase Order Completed Reports</h1>
+        <h1 class="welcome-greeting">Purchase Order Reports</h1>
         <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
     </div>
     <div class="header-actions">
@@ -96,6 +99,16 @@
     </div>
 </div>
 
+@* Status Filter Tabs *@
+<div class="status-filter-tabs">
+    <button class="status-tab @(selectedStatus == "Completed" ? "active" : "")" @onclick='() => SetStatusFilter("Completed")'>
+        <span>PO Completed</span>
+    </button>
+    <button class="status-tab @(selectedStatus == "Cancelled" ? "active" : "")" @onclick='() => SetStatusFilter("Cancelled")'>
+        <span>PO Cancelled</span>
+    </button>
+</div>
+
 @* Summary Card *@
 <div class="content-card">
     <div class="card-header">
@@ -132,12 +145,12 @@
         <table class="admin-table">
             <thead>
                 <tr>
-                    <th>PO Number</th>
-                    <th>Supplier</th>
-                    <th>Total Amount</th>
-                    <th>Expected Delivery</th>
-                    <th>Date Completed</th>
-                    <th>Actions</th>
+                    <th style="text-align: left;">PO Number</th>
+                    <th style="text-align: left;">Supplier</th>
+                    <th style="text-align: right;">Total Amount</th>
+                    <th style="text-align: left;">Expected Delivery</th>
+                    <th style="text-align: left;">@(selectedStatus == "Completed" ? "Date Completed" : "Date Cancelled")</th>
+                    <th style="text-align: center;">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -150,7 +163,7 @@
                 else if (purchaseOrders.Count == 0)
                 {
                     <tr>
-                        <td colspan="6" class="empty-cell">No completed purchase orders found for this filter.</td>
+                        <td colspan="6" class="empty-cell">No @(selectedStatus.ToLower()) purchase orders found for this filter.</td>
                     </tr>
                 }
                 else
@@ -158,10 +171,10 @@
                     @foreach (var po in purchaseOrders)
                     {
                         <tr class="clickable-row" @onclick="() => HandlePOClick(po.Id)">
-                            <td class="sale-number">@po.PONumber</td>
-                            <td>@po.SupplierName</td>
-                            <td>₱@po.TotalAmount.ToString("N2")</td>
-                            <td>@(po.ExpectedDeliveryDate?.ToString("MMM dd, yyyy") ?? "N/A")</td>
+                            <td class="sale-number" style="text-align: left;">@po.PONumber</td>
+                            <td style="text-align: left;">@po.SupplierName</td>
+                            <td style="text-align: right;">₱@po.TotalAmount.ToString("N2")</td>
+                            <td style="text-align: left;">@(po.ExpectedDeliveryDate?.ToString("MMM dd, yyyy") ?? "N/A")</td>
                             <td>
                                 <div class="timestamp-info">
                                     <div class="timestamp-date">@po.CreatedAt.ToString("MMM dd, yyyy")</div>
@@ -257,7 +270,7 @@
                     <div class="info-row">
                         <span class="info-label">Status:</span>
                         <span class="info-value">
-                            <span class="status-text status-text-approved">@selectedPO.Status</span>
+                            <span class="status-text @(selectedStatus == "Completed" ? "status-text-approved" : "status-text-cancelled")">@selectedPO.Status</span>
                         </span>
                     </div>
                     <div class="info-row">
@@ -285,7 +298,7 @@
                     @if (selectedPO.UpdatedAt.HasValue)
                     {
                         <div class="info-row">
-                            <span class="info-label">Completed At:</span>
+                            <span class="info-label">@(selectedStatus == "Completed" ? "Completed At:" : "Cancelled At:")</span>
                             <span class="info-value">@selectedPO.UpdatedAt.Value.ToString("MMM dd, yyyy HH:mm:ss")</span>
                         </div>
                     }
@@ -296,7 +309,7 @@
                     @if (!string.IsNullOrEmpty(selectedPO.UpdatedByName))
                     {
                         <div class="info-row">
-                            <span class="info-label">Completed By:</span>
+                            <span class="info-label">@(selectedStatus == "Completed" ? "Completed By:" : "Cancelled By:")</span>
                             <span class="info-value">@selectedPO.UpdatedByName</span>
                         </div>
                     }
@@ -388,9 +401,17 @@
     private System.Threading.Timer? _searchTimer;
     private bool showPODetailsModal = false;
     private IT13_Final.Services.Data.PurchaseOrderDetailsModel? selectedPO = null;
+    private string selectedStatus = "Completed";
 
     protected override async Task OnInitializedAsync()
     {
+        // Determine initial status from route
+        var uri = Nav.ToBaseRelativePath(Nav.Uri);
+        if (uri.Contains("Cancelled"))
+        {
+            selectedStatus = "Cancelled";
+        }
+        
         await LoadPurchaseOrders();
     }
 
@@ -409,6 +430,14 @@
         }
     }
 
+    private async Task SetStatusFilter(string status)
+    {
+        selectedStatus = status;
+        currentPage = 1;
+        await LoadPurchaseOrders();
+        StateHasChanged();
+    }
+
     private async Task LoadPurchaseOrders()
     {
         isLoading = true;
@@ -419,8 +448,16 @@
             var stockClerkUserId = AuthState.CurrentUser?.Id ?? 0;
             if (stockClerkUserId > 0)
             {
-                totalCount = await PurchaseOrderService.GetCompletedPurchaseOrdersCountAsync(stockClerkUserId, searchTerm, startDate, endDate);
-                purchaseOrders = await PurchaseOrderService.GetCompletedPurchaseOrdersAsync(stockClerkUserId, searchTerm, startDate, endDate, currentPage, pageSize);
+                if (selectedStatus == "Completed")
+                {
+                    totalCount = await PurchaseOrderService.GetCompletedPurchaseOrdersCountAsync(stockClerkUserId, searchTerm, startDate, endDate);
+                    purchaseOrders = await PurchaseOrderService.GetCompletedPurchaseOrdersAsync(stockClerkUserId, searchTerm, startDate, endDate, currentPage, pageSize);
+                }
+                else
+                {
+                    totalCount = await PurchaseOrderService.GetCancelledPurchaseOrdersCountAsync(stockClerkUserId, searchTerm, startDate, endDate);
+                    purchaseOrders = await PurchaseOrderService.GetCancelledPurchaseOrdersAsync(stockClerkUserId, searchTerm, startDate, endDate, currentPage, pageSize);
+                }
 
                 if (currentPage > totalPages && totalPages > 0)
                 {
@@ -657,7 +694,14 @@
                 }).ToArray()
             };
 
-            await JSRuntime.InvokeVoidAsync("printPOCompletedReceipt", receiptData);
+            if (selectedStatus == "Completed")
+            {
+                await JSRuntime.InvokeVoidAsync("printPOCompletedReceipt", receiptData);
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("printPOCancelledReceipt", receiptData);
+            }
         }
         catch (Exception ex)
         {
@@ -676,9 +720,11 @@
             var stockClerkUserId = AuthState.CurrentUser?.Id ?? 0;
             if (stockClerkUserId > 0)
             {
-                allPOsForPrint = await PurchaseOrderService.GetCompletedPurchaseOrdersAsync(stockClerkUserId, searchTerm, startDate, endDate, 1, 10000);
-                
-                await JSRuntime.InvokeVoidAsync("generateAndPrintPOCompletedReport", 
+                if (selectedStatus == "Completed")
+                {
+                    allPOsForPrint = await PurchaseOrderService.GetCompletedPurchaseOrdersAsync(stockClerkUserId, searchTerm, startDate, endDate, 1, 10000);
+                    
+                    await JSRuntime.InvokeVoidAsync("generateAndPrintPOCompletedReport", 
                     allPOsForPrint.Select(po => new {
                         poNumber = po.PONumber,
                         supplierName = po.SupplierName,
@@ -689,9 +735,29 @@
                         timeCompleted = po.CreatedAt.ToString("HH:mm:ss")
                     }).ToArray(),
                     AuthState.CurrentUser?.FullName ?? "Stock Clerk",
-                    startDate?.ToString("MMM dd, yyyy") ?? "All Time",
-                    endDate?.ToString("MMM dd, yyyy") ?? "Today"
-                );
+                        startDate?.ToString("MMM dd, yyyy") ?? "All Time",
+                        endDate?.ToString("MMM dd, yyyy") ?? "Today"
+                    );
+                }
+                else
+                {
+                    allPOsForPrint = await PurchaseOrderService.GetCancelledPurchaseOrdersAsync(stockClerkUserId, searchTerm, startDate, endDate, 1, 10000);
+                    
+                    await JSRuntime.InvokeVoidAsync("generateAndPrintPOCancelledReport",
+                        allPOsForPrint.Select(po => new {
+                            poNumber = po.PONumber,
+                            supplierName = po.SupplierName,
+                            totalAmount = po.TotalAmount,
+                            expectedDeliveryDate = po.ExpectedDeliveryDate?.ToString("MMM dd, yyyy") ?? "N/A",
+                            stockClerkName = po.CreatedByName ?? "N/A",
+                            dateCancelled = po.CreatedAt.ToString("MMM dd, yyyy"),
+                            timeCancelled = po.CreatedAt.ToString("HH:mm:ss")
+                        }).ToArray(),
+                        AuthState.CurrentUser?.FullName ?? "Stock Clerk",
+                        startDate?.ToString("MMM dd, yyyy") ?? "All Time",
+                        endDate?.ToString("MMM dd, yyyy") ?? "Today"
+                    );
+                }
             }
         }
         catch (Exception ex)

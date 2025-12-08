@@ -83,7 +83,7 @@ namespace IT13_Final.Services.Data
                 INNER JOIN dbo.tbl_users u ON sa.user_id = u.id
                 LEFT JOIN dbo.tbl_sizes sz ON sa.size_id = sz.id
                 LEFT JOIN dbo.tbl_colors c ON sa.color_id = c.id
-                WHERE sa.archives IS NULL AND v.user_id = @UserId";
+                WHERE sa.archives IS NULL AND sa.user_id = @UserId";
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -164,7 +164,7 @@ namespace IT13_Final.Services.Data
                 FROM dbo.tbl_stock_adjustments sa
                 INNER JOIN dbo.tbl_variants v ON sa.variant_id = v.id
                 INNER JOIN dbo.tbl_products p ON v.product_id = p.id
-                WHERE sa.archives IS NULL AND v.user_id = @UserId";
+                WHERE sa.archives IS NULL AND sa.user_id = @UserId";
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -226,7 +226,7 @@ namespace IT13_Final.Services.Data
                 INNER JOIN dbo.tbl_users u ON sa.user_id = u.id
                 LEFT JOIN dbo.tbl_sizes sz ON sa.size_id = sz.id
                 LEFT JOIN dbo.tbl_colors c ON sa.color_id = c.id
-                WHERE sa.id = @AdjustmentId AND sa.archives IS NULL AND (@UserId = 0 OR v.user_id = @UserId)";
+                WHERE sa.id = @AdjustmentId AND sa.archives IS NULL AND (@UserId = 0 OR sa.user_id = @UserId)";
 
             using var cmd = new SqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@AdjustmentId", adjustmentId);
@@ -328,7 +328,7 @@ namespace IT13_Final.Services.Data
                        SUM(CASE WHEN sa.adjustment_type = 'Decrease' THEN 1 ELSE 0 END) as decrease_count
                 FROM dbo.tbl_stock_adjustments sa
                 INNER JOIN dbo.tbl_variants v ON sa.variant_id = v.id
-                WHERE sa.archives IS NULL AND v.user_id = @UserId
+                WHERE sa.archives IS NULL AND sa.user_id = @UserId
                     AND CAST(sa.timestamps AS DATE) >= @StartDate
                 GROUP BY CAST(sa.timestamps AS DATE)
                 ORDER BY date";

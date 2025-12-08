@@ -214,7 +214,7 @@ namespace IT13_Final.Services.Data
                 FROM dbo.tbl_purchase_orders po
                 INNER JOIN dbo.tbl_suppliers s ON po.supplier_id = s.id
                 INNER JOIN dbo.tbl_users u ON po.created_by = u.id
-                WHERE po.archived_at IS NOT NULL AND po.status = 'Cancelled' AND s.user_id = @UserId";
+                WHERE po.archived_at IS NOT NULL AND po.status = 'Cancelled' AND po.created_by = @UserId";
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -279,7 +279,7 @@ namespace IT13_Final.Services.Data
                 SELECT COUNT(*)
                 FROM dbo.tbl_purchase_orders po
                 INNER JOIN dbo.tbl_suppliers s ON po.supplier_id = s.id
-                WHERE po.archived_at IS NOT NULL AND po.status = 'Cancelled' AND s.user_id = @UserId";
+                WHERE po.archived_at IS NOT NULL AND po.status = 'Cancelled' AND po.created_by = @UserId";
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -330,7 +330,7 @@ namespace IT13_Final.Services.Data
                 FROM dbo.tbl_purchase_orders po
                 INNER JOIN dbo.tbl_suppliers s ON po.supplier_id = s.id
                 INNER JOIN dbo.tbl_users u ON po.created_by = u.id
-                WHERE po.archived_at IS NULL AND po.status = 'Completed' AND s.user_id = @UserId";
+                WHERE po.archived_at IS NULL AND po.status = 'Completed' AND po.created_by = @UserId";
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -395,7 +395,7 @@ namespace IT13_Final.Services.Data
                 SELECT COUNT(*)
                 FROM dbo.tbl_purchase_orders po
                 INNER JOIN dbo.tbl_suppliers s ON po.supplier_id = s.id
-                WHERE po.archived_at IS NULL AND po.status = 'Completed' AND s.user_id = @UserId";
+                WHERE po.archived_at IS NULL AND po.status = 'Completed' AND po.created_by = @UserId";
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -447,7 +447,7 @@ namespace IT13_Final.Services.Data
                 INNER JOIN dbo.tbl_suppliers s ON po.supplier_id = s.id
                 INNER JOIN dbo.tbl_users u1 ON po.created_by = u1.id
                 LEFT JOIN dbo.tbl_users u2 ON po.updated_by = u2.id
-                WHERE po.id = @POId AND (@UserId = 0 OR s.user_id = @UserId)";
+                WHERE po.id = @POId AND (@UserId = 0 OR po.created_by = @UserId)";
 
             using var cmd = new SqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@POId", poId);

@@ -23,10 +23,10 @@
         <table class="suppliers-table">
             <thead>
                 <tr>
-                    <th>ID</th>
-                    <th>Company Name</th>
-                    <th>Email</th>
-                    <th>Date Created</th>
+                    <th style="text-align: right;">ID</th>
+                    <th style="text-align: left;">Company Name</th>
+                    <th style="text-align: left;">Email</th>
+                    <th style="text-align: left;">Date Created</th>
                 </tr>
             </thead>
             <tbody>
@@ -47,10 +47,10 @@
                     @foreach (var supplier in suppliers)
                     {
                         <tr class="clickable-row" @onclick="() => HandleRowClick(supplier.Id)">
-                            <td>@supplier.Id</td>
-                            <td class="supplier-name">@supplier.CompanyName</td>
-                            <td>@(string.IsNullOrEmpty(supplier.Email) ? "N/A" : supplier.Email)</td>
-                            <td>@supplier.DateCreated.ToString("MMM dd, yyyy")</td>
+                            <td style="text-align: right;">@supplier.Id</td>
+                            <td class="supplier-name" style="text-align: left;">@supplier.CompanyName</td>
+                            <td style="text-align: left;">@(string.IsNullOrEmpty(supplier.Email) ? "N/A" : supplier.Email)</td>
+                            <td style="text-align: left;">@supplier.DateCreated.ToString("MMM dd, yyyy")</td>
                         </tr>
                     }
                 }

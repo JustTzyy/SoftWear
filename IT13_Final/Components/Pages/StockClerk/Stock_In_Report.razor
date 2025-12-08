@@ -141,14 +141,14 @@
             <table class="admin-table">
                 <thead>
                     <tr>
-                        <th>Product</th>
-                        <th>Variant</th>
-                        <th>Quantity</th>
-                        <th>Cost Price</th>
-                        <th>Total Cost</th>
-                        <th>Supplier</th>
-                        <th>Date</th>
-                        <th>Actions</th>
+                        <th style="text-align: left;">Product</th>
+                        <th style="text-align: left;">Variant</th>
+                        <th style="text-align: right;">Quantity</th>
+                        <th style="text-align: right;">Cost Price</th>
+                        <th style="text-align: right;">Total Cost</th>
+                        <th style="text-align: left;">Supplier</th>
+                        <th style="text-align: left;">Date</th>
+                        <th style="text-align: center;">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -169,12 +169,12 @@
                         @foreach (var stockIn in stockIns)
                         {
                             <tr class="clickable-row" @onclick="() => HandleStockInClick(stockIn.Id)">
-                                <td class="sale-number">@stockIn.ProductName</td>
-                                <td>@stockIn.VariantName</td>
-                                <td>@stockIn.QuantityAdded</td>
-                                <td>₱@stockIn.CostPrice.ToString("N2")</td>
-                                <td>₱@((stockIn.QuantityAdded * stockIn.CostPrice).ToString("N2"))</td>
-                                <td>@(stockIn.SupplierName ?? "N/A")</td>
+                                <td class="sale-number" style="text-align: left;">@stockIn.ProductName</td>
+                                <td style="text-align: left;">@stockIn.VariantName</td>
+                                <td style="text-align: right;">@stockIn.QuantityAdded</td>
+                                <td style="text-align: right;">₱@stockIn.CostPrice.ToString("N2")</td>
+                                <td style="text-align: right;">₱@((stockIn.QuantityAdded * stockIn.CostPrice).ToString("N2"))</td>
+                                <td style="text-align: left;">@(stockIn.SupplierName ?? "N/A")</td>
                                 <td>
                                     <div class="timestamp-info">
                                         <div class="timestamp-date">@stockIn.Timestamps.ToString("MMM dd, yyyy")</div>

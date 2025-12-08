@@ -202,6 +202,111 @@ namespace IT13_Final.Services.Data
             return tables;
         }
 
+        private void AddParameterToCommand(SqlCommand cmd, string column, object value, Dictionary<string, string> columnTypes, DataTable dataTable, string? primaryKeyColumn, List<string> allColumns)
+        {
+            // Check if this is a binary column based on database schema
+            bool isBinaryColumn = false;
+            if (columnTypes.TryGetValue(column, out var dbDataType))
+            {
+                isBinaryColumn = dbDataType.Equals("varbinary", StringComparison.OrdinalIgnoreCase) ||
+                                 dbDataType.Equals("binary", StringComparison.OrdinalIgnoreCase) ||
+                                 dbDataType.Equals("image", StringComparison.OrdinalIgnoreCase);
+            }
+            
+            // Fallback 1: check by column name (common binary column names)
+            if (!isBinaryColumn && (
+                column.Equals("image", StringComparison.OrdinalIgnoreCase) ||
+                column.Equals("photo", StringComparison.OrdinalIgnoreCase) ||
+                column.Equals("picture", StringComparison.OrdinalIgnoreCase) ||
+                column.Equals("data", StringComparison.OrdinalIgnoreCase) ||
+                column.Equals("content", StringComparison.OrdinalIgnoreCase) ||
+                column.EndsWith("_image", StringComparison.OrdinalIgnoreCase) ||
+                column.EndsWith("_data", StringComparison.OrdinalIgnoreCase)))
+            {
+                isBinaryColumn = true;
+            }
+            
+            // Fallback 2: check DataTable column DataType
+            if (!isBinaryColumn && dataTable.Columns.Contains(column))
+            {
+                var colType = dataTable.Columns[column].DataType;
+                isBinaryColumn = colType == typeof(byte[]) || 
+                                 colType == typeof(System.Data.SqlTypes.SqlBinary);
+            }
+            
+            if (value == DBNull.Value)
+            {
+                if (isBinaryColumn)
+                {
+                    var binaryParam = new SqlParameter($"@{column}", SqlDbType.VarBinary, -1);
+                    binaryParam.Value = DBNull.Value;
+                    cmd.Parameters.Add(binaryParam);
+                }
+                else
+                {
+                    cmd.Parameters.AddWithValue($"@{column}", DBNull.Value);
+                }
+            }
+            else
+            {
+                if (isBinaryColumn)
+                {
+                    byte[]? byteValue = null;
+                    
+                    if (value is byte[] bytes)
+                    {
+                        byteValue = bytes;
+                    }
+                    else if (value is string strValue && !string.IsNullOrEmpty(strValue))
+                    {
+                        try
+                        {
+                            var hexString = strValue.Replace(" ", "").Replace("-", "");
+                            if (hexString.Length % 2 == 0)
+                            {
+                                byteValue = new byte[hexString.Length / 2];
+                                for (int i = 0; i < byteValue.Length; i++)
+                                {
+                                    byteValue[i] = Convert.ToByte(hexString.Substring(i * 2, 2), 16);
+                                }
+                            }
+                            else
+                            {
+                                byteValue = Convert.FromBase64String(strValue);
+                            }
+                        }
+                        catch
+                        {
+                            byteValue = System.Text.Encoding.UTF8.GetBytes(strValue);
+                        }
+                    }
+                    else if (value != null)
+                    {
+                        try
+                        {
+                            if (value is System.Data.SqlTypes.SqlBinary sqlBinary)
+                            {
+                                byteValue = sqlBinary.Value;
+                            }
+                            else if (value.GetType() == typeof(byte[]))
+                            {
+                                byteValue = (byte[])value;
+                            }
+                        }
+                        catch { }
+                    }
+                    
+                    var binaryParam = new SqlParameter($"@{column}", SqlDbType.VarBinary, -1);
+                    binaryParam.Value = (object?)byteValue ?? DBNull.Value;
+                    cmd.Parameters.Add(binaryParam);
+                }
+                else
+                {
+                    cmd.Parameters.AddWithValue($"@{column}", value);
+                }
+            }
+        }
+
         public async Task<SyncResult> SyncTableAsync(string tableName, CancellationToken ct = default)
         {
             var result = new SyncResult { Success = false };
@@ -263,54 +368,9 @@ namespace IT13_Final.Services.Data
                     // If we can't get column types, continue without this info
                 }
 
-                // Read all data from local table
-                // For tables with archived_at or archives column, only sync non-archived records
-                string selectSql;
-                try
-                {
-                    // Check if table has archived_at or archives column
-                    var checkArchivedSql = @"
-                        SELECT COUNT(*) 
-                        FROM INFORMATION_SCHEMA.COLUMNS 
-                        WHERE TABLE_NAME = @tableName 
-                        AND TABLE_SCHEMA = 'dbo'
-                        AND (COLUMN_NAME = 'archived_at' OR COLUMN_NAME = 'archives')";
-                    await using var checkArchivedCmd = new SqlCommand(checkArchivedSql, localConn);
-                    checkArchivedCmd.Parameters.AddWithValue("@tableName", tableName);
-                    var hasArchivedColumn = Convert.ToInt32(await checkArchivedCmd.ExecuteScalarAsync(ct)) > 0;
-                    
-                    if (hasArchivedColumn)
-                    {
-                        // Check which archived column exists
-                        var checkArchivedAtSql = @"
-                            SELECT COUNT(*) 
-                            FROM INFORMATION_SCHEMA.COLUMNS 
-                            WHERE TABLE_NAME = @tableName 
-                            AND TABLE_SCHEMA = 'dbo'
-                            AND COLUMN_NAME = 'archived_at'";
-                        await using var checkArchivedAtCmd = new SqlCommand(checkArchivedAtSql, localConn);
-                        checkArchivedAtCmd.Parameters.AddWithValue("@tableName", tableName);
-                        var hasArchivedAt = Convert.ToInt32(await checkArchivedAtCmd.ExecuteScalarAsync(ct)) > 0;
-                        
-                        if (hasArchivedAt)
-                        {
-                            selectSql = $"SELECT * FROM dbo.{tableName} WHERE archived_at IS NULL";
-                        }
-                        else
-                        {
-                            selectSql = $"SELECT * FROM dbo.{tableName} WHERE archives IS NULL";
-                        }
-                    }
-                    else
-                    {
-                        selectSql = $"SELECT * FROM dbo.{tableName}";
-                    }
-                }
-                catch
-                {
-                    // If we can't check, use all rows
-                    selectSql = $"SELECT * FROM dbo.{tableName}";
-                }
+                // Read all data from local table (including archived records)
+                // Sync ALL data to ensure complete synchronization
+                string selectSql = $"SELECT * FROM dbo.{tableName}";
                 
                 var adapter = new SqlDataAdapter(selectSql, localConn);
                 var dataSet = new DataSet();
@@ -359,8 +419,7 @@ namespace IT13_Final.Services.Data
                     }
                 }
 
-                // Get existing primary key values from Azure to avoid duplicates
-                var existingKeys = new HashSet<string>();
+                // Get primary key column for MERGE statement
                 string? primaryKeyColumn = null;
                 
                 try
@@ -387,23 +446,6 @@ namespace IT13_Final.Services.Data
                     if (pkColumns.Any())
                     {
                         primaryKeyColumn = pkColumns[0];
-                        
-                        // Get existing primary key values
-                        var existingSql = $"SELECT [{primaryKeyColumn}] FROM dbo.{tableName}";
-                        await using var existingCmd = new SqlCommand(existingSql, azureConn);
-                        await using var existingReader = await existingCmd.ExecuteReaderAsync(ct);
-                        while (await existingReader.ReadAsync(ct))
-                        {
-                            if (!existingReader.IsDBNull(0))
-                            {
-                                var keyValue = existingReader.GetValue(0).ToString();
-                                if (keyValue != null)
-                                {
-                                    existingKeys.Add(keyValue);
-                                }
-                            }
-                        }
-                        await existingReader.CloseAsync();
                     }
                     else
                     {
@@ -411,31 +453,20 @@ namespace IT13_Final.Services.Data
                         if (allColumns.Contains("id", StringComparer.OrdinalIgnoreCase))
                         {
                             primaryKeyColumn = allColumns.First(c => c.Equals("id", StringComparison.OrdinalIgnoreCase));
-                            var existingSql = $"SELECT [id] FROM dbo.{tableName}";
-                            await using var existingCmd = new SqlCommand(existingSql, azureConn);
-                            await using var existingReader = await existingCmd.ExecuteReaderAsync(ct);
-                            while (await existingReader.ReadAsync(ct))
-                            {
-                                if (!existingReader.IsDBNull(0))
-                                {
-                                    var keyValue = existingReader.GetValue(0).ToString();
-                                    if (keyValue != null)
-                                    {
-                                        existingKeys.Add(keyValue);
-                                    }
-                                }
-                            }
-                            await existingReader.CloseAsync();
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    // If we can't get primary keys, continue without duplicate checking
-                    result.Errors.Add($"Warning: Could not check existing keys for {tableName}: {ex.Message}");
+                    // If we can't get primary keys, try to use 'id' as fallback
+                    if (allColumns.Contains("id", StringComparer.OrdinalIgnoreCase))
+                    {
+                        primaryKeyColumn = allColumns.First(c => c.Equals("id", StringComparison.OrdinalIgnoreCase));
+                    }
+                    result.Errors.Add($"Warning: Could not determine primary key for {tableName}: {ex.Message}");
                 }
 
-                // Use all columns for insert (including IDENTITY columns)
+                // Use all columns for MERGE (including IDENTITY columns)
                 var insertColumns = allColumns.ToList();
                 var columnList = string.Join(", ", insertColumns.Select(c => $"[{c}]"));
                 var parameterList = string.Join(", ", insertColumns.Select(c => $"@{c}"));
@@ -444,12 +475,13 @@ namespace IT13_Final.Services.Data
                 bool needsIdentityInsert = identityColumns.Any();
 
                 int insertedRows = 0;
+                int updatedRows = 0;
                 int skippedRows = 0;
                 
                 // Track which specific rows are being skipped for better reporting
                 var skippedRowDetails = new List<string>();
 
-                // Enable IDENTITY_INSERT if needed (once for all inserts)
+                // Enable IDENTITY_INSERT if needed (once for all operations)
                 if (needsIdentityInsert)
                 {
                     var enableSql = $"SET IDENTITY_INSERT dbo.{tableName} ON;";
@@ -459,205 +491,64 @@ namespace IT13_Final.Services.Data
 
                 try
                 {
-                    var insertSql = $"INSERT INTO dbo.{tableName} ({columnList}) VALUES ({parameterList})";
+                    // Build UPDATE and INSERT statements for UPSERT (UPDATE if exists, INSERT if not)
+                    string? updateSql = null;
+                    string insertSql = $"INSERT INTO dbo.{tableName} ({columnList}) VALUES ({parameterList})";
+                    
+                    if (!string.IsNullOrEmpty(primaryKeyColumn) && allColumns.Contains(primaryKeyColumn))
+                    {
+                        // Build UPDATE SET clause (all columns except primary key)
+                        var updateColumns = insertColumns.Where(c => !c.Equals(primaryKeyColumn, StringComparison.OrdinalIgnoreCase)).ToList();
+                        var updateSetClause = string.Join(", ", updateColumns.Select(c => $"[{c}] = @{c}"));
+                        updateSql = $"UPDATE dbo.{tableName} SET {updateSetClause} WHERE [{primaryKeyColumn}] = @{primaryKeyColumn}";
+                    }
 
                     foreach (DataRow row in dataTable.Rows)
                     {
                         try
                         {
-                            // Check if this row already exists (by primary key)
-                            bool shouldSkip = false;
-                            string rowInfo = "";
-                            if (existingKeys.Count > 0 && !string.IsNullOrEmpty(primaryKeyColumn))
+                            // Try UPDATE first if we have a primary key and UPDATE statement
+                            bool wasUpdated = false;
+                            if (!string.IsNullOrEmpty(updateSql) && !string.IsNullOrEmpty(primaryKeyColumn) && allColumns.Contains(primaryKeyColumn))
                             {
-                                if (allColumns.Contains(primaryKeyColumn))
+                                await using var updateCmd = new SqlCommand(updateSql, azureConn);
+                                
+                                // Add parameters for UPDATE
+                                foreach (var column in insertColumns)
                                 {
-                                    var pkValue = row[primaryKeyColumn];
-                                    if (pkValue != DBNull.Value)
-                                    {
-                                        var rowKey = pkValue.ToString();
-                                        if (rowKey != null && existingKeys.Contains(rowKey))
-                                        {
-                                            skippedRows++;
-                                            shouldSkip = true;
-                                            // Track which specific row was skipped
-                                            rowInfo = $"{primaryKeyColumn}={rowKey}";
-                                            // Try to get a name or identifier column for better reporting
-                                            if (allColumns.Contains("name") && row["name"] != DBNull.Value)
-                                            {
-                                                rowInfo += $" (name='{row["name"]}')";
-                                            }
-                                        }
-                                    }
+                                    var value = row[column];
+                                    AddParameterToCommand(updateCmd, column, value, columnTypes, dataTable, primaryKeyColumn, allColumns);
+                                }
+                                
+                                var rowsAffected = await updateCmd.ExecuteNonQueryAsync(ct);
+                                if (rowsAffected > 0)
+                                {
+                                    updatedRows++;
+                                    wasUpdated = true;
+                                    continue; // Skip INSERT since UPDATE succeeded
                                 }
                             }
-
-                            if (shouldSkip)
-                            {
-                                if (!string.IsNullOrEmpty(rowInfo))
-                                {
-                                    skippedRowDetails.Add(rowInfo);
-                                }
-                                continue;
-                            }
-
-                            await using var insertCmd = new SqlCommand(insertSql, azureConn);
                             
-                            foreach (var column in insertColumns)
+                            // If UPDATE didn't affect any rows (or no UPDATE statement), do INSERT
+                            if (!wasUpdated)
                             {
-                                var value = row[column];
+                                await using var insertCmd = new SqlCommand(insertSql, azureConn);
                                 
-                                // Check if this is a binary column based on database schema
-                                // Also check by column name (common binary column names)
-                                bool isBinaryColumn = false;
-                                if (columnTypes.TryGetValue(column, out var dbDataType))
+                                // Add parameters for INSERT
+                                foreach (var column in insertColumns)
                                 {
-                                    isBinaryColumn = dbDataType.Equals("varbinary", StringComparison.OrdinalIgnoreCase) ||
-                                                     dbDataType.Equals("binary", StringComparison.OrdinalIgnoreCase) ||
-                                                     dbDataType.Equals("image", StringComparison.OrdinalIgnoreCase);
+                                    var value = row[column];
+                                    AddParameterToCommand(insertCmd, column, value, columnTypes, dataTable, primaryKeyColumn, allColumns);
                                 }
                                 
-                                // Fallback 1: check by column name (common binary column names)
-                                if (!isBinaryColumn && (
-                                    column.Equals("image", StringComparison.OrdinalIgnoreCase) ||
-                                    column.Equals("photo", StringComparison.OrdinalIgnoreCase) ||
-                                    column.Equals("picture", StringComparison.OrdinalIgnoreCase) ||
-                                    column.Equals("data", StringComparison.OrdinalIgnoreCase) ||
-                                    column.Equals("content", StringComparison.OrdinalIgnoreCase) ||
-                                    column.EndsWith("_image", StringComparison.OrdinalIgnoreCase) ||
-                                    column.EndsWith("_data", StringComparison.OrdinalIgnoreCase)))
-                                {
-                                    isBinaryColumn = true;
-                                }
-                                
-                                // Fallback 2: check DataTable column DataType
-                                if (!isBinaryColumn && dataTable.Columns.Contains(column))
-                                {
-                                    var colType = dataTable.Columns[column].DataType;
-                                    isBinaryColumn = colType == typeof(byte[]) || 
-                                                     colType == typeof(System.Data.SqlTypes.SqlBinary);
-                                }
-                                
-                                if (value == DBNull.Value)
-                                {
-                                    if (isBinaryColumn)
-                                    {
-                                        // Even for NULL, use proper binary parameter type
-                                        var binaryParam = new SqlParameter($"@{column}", SqlDbType.VarBinary, -1);
-                                        binaryParam.Value = DBNull.Value;
-                                        insertCmd.Parameters.Add(binaryParam);
-                                    }
-                                    else
-                                    {
-                                        insertCmd.Parameters.AddWithValue($"@{column}", DBNull.Value);
-                                    }
-                                }
-                                else
-                                {
-                                    if (isBinaryColumn)
-                                    {
-                                        // Handle binary data properly
-                                        byte[]? byteValue = null;
-                                        
-                                        if (value is byte[] bytes)
-                                        {
-                                            byteValue = bytes;
-                                        }
-                                        else if (value is string strValue && !string.IsNullOrEmpty(strValue))
-                                        {
-                                            // SqlDataAdapter might read VARBINARY as string (hex representation)
-                                            // Try to convert from hex string
-                                            try
-                                            {
-                                                // Remove spaces and convert hex string to bytes
-                                                var hexString = strValue.Replace(" ", "").Replace("-", "");
-                                                if (hexString.Length % 2 == 0)
-                                                {
-                                                    byteValue = new byte[hexString.Length / 2];
-                                                    for (int i = 0; i < byteValue.Length; i++)
-                                                    {
-                                                        byteValue[i] = Convert.ToByte(hexString.Substring(i * 2, 2), 16);
-                                                    }
-                                                }
-                                                else
-                                                {
-                                                    // If not hex, try base64
-                                                    byteValue = Convert.FromBase64String(strValue);
-                                                }
-                                            }
-                                            catch
-                                            {
-                                                // If conversion fails, use UTF8 encoding as last resort
-                                                byteValue = System.Text.Encoding.UTF8.GetBytes(strValue);
-                                            }
-                                        }
-                                        else if (value != null)
-                                        {
-                                            // Try direct cast or conversion
-                                            try
-                                            {
-                                                if (value is System.Data.SqlTypes.SqlBinary sqlBinary)
-                                                {
-                                                    byteValue = sqlBinary.Value;
-                                                }
-                                                else
-                                                {
-                                                    // Try to convert using Convert.ChangeType or direct cast
-                                                    var valueType = value.GetType();
-                                                    if (valueType == typeof(byte[]))
-                                                    {
-                                                        byteValue = (byte[])value;
-                                                    }
-                                                    else
-                                                    {
-                                                        // If we can't convert, log error and skip
-                                                        result.Errors.Add($"Cannot convert {column} value from {valueType.Name} to byte[] for product ID {row[primaryKeyColumn ?? "id"]}");
-                                                        byteValue = null; // Will be set to DBNull
-                                                    }
-                                                }
-                                            }
-                                            catch (Exception ex)
-                                            {
-                                                // If all else fails, log and use null
-                                                result.Errors.Add($"Error converting {column} to byte[]: {ex.Message}");
-                                                byteValue = null;
-                                            }
-                                        }
-                                        
-                                        // Create proper VARBINARY parameter
-                                        var binaryParam = new SqlParameter($"@{column}", SqlDbType.VarBinary, -1);
-                                        binaryParam.Value = (object?)byteValue ?? DBNull.Value;
-                                        insertCmd.Parameters.Add(binaryParam);
-                                    }
-                                    else
-                                    {
-                                        // For non-binary columns, use AddWithValue
-                                        insertCmd.Parameters.AddWithValue($"@{column}", value);
-                                    }
-                                }
+                                await insertCmd.ExecuteNonQueryAsync(ct);
+                                insertedRows++;
                             }
-
-                            await insertCmd.ExecuteNonQueryAsync(ct);
-                            insertedRows++;
                         }
                         catch (SqlException ex)
                         {
-                            // Skip duplicate key errors or other constraint violations
-                            if (ex.Number == 2627 || ex.Number == 2601) // Primary key or unique constraint violation
-                            {
-                                skippedRows++;
-                                // Add detail about which row was skipped
-                                if (primaryKeyColumn != null && allColumns.Contains(primaryKeyColumn))
-                                {
-                                    var pkValue = row[primaryKeyColumn];
-                                    result.Errors.Add($"Skipped duplicate {tableName} with {primaryKeyColumn}={pkValue} (already exists in Azure)");
-                                }
-                                else
-                                {
-                                    result.Errors.Add($"Skipped duplicate row in {tableName} (already exists in Azure)");
-                                }
-                            }
-                            else if (ex.Number == 544) // Cannot insert explicit value for identity column
+                            // Handle constraint violations
+                            if (ex.Number == 544) // Cannot insert explicit value for identity column
                             {
                                 skippedRows++;
                                 result.Errors.Add($"Skipped row with identity conflict in {tableName}: {ex.Message}");
@@ -665,16 +556,26 @@ namespace IT13_Final.Services.Data
                             else if (ex.Number == 547) // Foreign key constraint violation
                             {
                                 skippedRows++;
-                                result.Errors.Add($"Skipped row in {tableName} due to foreign key constraint: {ex.Message}");
+                                if (primaryKeyColumn != null && allColumns.Contains(primaryKeyColumn))
+                                {
+                                    var pkValue = row[primaryKeyColumn];
+                                    result.Errors.Add($"Skipped row in {tableName} with {primaryKeyColumn}={pkValue} due to foreign key constraint: {ex.Message}");
+                                }
+                                else
+                                {
+                                    result.Errors.Add($"Skipped row in {tableName} due to foreign key constraint: {ex.Message}");
+                                }
                             }
                             else
                             {
-                                result.Errors.Add($"Error inserting row in {tableName}: {ex.Message} (Error #{ex.Number})");
+                                skippedRows++;
+                                result.Errors.Add($"Error syncing row in {tableName}: {ex.Message} (Error #{ex.Number})");
                             }
                         }
                         catch (Exception ex)
                         {
-                            result.Errors.Add($"Error inserting row in {tableName}: {ex.Message}");
+                            skippedRows++;
+                            result.Errors.Add($"Error syncing row in {tableName}: {ex.Message}");
                         }
                     }
                 }
@@ -690,45 +591,44 @@ namespace IT13_Final.Services.Data
                 }
 
                 result.Success = true;
-                result.RowsSynced = insertedRows;
+                result.RowsSynced = insertedRows + updatedRows;
                 result.RowsSkipped = skippedRows;
                 
-                // Build detailed message about skipped rows
+                // Build detailed message
+                var messageParts = new List<string>();
+                
+                if (insertedRows > 0 && updatedRows > 0)
+                {
+                    messageParts.Add($"{insertedRows} inserted, {updatedRows} updated");
+                }
+                else if (insertedRows > 0)
+                {
+                    messageParts.Add($"{insertedRows} inserted");
+                }
+                else if (updatedRows > 0)
+                {
+                    messageParts.Add($"{updatedRows} updated");
+                }
+                
                 if (skippedRows > 0)
                 {
-                    var skipDetails = new List<string>();
+                    messageParts.Add($"{skippedRows} skipped");
                     
-                    // Add skipped row details (from duplicate check)
-                    if (skippedRowDetails.Any())
-                    {
-                        var uniqueSkips = skippedRowDetails.Distinct().Take(5).ToList();
-                        skipDetails.Add($"Skipped existing: {string.Join(", ", uniqueSkips)}");
-                        if (skippedRowDetails.Count > 5)
-                        {
-                            skipDetails.Add($"... and {skippedRowDetails.Count - 5} more");
-                        }
-                    }
-                    
-                    // Add error details (from insert failures)
+                    // Add error details if any
                     if (result.Errors.Any())
                     {
                         var errorDetails = result.Errors.Take(3).ToList();
-                        skipDetails.Add($"Errors: {string.Join("; ", errorDetails)}");
+                        messageParts.Add($"Errors: {string.Join("; ", errorDetails)}");
                     }
-                    
-                    if (skipDetails.Any())
-                    {
-                        result.Message = $"Synced {insertedRows} rows from {tableName}. {skippedRows} rows skipped. " +
-                                       string.Join(". ", skipDetails);
-                    }
-                    else
-                    {
-                        result.Message = $"Synced {insertedRows} rows from {tableName}. {skippedRows} rows skipped (duplicates).";
-                    }
+                }
+                
+                if (messageParts.Any())
+                {
+                    result.Message = $"Synced {tableName}: {string.Join(", ", messageParts)}.";
                 }
                 else
                 {
-                    result.Message = $"Synced {insertedRows} rows from {tableName}.";
+                    result.Message = $"No changes needed for {tableName}.";
                 }
             }
             catch (Exception ex)
@@ -908,14 +808,8 @@ namespace IT13_Final.Services.Data
                         checkArchivedAtCmd.Parameters.AddWithValue("@tableName", tableName);
                         var hasArchivedAt = Convert.ToInt32(await checkArchivedAtCmd.ExecuteScalarAsync(ct)) > 0;
                         
-                        if (hasArchivedAt)
-                        {
-                            selectSql = $"SELECT * FROM dbo.{tableName} WHERE archived_at IS NULL";
-                        }
-                        else
-                        {
-                            selectSql = $"SELECT * FROM dbo.{tableName} WHERE archives IS NULL";
-                        }
+                        // Sync ALL records including archived ones
+                        selectSql = $"SELECT * FROM dbo.{tableName}";
                     }
                     else
                     {

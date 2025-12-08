@@ -170,7 +170,8 @@ namespace IT13_Final.Services.Data
                 poCmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
             }
 
-            using var poReader = await poCmd.ExecuteReaderAsync(ct);
+            using (var poReader = await poCmd.ExecuteReaderAsync(ct))
+            {
             while (await poReader.ReadAsync(ct))
             {
                 var totalAmount = poReader.GetDecimal(5);
@@ -214,7 +215,7 @@ namespace IT13_Final.Services.Data
                     PaymentStatus = status
                 });
             }
-            poReader.Close();
+            }
 
             // Get stock-in records grouped by supplier and date
             var stockInSql = @"
@@ -297,7 +298,8 @@ namespace IT13_Final.Services.Data
                 stockInCmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
             }
 
-            using var stockInReader = await stockInCmd.ExecuteReaderAsync(ct);
+            using (var stockInReader = await stockInCmd.ExecuteReaderAsync(ct))
+            {
             while (await stockInReader.ReadAsync(ct))
             {
                 var totalAmount = stockInReader.GetDecimal(3);
@@ -343,6 +345,7 @@ namespace IT13_Final.Services.Data
                     PaymentStatus = status
                 });
             }
+            }
 
             // Sort combined results and apply pagination
             var sortedItems = payableItems
@@ -364,14 +367,10 @@ namespace IT13_Final.Services.Data
         public async Task<int> GetPayableItemsCountAsync(int sellerUserId, string? searchTerm = null, int? supplierId = null, string? paymentStatus = null, DateTime? startDate = null, DateTime? endDate = null, CancellationToken ct = default)
         {
             // Get all items and count them (simpler approach)
-            var allItems = await GetPayableItemsAsync(sellerUserId, searchTerm, supplierId, null, startDate, endDate, 1, int.MaxValue, ct);
+            // Pass paymentStatus to GetPayableItemsAsync so SQL filtering works correctly
+            var allItems = await GetPayableItemsAsync(sellerUserId, searchTerm, supplierId, paymentStatus, startDate, endDate, 1, int.MaxValue, ct);
             
-            // Apply payment status filter if needed
-            if (!string.IsNullOrWhiteSpace(paymentStatus))
-            {
-                allItems = allItems.Where(x => x.PaymentStatus == paymentStatus).ToList();
-            }
-            
+            // The payment status filter is already applied in GetPayableItemsAsync, so just return count
             return allItems.Count;
         }
 
@@ -723,6 +722,8 @@ namespace IT13_Final.Services.Data
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
 
+            int? invoiceId = model.InvoiceId;
+
             // Verify PO belongs to seller if paying a PO
             if (model.POId.HasValue)
             {
@@ -744,16 +745,99 @@ namespace IT13_Final.Services.Data
                 }
             }
 
+            // Auto-create supplier invoice for stock-in groups if it doesn't exist
+            if (!string.IsNullOrWhiteSpace(model.StockInGroupKey) && !invoiceId.HasValue)
+            {
+                // Parse stock-in group key: format is "STOCK-{yyyyMMdd}-{supplier_id}"
+                // Example: "STOCK-20251208-21"
+                var parts = model.StockInGroupKey.Split('-');
+                if (parts.Length >= 3 && parts[0] == "STOCK")
+                {
+                    if (DateTime.TryParseExact(parts[1], "yyyyMMdd", null, System.Globalization.DateTimeStyles.None, out var stockInDate) &&
+                        int.TryParse(parts[2], out var supplierId))
+                    {
+                        // Check if invoice already exists for this stock-in group
+                        var checkInvoiceSql = @"
+                            SELECT id 
+                            FROM dbo.tbl_supplier_invoices 
+                            WHERE invoice_number = @InvoiceNumber 
+                            AND seller_user_id = @SellerUserId 
+                            AND archived_at IS NULL";
+                        using var checkCmd = new SqlCommand(checkInvoiceSql, conn);
+                        checkCmd.Parameters.AddWithValue("@InvoiceNumber", model.StockInGroupKey);
+                        checkCmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+                        var existingInvoiceId = await checkCmd.ExecuteScalarAsync(ct);
+                        
+                        if (existingInvoiceId != null && existingInvoiceId != DBNull.Value)
+                        {
+                            invoiceId = Convert.ToInt32(existingInvoiceId);
+                        }
+                        else
+                        {
+                            // Get stock-in details to create invoice
+                            var stockInDetailsSql = @"
+                                SELECT 
+                                    SUM(si.quantity_added * si.cost_price) as total_amount,
+                                    COUNT(*) as stock_in_count
+                                FROM dbo.tbl_stock_in si
+                                INNER JOIN dbo.tbl_suppliers s ON si.supplier_id = s.id
+                                WHERE si.archives IS NULL
+                                AND si.supplier_id = @SupplierId
+                                AND CAST(si.timestamps AS DATE) = @StockInDate
+                                AND s.user_id = @SellerUserId";
+                            
+                            using var detailsCmd = new SqlCommand(stockInDetailsSql, conn);
+                            detailsCmd.Parameters.AddWithValue("@SupplierId", supplierId);
+                            detailsCmd.Parameters.AddWithValue("@StockInDate", stockInDate.Date);
+                            detailsCmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+                            
+                            using var detailsReader = await detailsCmd.ExecuteReaderAsync(ct);
+                            if (await detailsReader.ReadAsync(ct))
+                            {
+                                var totalAmount = detailsReader.GetDecimal(0);
+                                var stockInCount = detailsReader.GetInt32(1);
+                                
+                                detailsReader.Close();
+                                
+                                // Create supplier invoice
+                                var createInvoiceSql = @"
+                                    INSERT INTO dbo.tbl_supplier_invoices 
+                                        (invoice_number, supplier_id, invoice_date, total_amount, description, source_type, created_by, seller_user_id, created_at)
+                                    VALUES 
+                                        (@InvoiceNumber, @SupplierId, @InvoiceDate, @TotalAmount, @Description, 'StockIn', @CreatedBy, @SellerUserId, SYSUTCDATETIME());
+                                    SELECT CAST(SCOPE_IDENTITY() AS INT);";
+                                
+                                using var createInvoiceCmd = new SqlCommand(createInvoiceSql, conn);
+                                createInvoiceCmd.Parameters.AddWithValue("@InvoiceNumber", model.StockInGroupKey);
+                                createInvoiceCmd.Parameters.AddWithValue("@SupplierId", supplierId);
+                                createInvoiceCmd.Parameters.AddWithValue("@InvoiceDate", stockInDate.Date);
+                                createInvoiceCmd.Parameters.AddWithValue("@TotalAmount", totalAmount);
+                                createInvoiceCmd.Parameters.AddWithValue("@Description", $"Stock-in from {stockInCount} items");
+                                createInvoiceCmd.Parameters.AddWithValue("@CreatedBy", createdByUserId);
+                                createInvoiceCmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+                                
+                                var newInvoiceId = await createInvoiceCmd.ExecuteScalarAsync(ct);
+                                if (newInvoiceId != null && newInvoiceId != DBNull.Value)
+                                {
+                                    invoiceId = Convert.ToInt32(newInvoiceId);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             var sql = @"
                 INSERT INTO dbo.tbl_supplier_payments 
-                    (invoice_id, po_id, amount_paid, payment_method, payment_date, reference_number, notes, receipt_image_base64, receipt_image_content_type, created_by, seller_user_id, created_at)
+                    (invoice_id, po_id, stock_in_group_key, amount_paid, payment_method, payment_date, reference_number, notes, receipt_image_base64, receipt_image_content_type, created_by, seller_user_id, created_at)
                 VALUES 
-                    (@InvoiceId, @POId, @AmountPaid, @PaymentMethod, @PaymentDate, @ReferenceNumber, @Notes, @ReceiptImage, @ReceiptContentType, @CreatedBy, @SellerUserId, SYSUTCDATETIME());
+                    (@InvoiceId, @POId, @StockInGroupKey, @AmountPaid, @PaymentMethod, @PaymentDate, @ReferenceNumber, @Notes, @ReceiptImage, @ReceiptContentType, @CreatedBy, @SellerUserId, SYSUTCDATETIME());
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
 
             using var cmd = new SqlCommand(sql, conn);
-            cmd.Parameters.AddWithValue("@InvoiceId", (object?)model.InvoiceId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@InvoiceId", (object?)invoiceId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@POId", (object?)model.POId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@StockInGroupKey", (object?)model.StockInGroupKey ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@AmountPaid", model.AmountPaid);
             cmd.Parameters.AddWithValue("@PaymentMethod", model.PaymentMethod);
             cmd.Parameters.AddWithValue("@PaymentDate", model.PaymentDate.Date);
