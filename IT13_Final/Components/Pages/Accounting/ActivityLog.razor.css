@@ -119,8 +119,9 @@
 /* Dashboard-style Filters */
 .dashboard-filters {
     display: flex;
-    gap: 16px;
+    justify-content: space-between;
     align-items: center;
+    gap: 16px;
     margin-bottom: 24px;
     padding: 16px 20px;
     background: white;
@@ -132,8 +133,11 @@
 
 .dashboard-filters .search-wrapper {
     flex: 1;
-    min-width: 250px;
+    min-width: 200px;
+    max-width: 400px;
     position: relative;
+    display: flex;
+    align-items: center;
 }
 
 .dashboard-filters .search-icon {
@@ -157,6 +161,11 @@
     color: #1f2937;
     background: #f9fafb;
     transition: all 0.2s;
+}
+
+.dashboard-filters .search-input:hover {
+    border-color: #d1d5db;
+    background: #f3f4f6;
 }
 
 .dashboard-filters .search-input:focus {
@@ -215,10 +224,29 @@
     background-color: white;
 }
 
+.dashboard-filters .date-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.dashboard-filters .date-input-with-icon {
+    padding-right: 36px;
+}
+
+.dashboard-filters .date-input-icon {
+    position: absolute;
+    right: 12px;
+    width: 16px;
+    height: 16px;
+    color: #9ca3af;
+    pointer-events: none;
+}
+
 .dashboard-filters .date-input {
-    width: 120px;
+    width: 130px;
     height: 42px;
-    padding: 0 12px;
+    padding: 0 14px;
     border: 2px solid #e5e7eb;
     border-radius: 10px;
     font-size: 14px;

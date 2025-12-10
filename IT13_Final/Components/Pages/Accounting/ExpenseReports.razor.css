@@ -315,24 +315,28 @@
    Summary Grid
 ======================================== */
 .summary-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    display: flex;
+    flex-wrap: wrap;
     gap: 16px;
+    margin-bottom: 24px;
 }
 
 .summary-box {
-    background: #f8fafc;
+    flex: 1 1 calc(20% - 13px);
+    min-width: 180px;
+    background: white;
     border: 1px solid #e5e7eb;
-    border-radius: 12px;
+    border-radius: 16px;
     padding: 20px;
     transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .summary-box:hover {
     background: #eef2ff;
     border-color: #c7d2fe;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(92, 124, 250, 0.1);
+    transform: translateY(-4px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
 }
 
 .summary-label {
@@ -345,9 +349,12 @@
 }
 
 .summary-value {
-    font-size: 24px;
+    font-size: clamp(14px, 1.8vw, 24px);
     font-weight: 700;
     color: #1a1a1a;
+    letter-spacing: -0.5px;
+    line-height: 1.2;
+    word-break: break-word;
 }
 
 /* ========================================
@@ -536,8 +543,12 @@
         align-items: stretch;
     }
 
-    .summary-grid {
-        grid-template-columns: 1fr;
+    .summary-box {
+        min-width: 150px;
+    }
+    
+    .summary-value {
+        font-size: clamp(12px, 3.5vw, 18px);
     }
 
     .admin-table {

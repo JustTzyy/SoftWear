@@ -1,10 +1,11 @@
 @inject IT13_Final.Services.Auth.AuthState AuthState
 @inject IT13_Final.Services.Audit.IHistoryService HistoryService
 @inject NavigationManager Nav
+@inject IJSRuntime JSRuntime
 @inherits LayoutComponentBase
 @implements IDisposable
 
-<div class="grid min-h-screen transition-all duration-300 ease-in-out" style="grid-template-columns: @(sidebarCollapsed ? "80px" : "260px") 1fr; background: #F5F5F5;">
+<div class="grid min-h-screen transition-all duration-300 ease-in-out" style="grid-template-columns: @(sidebarCollapsed ? "80px" : "260px") 1fr; background: #e5e7eb;">
     <aside class="bg-white transition-all duration-300 ease-in-out overflow-hidden" style="border-right: 1px solid #E0E0E0; position: sticky; top: 0; height: 100vh;">
         <div class="flex items-start gap-3 py-4 px-4 cursor-pointer hover:bg-gray-50 transition-colors duration-200" style="min-height: 64px;" @onclick="ToggleSidebar">
             <a href="/seller/dashboard" class="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style="border: 2px solid #5C7CFA; padding: 6px; background-color: #1a2332;" @onclick:stopPropagation>
@@ -28,7 +29,7 @@
                 }
             </a>
 
-            <button class="@GetStaffMgmtButtonClass()" @onclick="() => staffMgmtOpen = !staffMgmtOpen" aria-expanded="@staffMgmtOpen" title="Staff Management">
+            <button class="@GetStaffMgmtButtonClass()" @onclick="ToggleStaffMgmt" aria-expanded="@staffMgmtOpen" title="Staff Management">
                 <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/seller/Accounting_Record", "/seller/Cashier_Record", "/seller/Stock_Clerk_Record", "/seller/Permission_Requests")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                 </svg>
@@ -61,7 +62,7 @@
                 </div>
             }
 
-            <button class="@GetProductMgmtButtonClass()" @onclick="() => productMgmtOpen = !productMgmtOpen" aria-expanded="@productMgmtOpen" title="Product Management">
+            <button class="@GetProductMgmtButtonClass()" @onclick="ToggleProductMgmt" aria-expanded="@productMgmtOpen" title="Product Management">
                 <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/seller/Color", "/seller/Size", "/seller/Product", "/seller/Variant")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                 </svg>
@@ -98,7 +99,7 @@
                 </div>
             }
 
-            <button class="@GetSupplierMgmtButtonClass()" @onclick="() => supplierMgmtOpen = !supplierMgmtOpen" aria-expanded="@supplierMgmtOpen" title="Supplier Management">
+            <button class="@GetSupplierMgmtButtonClass()" @onclick="ToggleSupplierMgmt" aria-expanded="@supplierMgmtOpen" title="Supplier Management">
                 <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/seller/Supplier")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
@@ -119,7 +120,7 @@
                 </div>
             }
 
-            <button class="@GetReportsButtonClass()" @onclick="() => reportsOpen = !reportsOpen" aria-expanded="@reportsOpen" title="Reports">
+            <button class="@GetReportsButtonClass()" @onclick="ToggleReports" aria-expanded="@reportsOpen" title="Reports">
                 <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/seller/AuditLogs", "/seller/CashierSalesReports", "/seller/CashierReturnsReports", "/seller/StockClerkStockInReports", "/seller/StockClerkStockOutReports", "/seller/StockClerkStockAdjustmentReports", "/seller/StockClerkSupplierReports", "/seller/StockClerkPurchaseOrderReports", "/seller/AccountingFinancialReports", "/seller/AccountingExpenseReports", "/seller/AccountingTaxReports", "/seller/AccountingDailySalesVerificationReports", "/seller/AccountingProfitLossReports", "/seller/AccountingCashInOutAudit", "/seller/AccountingIncomeBreakdown")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
@@ -137,7 +138,7 @@
                         <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/seller/AuditLogs")"></span>
                         <span>Audit Logs</span>
                     </a>
-                    <button class="@GetSubSubNavButtonClass("/seller/CashierSalesReports", "/seller/CashierReturnsReports")" @onclick="() => cashierReportsOpen = !cashierReportsOpen" aria-expanded="@cashierReportsOpen">
+                    <button class="@GetSubSubNavButtonClass("/seller/CashierSalesReports", "/seller/CashierReturnsReports")" @onclick="ToggleCashierReports" aria-expanded="@cashierReportsOpen">
                         <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/CashierSalesReports", "/seller/CashierReturnsReports") flex-shrink-0"></span>
                         <span class="flex-1 break-words">Cashier Reports</span>
                         <span class="flex-shrink-0">@(cashierReportsOpen ? "▾" : "▸")</span>
@@ -155,7 +156,7 @@
                             </a>
                         </div>
                     }
-                    <button class="@GetSubSubNavButtonClass("/seller/StockClerkStockInReports", "/seller/StockClerkStockOutReports", "/seller/StockClerkStockAdjustmentReports", "/seller/StockClerkPurchaseOrderReports")" @onclick="() => stockClerkReportsOpen = !stockClerkReportsOpen" aria-expanded="@stockClerkReportsOpen">
+                    <button class="@GetSubSubNavButtonClass("/seller/StockClerkStockInReports", "/seller/StockClerkStockOutReports", "/seller/StockClerkStockAdjustmentReports", "/seller/StockClerkPurchaseOrderReports")" @onclick="ToggleStockClerkReports" aria-expanded="@stockClerkReportsOpen">
                         <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/StockClerkStockInReports", "/seller/StockClerkStockOutReports", "/seller/StockClerkStockAdjustmentReports", "/seller/StockClerkPurchaseOrderReports") flex-shrink-0"></span>
                         <span class="flex-1 break-words">Stock Clerk Reports</span>
                         <span class="flex-shrink-0">@(stockClerkReportsOpen ? "▾" : "▸")</span>
@@ -181,7 +182,7 @@
                             </a>
                         </div>
                     }
-                    <button class="@GetSubSubNavButtonClass("/seller/AccountingExpenseReports", "/seller/AccountingTaxReports", "/seller/AccountingDailySalesVerificationReports", "/seller/AccountingProfitLossReports", "/seller/AccountingCashInOutAudit", "/seller/AccountingIncomeBreakdown")" @onclick="() => accountingReportsOpen = !accountingReportsOpen" aria-expanded="@accountingReportsOpen">
+                    <button class="@GetSubSubNavButtonClass("/seller/AccountingExpenseReports", "/seller/AccountingTaxReports", "/seller/AccountingDailySalesVerificationReports", "/seller/AccountingProfitLossReports", "/seller/AccountingCashInOutAudit", "/seller/AccountingIncomeBreakdown")" @onclick="ToggleAccountingReports" aria-expanded="@accountingReportsOpen">
                         <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/AccountingExpenseReports", "/seller/AccountingTaxReports", "/seller/AccountingDailySalesVerificationReports", "/seller/AccountingProfitLossReports", "/seller/AccountingCashInOutAudit", "/seller/AccountingIncomeBreakdown") flex-shrink-0"></span>
                         <span class="flex-1 break-words">Accounting Reports</span>
                         <span class="flex-shrink-0">@(accountingReportsOpen ? "▾" : "▸")</span>
@@ -267,6 +268,79 @@
     private bool profileOpen;
     private bool sidebarCollapsed = false;
     private string currentUri = string.Empty;
+
+    // Accordion behavior: close other dropdowns when one is opened
+    private void CloseAllDropdowns()
+    {
+        staffMgmtOpen = false;
+        productMgmtOpen = false;
+        supplierMgmtOpen = false;
+        reportsOpen = false;
+        cashierReportsOpen = false;
+        stockClerkReportsOpen = false;
+        accountingReportsOpen = false;
+    }
+
+    private void ToggleStaffMgmt()
+    {
+        bool wasOpen = staffMgmtOpen;
+        CloseAllDropdowns();
+        staffMgmtOpen = !wasOpen;
+    }
+
+    private void ToggleProductMgmt()
+    {
+        bool wasOpen = productMgmtOpen;
+        CloseAllDropdowns();
+        productMgmtOpen = !wasOpen;
+    }
+
+    private void ToggleSupplierMgmt()
+    {
+        bool wasOpen = supplierMgmtOpen;
+        CloseAllDropdowns();
+        supplierMgmtOpen = !wasOpen;
+    }
+
+    private void ToggleReports()
+    {
+        bool wasOpen = reportsOpen;
+        CloseAllDropdowns();
+        reportsOpen = !wasOpen;
+    }
+
+    private void ToggleCashierReports()
+    {
+        cashierReportsOpen = !cashierReportsOpen;
+        // Close other sub-dropdowns within Reports, but keep Reports open
+        if (cashierReportsOpen)
+        {
+            stockClerkReportsOpen = false;
+            accountingReportsOpen = false;
+        }
+    }
+
+    private void ToggleStockClerkReports()
+    {
+        stockClerkReportsOpen = !stockClerkReportsOpen;
+        // Close other sub-dropdowns within Reports, but keep Reports open
+        if (stockClerkReportsOpen)
+        {
+            cashierReportsOpen = false;
+            accountingReportsOpen = false;
+        }
+    }
+
+    private void ToggleAccountingReports()
+    {
+        accountingReportsOpen = !accountingReportsOpen;
+        // Close other sub-dropdowns within Reports, but keep Reports open
+        if (accountingReportsOpen)
+        {
+            cashierReportsOpen = false;
+            stockClerkReportsOpen = false;
+        }
+    }
 
     protected override void OnInitialized()
     {
@@ -619,6 +693,10 @@
 
     private async void OnSignOut()
     {
+        // Confirm before logging out
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmLogout");
+        if (!confirmed) return;
+
         if (AuthState.CurrentUser is not null)
         {
             try { await HistoryService.LogAsync(AuthState.CurrentUser.Id, "logout", "Authentication", "User signed out"); } catch {}

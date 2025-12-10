@@ -21,6 +21,7 @@
 main.accounting-main {
     overflow-y: auto;
     overflow-x: hidden;
+    background: #e5e7eb;
 }
 
 /* Responsive Layout */
@@ -56,5 +57,22 @@ main.accounting-main {
     header h1 {
         font-size: 18px !important;
     }
+}
+
+/* Center numeric data in all Accounting tables */
+/* Target common numeric column positions (Amount, Price, Quantity, etc. are typically 2nd or 3rd columns) */
+main.accounting-main table.admin-table th:nth-child(2),
+main.accounting-main table.admin-table td:nth-child(2),
+main.accounting-main table.admin-table th:nth-child(3),
+main.accounting-main table.admin-table td:nth-child(3),
+main.accounting-main table th[data-numeric],
+main.accounting-main table td[data-numeric],
+main.accounting-main table .numeric-cell {
+    text-align: center !important;
+}
+
+/* Override inline styles for numeric columns */
+main.accounting-main table td[style*="text-align: right"] {
+    text-align: center !important;
 }
 

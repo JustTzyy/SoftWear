@@ -57,7 +57,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -85,12 +85,6 @@
             <option value="Cancelled">Cancelled</option>
             <option value="Pending">Pending</option>
         </select>
-        <button class="filter-btn" @onclick="ApplyFilters">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
             <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
@@ -181,7 +175,29 @@
                                 <span class="status-text @(po.Status == "Completed" ? "status-text-approved" : po.Status == "Cancelled" ? "status-text-cancelled" : "status-text-pending")">@po.Status</span>
                             </td>
                             <td>₱@po.TotalAmount.ToString("N2")</td>
-                            <td>@(po.ExpectedDeliveryDate?.ToString("MMM dd, yyyy") ?? "N/A")</td>
+                            <td>
+                                @if (po.ExpectedDeliveryDate.HasValue)
+                                {
+                                    <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                                        <span>@po.ExpectedDeliveryDate.Value.ToString("MMM dd, yyyy")</span>
+                                        @{
+                                            var deliveryStatus = GetDeliveryStatus(po.ExpectedDeliveryDate.Value, po.Status);
+                                        }
+                                        @if (deliveryStatus == "overdue")
+                                        {
+                                            <span class="overdue-badge" title="Overdue - Expected delivery date has passed">⚠️ Overdue</span>
+                                        }
+                                        else if (deliveryStatus == "due-today")
+                                        {
+                                            <span class="due-today-badge" title="Due Today - Expected delivery is today">⚠️ Due Today</span>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span>N/A</span>
+                                }
+                            </td>
                             <td>@po.CreatedByName</td>
                             <td>
                                 <div class="timestamp-info">
@@ -677,8 +693,23 @@
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            startDate = date;
+            var today = DateTime.Today;
+            // Prevent future dates - cap at today
+            if (date.Date > today)
+            {
+                startDate = today;
+            }
+            else
+            {
+                startDate = date.Date;
+            }
             selectedDateRange = "";
+            
+            // If end date is before start date, adjust it
+            if (endDate.HasValue && endDate.Value < startDate.Value)
+            {
+                endDate = startDate.Value;
+            }
         }
         else if (string.IsNullOrWhiteSpace(value))
         {
@@ -693,7 +724,34 @@
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            endDate = date;
+            var today = DateTime.Today;
+            var parsedDate = date.Date;
+            
+            // Prevent future dates - cap at today
+            if (parsedDate > today)
+            {
+                parsedDate = today;
+            }
+            
+            // Ensure end date is never before start date - if it is, set it to startDate or today (whichever is earlier)
+            if (startDate.HasValue)
+            {
+                // If end date is before start date, set it to start date
+                if (parsedDate < startDate.Value)
+                {
+                    endDate = startDate.Value;
+                }
+                else
+                {
+                    endDate = parsedDate;
+                }
+            }
+            else
+            {
+                // If no start date is set, allow any date up to today
+                endDate = parsedDate;
+            }
+            
             selectedDateRange = "";
         }
         else if (string.IsNullOrWhiteSpace(value))
@@ -881,6 +939,10 @@
 
     private async Task PrintReport()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         try
         {
             isGeneratingPDF = true;
@@ -996,7 +1058,7 @@
                     timeCompleted = po.CreatedAt.ToString("HH:mm:ss"),
                     createdByName = po.CreatedByName
                 }).ToArray(),
-                AuthState.CurrentUser?.FullName ?? "Seller",
+                AuthState.CurrentUser?.FullName ?? "Admin",
                 startDate?.ToString("MMM dd, yyyy") ?? "All Time",
                 endDate?.ToString("MMM dd, yyyy") ?? "Today"
             );
@@ -1011,6 +1073,27 @@
             isGeneratingPDF = false;
             StateHasChanged();
         }
+    }
+
+    private string GetDeliveryStatus(DateTime expectedDate, string status)
+    {
+        // Don't show warnings for completed or cancelled orders
+        if (string.IsNullOrWhiteSpace(status))
+            return "normal";
+            
+        var statusUpper = status.Trim().ToUpperInvariant();
+        if (statusUpper == "COMPLETED" || statusUpper == "CANCELLED")
+            return "normal";
+        
+        var today = DateTime.Today;
+        var expectedDateOnly = expectedDate.Date;
+        
+        if (expectedDateOnly < today)
+            return "overdue";
+        else if (expectedDateOnly == today)
+            return "due-today";
+        else
+            return "normal";
     }
 
     public void Dispose()

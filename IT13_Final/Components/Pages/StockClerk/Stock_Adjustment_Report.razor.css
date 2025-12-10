@@ -345,12 +345,14 @@
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin-bottom: 8px;
+    text-align: left;
 }
 
 .summary-value {
     font-size: 24px;
     font-weight: 700;
     color: #1a1a1a;
+    text-align: right;
 }
 
 /* ========================================
@@ -677,7 +679,7 @@
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    padding: 16px 0;
+    padding: 8px 0;
     border-bottom: 1px solid #f3f4f6;
 }
 
@@ -689,7 +691,9 @@
     font-weight: 600;
     color: #6b7280;
     font-size: 14px;
-    min-width: 140px;
+    min-width: 180px;
+    text-align: left;
+    flex-shrink: 0;
 }
 
 .info-value {
@@ -697,6 +701,7 @@
     font-size: 14px;
     text-align: right;
     flex: 1;
+    min-width: 0;
 }
 
 .color-display {

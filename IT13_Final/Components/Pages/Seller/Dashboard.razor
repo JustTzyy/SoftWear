@@ -23,6 +23,22 @@
         <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
     </div>
     <div class="header-actions">
+        <button class="action-btn visibility-btn @(hideConfidential ? "hidden-mode" : "")" @onclick="ToggleConfidentialVisibility" title="@(hideConfidential ? "Show Confidential Info" : "Hide Confidential Info")">
+            @if (hideConfidential)
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                </svg>
+            }
+            else
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+            }
+        </button>
         <button class="action-btn print-btn" @onclick="PrintDashboard" title="Print Dashboard">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="6 9 6 2 18 2 18 9"></polyline>
@@ -40,7 +56,7 @@
             <circle cx="11" cy="11" r="8"></circle>
             <path d="m21 21-4.35-4.35"></path>
         </svg>
-        <input type="text" id="dashboard-search-input" class="search-input" placeholder="Search metrics, products..." @bind="searchTerm" @bind:event="oninput" @bind:after="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        <input type="text" id="dashboard-search-input" class="search-input" placeholder="Search sellers, metrics..." @bind="searchTerm" @bind:event="oninput" @bind:after="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
         @if (!string.IsNullOrWhiteSpace(searchTerm))
         {
             <button class="clear-search-btn" @onclick="HandleClearSearch" title="Clear">
@@ -52,7 +68,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -61,22 +77,22 @@
             <option value="thismonth">This Month</option>
             <option value="thisyear">This Year</option>
         </select>
-        <input type="date"
-               class="date-input"
-               value="@(startDate?.ToString("yyyy-MM-dd"))"
+        <input type="date" 
+               class="date-input" 
+               value="@(startDate?.ToString("yyyy-MM-dd"))" 
                min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
                max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleFromDateChange" />
         <span class="date-separator">to</span>
-        <input type="date"
-               class="date-input"
-               value="@(endDate?.ToString("yyyy-MM-dd"))"
-               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+        <input type="date" 
+               class="date-input" 
+               value="@(endDate?.ToString("yyyy-MM-dd"))" 
+               min="@(startDate?.ToString("yyyy-MM-dd") ?? DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd"))"
                max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleToDateChange" />
         @if (HasActiveDateFilters)
         {
-            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear">
+            <button class="clear-btn" @onclick="ClearAllFilters" title="Clear Filters">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
                     <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -131,7 +147,7 @@ else
             </div>
             <div class="kpi-content">
                 <span class="kpi-label">Total Sales</span>
-                <span class="kpi-value">₱@totalIncome.ToString("N0")</span>
+                <span class="kpi-value @(hideConfidential ? "masked" : "")">₱@MaskValue(totalIncome)</span>
                 <span class="kpi-trend @(totalIncome > 0 ? "trend-up" : "")">
                     @if (totalIncome > 0)
                     {
@@ -151,7 +167,7 @@ else
             </div>
             <div class="kpi-content">
                 <span class="kpi-label">Net Income</span>
-                <span class="kpi-value @(netIncome >= 0 ? "positive" : "negative")">₱@netIncome.ToString("N0")</span>
+                <span class="kpi-value @(netIncome >= 0 ? "positive" : "negative") @(hideConfidential ? "masked" : "")">₱@MaskValue(netIncome)</span>
                 <span class="kpi-trend @(netIncome >= 0 ? "trend-up" : "trend-down")">
                     @if (netIncome >= 0)
                     {
@@ -175,7 +191,7 @@ else
             </div>
             <div class="kpi-content">
                 <span class="kpi-label">Total Expenses</span>
-                <span class="kpi-value">₱@totalExpensesAmount.ToString("N0")</span>
+                <span class="kpi-value @(hideConfidential ? "masked" : "")">₱@MaskValue(totalExpensesAmount)</span>
                 <span class="kpi-trend trend-down">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
                     <span>Operating costs</span>
@@ -192,7 +208,7 @@ else
             </div>
             <div class="kpi-content">
                 <span class="kpi-label">Returns</span>
-                <span class="kpi-value">₱@totalReturnsAmount.ToString("N0")</span>
+                <span class="kpi-value @(hideConfidential ? "masked" : "")">₱@MaskValue(totalReturnsAmount)</span>
                 <span class="kpi-trend">
                     <span>Refunded amount</span>
                 </span>
@@ -210,7 +226,7 @@ else
             </div>
             <div class="kpi-content">
                 <span class="kpi-label">Supplier Payments</span>
-                <span class="kpi-value">₱@supplierPaymentsTotal.ToString("N0")</span>
+                <span class="kpi-value @(hideConfidential ? "masked" : "")">₱@MaskValue(supplierPaymentsTotal)</span>
                 <span class="kpi-trend trend-down">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
                     <span>@supplierPaymentsCount payments</span>
@@ -275,16 +291,33 @@ else
                         <path d="@fillPath" fill="url(#salesGradient)" />
                         <path d="@linePath" fill="none" stroke="#10B981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
 
-                        @* Data points *@
+                        @* Data points with tooltips *@
                         @for (int i = 0; i < dailySalesData.Count; i++)
                         {
                             var item = dailySalesData[i];
                             var x = 60 + (i * pointSpacing);
                             var y = maxAmount > 0 ? 240 - ((double)item.Amount / (double)maxAmount) * chartHeight : 240;
+                            var tooltipY = y - 45;
+                            if (tooltipY < 10) tooltipY = y + 15;
                             
-                            if (item.Amount > 0 && (i == 0 || i == dailySalesData.Count - 1 || i % 5 == 0))
+                            if (item.Amount > 0)
+                            {
+                                <g class="chart-point-group">
+                                    @* Invisible larger hit area for easier hover *@
+                                    <circle cx="@x" cy="@y" r="15" fill="transparent" class="chart-hit-area" />
+                                    @* Visible data point *@
+                                    @if (i == 0 || i == dailySalesData.Count - 1 || i % 5 == 0)
                             {
                                 <circle cx="@x" cy="@y" r="5" fill="#10B981" stroke="#fff" stroke-width="2" class="data-point" />
+                                    }
+                                    @* Tooltip *@
+                                    <g class="chart-tooltip" transform="translate(@x, @tooltipY)">
+                                        <rect x="-55" y="-20" width="110" height="40" rx="6" fill="#1f2937" opacity="0.95" />
+                                        <text x="0" y="-2" font-size="11" fill="#9ca3af" text-anchor="middle">@item.Date.ToString("MMM dd, yyyy")</text>
+                                        <text x="0" y="14" font-size="13" fill="#10b981" text-anchor="middle" font-weight="600">₱@item.Amount.ToString("N2")</text>
+                                        <polygon points="0,22 -6,28 6,28" fill="#1f2937" transform="translate(0, -2)" />
+                                    </g>
+                                </g>
                             }
                         }
 
@@ -324,37 +357,40 @@ else
                     var totalAllExpenses = totalExpensesAmount + supplierPaymentsTotal;
                     // netIncome already includes expenses and supplier payments, so use it directly
                     var netAfterAll = netIncome;
-                    var finMax = Math.Max((double)totalIncome, Math.Max((double)totalAllExpenses, Math.Max((double)supplierPaymentsTotal, Math.Abs((double)netAfterAll))));
-                    if (finMax <= 0) finMax = 1;
+                    // Use separate scales: Income/Expenses use their own max, Supplier Pay/Net Profit use their own max
+                    var incomeExpenseMax = Math.Max((double)totalIncome, (double)totalExpensesAmount);
+                    if (incomeExpenseMax <= 0) incomeExpenseMax = 1;
+                    var supplierNetMax = Math.Max((double)supplierPaymentsTotal, Math.Abs((double)netAfterAll));
+                    if (supplierNetMax <= 0) supplierNetMax = 1;
                 }
                 <div class="horizontal-bars">
                     <div class="bar-row">
                         <span class="bar-label">Income</span>
                         <div class="bar-track">
-                            <div class="bar-fill bar-income" style="width: @((totalIncome > 0 ? (double)totalIncome / finMax * 100 : 0).ToString("F1"))%"></div>
+                            <div class="bar-fill bar-income" style="width: @(hideConfidential ? "0" : (totalIncome > 0 ? (double)totalIncome / incomeExpenseMax * 100 : 0).ToString("F1"))%"></div>
                         </div>
-                        <span class="bar-value">₱@totalIncome.ToString("N0")</span>
+                        <span class="bar-value @(hideConfidential ? "masked" : "")">₱@MaskValue(totalIncome)</span>
                     </div>
                     <div class="bar-row">
                         <span class="bar-label">Op. Expenses</span>
                         <div class="bar-track">
-                            <div class="bar-fill bar-expense" style="width: @((totalExpensesAmount > 0 ? (double)totalExpensesAmount / finMax * 100 : 0).ToString("F1"))%"></div>
+                            <div class="bar-fill bar-expense" style="width: @(hideConfidential ? "0" : (totalExpensesAmount > 0 ? (double)totalExpensesAmount / incomeExpenseMax * 100 : 0).ToString("F1"))%"></div>
                         </div>
-                        <span class="bar-value">₱@totalExpensesAmount.ToString("N0")</span>
+                        <span class="bar-value @(hideConfidential ? "masked" : "")">₱@MaskValue(totalExpensesAmount)</span>
                     </div>
                     <div class="bar-row">
                         <span class="bar-label">Supplier Pay</span>
                         <div class="bar-track">
-                            <div class="bar-fill bar-supplier" style="width: @((supplierPaymentsTotal > 0 ? (double)supplierPaymentsTotal / finMax * 100 : 0).ToString("F1"))%"></div>
+                            <div class="bar-fill bar-supplier" style="width: @(hideConfidential ? "0" : (supplierPaymentsTotal > 0 ? (double)supplierPaymentsTotal / supplierNetMax * 100 : 0).ToString("F1"))%"></div>
                         </div>
-                        <span class="bar-value">₱@supplierPaymentsTotal.ToString("N0")</span>
+                        <span class="bar-value @(hideConfidential ? "masked" : "")">₱@MaskValue(supplierPaymentsTotal)</span>
                     </div>
                     <div class="bar-row">
                         <span class="bar-label">Net Profit</span>
                         <div class="bar-track">
-                            <div class="bar-fill @(netAfterAll >= 0 ? "bar-profit" : "bar-loss")" style="width: @((netAfterAll != 0 ? Math.Abs((double)netAfterAll) / finMax * 100 : 0).ToString("F1"))%"></div>
+                            <div class="bar-fill @(netAfterAll >= 0 ? "bar-profit" : "bar-loss")" style="width: @(hideConfidential ? "0" : (netAfterAll != 0 ? Math.Abs((double)netAfterAll) / supplierNetMax * 100 : 0).ToString("F1"))%"></div>
                         </div>
-                        <span class="bar-value @(netAfterAll >= 0 ? "positive" : "negative")">₱@netAfterAll.ToString("N0")</span>
+                        <span class="bar-value @(netAfterAll >= 0 ? "positive" : "negative") @(hideConfidential ? "masked" : "")">₱@MaskValue(netAfterAll)</span>
                     </div>
                 </div>
             </div>
@@ -559,11 +595,13 @@ else
                             }
                         }
 
-                        @* Legend *@
-                        <rect x="450" y="10" width="12" height="12" fill="#10B981" rx="2" />
-                        @: <text x="467" y="20" font-size="10" fill="#6b7280">Stock In</text>
-                        <rect x="520" y="10" width="12" height="12" fill="#EF4444" rx="2" />
-                        @: <text x="537" y="20" font-size="10" fill="#6b7280">Stock Out</text>
+                        @* Legend at bottom - larger and more visible *@
+                        <g transform="translate(300, 260)">
+                            <rect x="-80" y="-8" width="18" height="18" fill="#10B981" rx="3" />
+                            <text x="-55" y="4" font-size="16" fill="#1f2937" font-weight="600">Stock In</text>
+                            <rect x="40" y="-8" width="18" height="18" fill="#EF4444" rx="3" />
+                            <text x="65" y="4" font-size="16" fill="#1f2937" font-weight="600">Stock Out</text>
+                        </g>
                     }
                     else
                     {
@@ -700,6 +738,7 @@ else
 @code {
     private bool showSecurityAlert = false;
     private bool isLoading = true;
+    private bool hideConfidential = false;
     private int sellerUserId = 0;
     
     // Inventory stats
@@ -784,6 +823,64 @@ else
         public string CashierName { get; set; } = "";
         public int TransactionCount { get; set; }
         public decimal TotalSales { get; set; }
+    }
+
+    private void ToggleConfidentialVisibility()
+    {
+        hideConfidential = !hideConfidential;
+        StateHasChanged();
+    }
+
+    private string MaskValue(decimal value, string format = "N0")
+    {
+        if (hideConfidential) return "•••••";
+        return FormatCompactNumber(value);
+    }
+
+    private string MaskValue(int value)
+    {
+        if (hideConfidential) return "•••";
+        return FormatCompactNumber(value);
+    }
+
+    private string FormatCompactNumber(decimal value)
+    {
+        var absValue = Math.Abs(value);
+        var sign = value < 0 ? "-" : "";
+        
+        if (absValue >= 1_000_000_000_000m) // Trillion
+        {
+            var num = absValue / 1_000_000_000_000m;
+            return sign + FormatWithMaxDigits(num) + "T";
+        }
+        else if (absValue >= 1_000_000_000m) // Billion
+        {
+            var num = absValue / 1_000_000_000m;
+            return sign + FormatWithMaxDigits(num) + "B";
+        }
+        else if (absValue >= 1_000_000m) // Million
+        {
+            var num = absValue / 1_000_000m;
+            return sign + FormatWithMaxDigits(num) + "M";
+        }
+        else if (absValue >= 10_000m) // Thousand (10K+)
+        {
+            var num = absValue / 1_000m;
+            return sign + FormatWithMaxDigits(num) + "K";
+        }
+        else
+        {
+            return value.ToString("N0");
+        }
+    }
+
+    private string FormatWithMaxDigits(decimal num)
+    {
+        // Format to max 4 significant digits
+        if (num >= 1000) return num.ToString("N0");
+        if (num >= 100) return num.ToString("F1");
+        if (num >= 10) return num.ToString("F2");
+        return num.ToString("F3");
     }
 
     private string GetGreeting()
@@ -1102,12 +1199,16 @@ else
         {
             if (cashierIds.Count == 0)
             {
-                // Fill with zeros if no cashiers
-                var start = startDate ?? DateTime.Today.AddDays(-30);
-                var end = endDate ?? DateTime.Today;
-                for (var date = start; date <= end; date = date.AddDays(1))
+                // If date range is specified, fill with zeros for that range
+                // Otherwise (All Time), return empty list
+                if (startDate.HasValue && endDate.HasValue)
                 {
-                    dailySalesData.Add(new DailySalesData { Date = date, Amount = 0, Count = 0 });
+                    var start = startDate.Value.Date;
+                    var end = endDate.Value.Date;
+                    for (var date = start; date <= end; date = date.AddDays(1))
+                    {
+                        dailySalesData.Add(new DailySalesData { Date = date, Amount = 0, Count = 0 });
+                    }
                 }
                 return;
             }
@@ -1124,6 +1225,22 @@ else
             }
             var cashierIdsInClause = string.Join(",", cashierParams);
 
+            // Build date filter conditionally
+            var dateFilter = "";
+            if (startDate.HasValue && endDate.HasValue)
+            {
+                dateFilter = "AND CAST(s.timestamps AS DATE) >= @StartDate AND CAST(s.timestamps AS DATE) <= @EndDate";
+            }
+            else if (startDate.HasValue)
+            {
+                dateFilter = "AND CAST(s.timestamps AS DATE) >= @StartDate";
+            }
+            else if (endDate.HasValue)
+            {
+                dateFilter = "AND CAST(s.timestamps AS DATE) <= @EndDate";
+            }
+            // If both are null (All Time), no date filter is applied
+
             var sql = $@"
                 SELECT CAST(s.timestamps AS DATE) as sale_date, 
                        COALESCE(SUM(s.amount), 0) as total_amount,
@@ -1132,8 +1249,7 @@ else
                 WHERE s.archives IS NULL 
                 AND s.status = 'Completed'
                 AND s.user_id IN ({cashierIdsInClause})
-                AND CAST(s.timestamps AS DATE) >= @StartDate
-                AND CAST(s.timestamps AS DATE) <= @EndDate
+                {dateFilter}
                 AND EXISTS (
                     SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
                     WHERE dsv.cashier_user_id = s.user_id
@@ -1150,8 +1266,15 @@ else
             {
                 cmd.Parameters.AddWithValue($"@CashierId{i}", cashierIds[i]);
             }
-            cmd.Parameters.AddWithValue("@StartDate", startDate ?? DateTime.Today.AddDays(-30));
-            cmd.Parameters.AddWithValue("@EndDate", endDate ?? DateTime.Today);
+            cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+            }
 
             using var reader = await cmd.ExecuteReaderAsync();
             var dataDict = new Dictionary<DateTime, DailySalesData>();
@@ -1167,19 +1290,28 @@ else
                 };
             }
 
-            // Fill in missing dates
-            var startFill = startDate ?? DateTime.Today.AddDays(-30);
-            var endFill = endDate ?? DateTime.Today;
-            for (var date = startFill; date <= endFill; date = date.AddDays(1))
+            // Fill in missing dates only if date range is specified
+            // For "All Time", just add the dates that have data (don't fill gaps)
+            if (startDate.HasValue && endDate.HasValue)
             {
-                if (dataDict.ContainsKey(date))
+                var startFill = startDate.Value.Date;
+                var endFill = endDate.Value.Date;
+                for (var date = startFill; date <= endFill; date = date.AddDays(1))
                 {
-                    dailySalesData.Add(dataDict[date]);
+                    if (dataDict.ContainsKey(date))
+                    {
+                        dailySalesData.Add(dataDict[date]);
+                    }
+                    else
+                    {
+                        dailySalesData.Add(new DailySalesData { Date = date, Amount = 0, Count = 0 });
+                    }
                 }
-                else
-                {
-                    dailySalesData.Add(new DailySalesData { Date = date, Amount = 0, Count = 0 });
-                }
+            }
+            else
+            {
+                // For "All Time", just add the dates that have data
+                dailySalesData = dataDict.Values.OrderBy(d => d.Date).ToList();
             }
         }
         catch { }
@@ -1205,6 +1337,22 @@ else
             }
             var cashierIdsInClause = string.Join(",", cashierParams);
 
+            // Build date filter conditionally
+            var dateFilter = "";
+            if (startDate.HasValue && endDate.HasValue)
+            {
+                dateFilter = "AND CAST(s.timestamps AS DATE) >= @StartDate AND CAST(s.timestamps AS DATE) <= @EndDate";
+            }
+            else if (startDate.HasValue)
+            {
+                dateFilter = "AND CAST(s.timestamps AS DATE) >= @StartDate";
+            }
+            else if (endDate.HasValue)
+            {
+                dateFilter = "AND CAST(s.timestamps AS DATE) <= @EndDate";
+            }
+            // If both are null (All Time), no date filter is applied
+
             var sql = $@"
                 SELECT TOP 5
                     p.name as product_name,
@@ -1218,8 +1366,7 @@ else
                 AND si.archives IS NULL
                 AND s.status = 'Completed'
                 AND s.user_id IN ({cashierIdsInClause})
-                AND CAST(s.timestamps AS DATE) >= @StartDate
-                AND CAST(s.timestamps AS DATE) <= @EndDate
+                {dateFilter}
                 AND EXISTS (
                     SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
                     WHERE dsv.cashier_user_id = s.user_id
@@ -1237,8 +1384,14 @@ else
                 cmd.Parameters.AddWithValue($"@CashierId{i}", cashierIds[i]);
             }
             cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
-            cmd.Parameters.AddWithValue("@StartDate", startDate ?? DateTime.Today.AddDays(-30));
-            cmd.Parameters.AddWithValue("@EndDate", endDate ?? DateTime.Today);
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+            }
 
             using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
@@ -1274,6 +1427,22 @@ else
             }
             var cashierIdsInClause = string.Join(",", cashierParams);
 
+            // Build date filter conditionally
+            var dateFilter = "";
+            if (startDate.HasValue && endDate.HasValue)
+            {
+                dateFilter = "AND CAST(s.timestamps AS DATE) >= @StartDate AND CAST(s.timestamps AS DATE) <= @EndDate";
+            }
+            else if (startDate.HasValue)
+            {
+                dateFilter = "AND CAST(s.timestamps AS DATE) >= @StartDate";
+            }
+            else if (endDate.HasValue)
+            {
+                dateFilter = "AND CAST(s.timestamps AS DATE) <= @EndDate";
+            }
+            // If both are null (All Time), no date filter is applied
+
             var sql = $@"
                 SELECT TOP 5
                     COALESCE(u.name, (LTRIM(RTRIM(ISNULL(u.fname,''))) + ' ' + LTRIM(RTRIM(ISNULL(u.lname,''))))) as cashier_name,
@@ -1285,8 +1454,7 @@ else
                 AND s.status = 'Completed'
                 AND s.user_id IN ({cashierIdsInClause})
                 AND u.archived_at IS NULL
-                AND CAST(s.timestamps AS DATE) >= @StartDate
-                AND CAST(s.timestamps AS DATE) <= @EndDate
+                {dateFilter}
                 AND EXISTS (
                     SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
                     WHERE dsv.cashier_user_id = s.user_id
@@ -1304,8 +1472,14 @@ else
                 cmd.Parameters.AddWithValue($"@CashierId{i}", cashierIds[i]);
             }
             cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
-            cmd.Parameters.AddWithValue("@StartDate", startDate ?? DateTime.Today.AddDays(-30));
-            cmd.Parameters.AddWithValue("@EndDate", endDate ?? DateTime.Today);
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+            }
 
             using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
@@ -1665,29 +1839,72 @@ else
         StateHasChanged();
     }
 
-    private async void HandleFromDateChange(ChangeEventArgs e)
+    private async Task HandleFromDateChange(ChangeEventArgs e)
     {
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            startDate = date;
+            var today = DateTime.Today;
+            // Prevent future dates - cap at today
+            if (date.Date > today)
+            {
+                startDate = today;
+            }
+            else
+            {
+                startDate = date.Date;
+            }
             selectedDateRange = "";
+            
+            // If end date is before start date, adjust it
+            if (endDate.HasValue && endDate.Value < startDate.Value)
+            {
+                endDate = startDate.Value;
+            }
         }
         else if (string.IsNullOrWhiteSpace(value))
         {
             startDate = null;
             selectedDateRange = "";
         }
+        
         await LoadDashboardData();
         StateHasChanged();
     }
 
-    private async void HandleToDateChange(ChangeEventArgs e)
+    private async Task HandleToDateChange(ChangeEventArgs e)
     {
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            endDate = date;
+            var today = DateTime.Today;
+            var parsedDate = date.Date;
+            
+            // Prevent future dates - cap at today
+            if (parsedDate > today)
+            {
+                parsedDate = today;
+            }
+            
+            // Ensure end date is never before start date - if it is, set it to startDate or today (whichever is earlier)
+            if (startDate.HasValue)
+            {
+                // If end date is before start date, set it to start date
+                if (parsedDate < startDate.Value)
+                {
+                    endDate = startDate.Value;
+                }
+                else
+                {
+                    endDate = parsedDate;
+                }
+            }
+            else
+            {
+                // If no start date is set, allow any date up to today
+                endDate = parsedDate;
+            }
+            
             selectedDateRange = "";
         }
         else if (string.IsNullOrWhiteSpace(value))
@@ -1695,12 +1912,23 @@ else
             endDate = null;
             selectedDateRange = "";
         }
+        
         await LoadDashboardData();
         StateHasChanged();
     }
 
     private async void ClearDateFilter()
+        {
+            selectedDateRange = "";
+        startDate = null;
+        endDate = null;
+        await LoadDashboardData();
+        StateHasChanged();
+    }
+
+    private async Task ClearAllFilters()
     {
+        searchTerm = string.Empty;
         selectedDateRange = "";
         startDate = null;
         endDate = null;
@@ -1710,6 +1938,10 @@ else
 
     private async Task PrintDashboard()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         try
         {
             if (AuthState.CurrentUser != null)

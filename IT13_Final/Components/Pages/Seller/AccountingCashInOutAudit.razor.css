@@ -262,6 +262,11 @@
     border-radius: 12px;
     padding: 20px;
     transition: all 0.2s;
+    overflow: hidden;
+    min-height: 80px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
 }
 
 .summary-box:hover {
@@ -281,9 +286,32 @@
 }
 
 .summary-value {
-    font-size: 24px;
+    font-size: clamp(10px, 1.2vw, 24px);
     font-weight: 700;
     color: #1a1a1a;
+    letter-spacing: -0.5px;
+    line-height: 1.2;
+    word-break: break-word;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    display: block;
+    white-space: nowrap;
+    min-height: 1.2em;
+    transition: font-size 0.2s ease;
+}
+
+/* Dynamic font size classes based on content length */
+.summary-value-xs {
+    font-size: clamp(8px, 0.9vw, 14px) !important;
+}
+
+.summary-value-sm {
+    font-size: clamp(9px, 1vw, 16px) !important;
+}
+
+.summary-value-md {
+    font-size: clamp(10px, 1.1vw, 18px) !important;
 }
 
 /* ========================================

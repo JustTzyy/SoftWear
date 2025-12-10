@@ -44,7 +44,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -66,12 +66,6 @@
                min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
                max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleEndDateChange" />
-        <button class="filter-btn" @onclick="ApplyDateFilter">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
             <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
@@ -301,27 +295,27 @@
                     <div class="form-grid">
                         <div class="form-field">
                             <label class="field-label">Company Name <span class="required-asterisk">*</span></label>
-                            <InputText class="form-input" @bind-Value="_addSupplierModel.CompanyName" placeholder="Enter company name" />
+                            <InputText id="add-supplier-company-input" class="form-input" @bind-Value="_addSupplierModel.CompanyName" @oninput="FilterAddCompanyNameInput" placeholder="Enter company name" />
                             <ValidationMessage For="@(() => _addSupplierModel.CompanyName)" />
                         </div>
                         <div class="form-field">
-                            <label class="field-label">Contact Person</label>
-                            <InputText class="form-input" @bind-Value="_addSupplierModel.ContactPerson" @oninput="FilterAddContactPersonInput" placeholder="Enter contact person name" />
+                            <label class="field-label">Contact Person <span class="required-asterisk">*</span></label>
+                            <InputText id="add-supplier-contact-input" class="form-input" @bind-Value="_addSupplierModel.ContactPerson" @oninput="FilterAddContactPersonInput" placeholder="Enter contact person name" />
                         </div>
                         <div class="form-field">
-                            <label class="field-label">Email</label>
+                            <label class="field-label">Email <span class="required-asterisk">*</span></label>
                             <InputText class="form-input" type="email" @bind-Value="_addSupplierModel.Email" @oninput="FilterAddEmailInput" placeholder="Enter email address" />
                         </div>
                         <div class="form-field">
-                            <label class="field-label">Contact Number</label>
+                            <label class="field-label">Contact Number <span class="required-asterisk">*</span></label>
                             <InputText class="form-input" @bind-Value="_addSupplierModel.ContactNumber" @oninput="FilterAddContactNumberInput" placeholder="09123456789" maxlength="11" />
                         </div>
                         <div class="form-field full-width">
-                            <label class="field-label">Street Address</label>
-                            <InputText class="form-input" @bind-Value="_addSupplierAddressModel.Street" placeholder="Enter street address" />
+                            <label class="field-label">Street Address <span class="required-asterisk">*</span></label>
+                            <InputText id="add-supplier-street-input" class="form-input" @bind-Value="_addSupplierAddressModel.Street" placeholder="Enter street address" />
                         </div>
                         <div class="form-field">
-                            <label class="field-label">Province</label>
+                            <label class="field-label">Province <span class="required-asterisk">*</span></label>
                             <InputSelect class="form-input" @bind-Value="_addSupplierAddressModel.Province" @bind-Value:after="OnAddProvinceChanged">
                                 <option value="">Select Province</option>
                                 @foreach (var province in _provinces)
@@ -331,7 +325,7 @@
                             </InputSelect>
                         </div>
                         <div class="form-field">
-                            <label class="field-label">City</label>
+                            <label class="field-label">City <span class="required-asterisk">*</span></label>
                             <InputSelect class="form-input" @bind-Value="_addSupplierAddressModel.City" @bind-Value:after="OnAddCityChanged">
                                 <option value="">Select City</option>
                                 @foreach (var city in _addSupplierCities)
@@ -385,27 +379,27 @@
                     <div class="form-grid">
                         <div class="form-field">
                             <label class="field-label">Company Name <span class="required-asterisk">*</span></label>
-                            <InputText class="form-input" @bind-Value="_updateSupplierModel.CompanyName" placeholder="Enter company name" />
+                            <InputText id="update-supplier-company-input" class="form-input" @bind-Value="_updateSupplierModel.CompanyName" @oninput="FilterUpdateCompanyNameInput" placeholder="Enter company name" />
                             <ValidationMessage For="@(() => _updateSupplierModel.CompanyName)" />
                         </div>
                         <div class="form-field">
-                            <label class="field-label">Contact Person</label>
-                            <InputText class="form-input" @bind-Value="_updateSupplierModel.ContactPerson" @oninput="FilterUpdateContactPersonInput" placeholder="Enter contact person name" />
+                            <label class="field-label">Contact Person <span class="required-asterisk">*</span></label>
+                            <InputText id="update-supplier-contact-input" class="form-input" @bind-Value="_updateSupplierModel.ContactPerson" @oninput="FilterUpdateContactPersonInput" placeholder="Enter contact person name" />
                         </div>
                         <div class="form-field">
-                            <label class="field-label">Email</label>
+                            <label class="field-label">Email <span class="required-asterisk">*</span></label>
                             <InputText class="form-input" type="email" @bind-Value="_updateSupplierModel.Email" @oninput="FilterUpdateEmailInput" placeholder="Enter email address" />
                         </div>
                         <div class="form-field">
-                            <label class="field-label">Contact Number</label>
+                            <label class="field-label">Contact Number <span class="required-asterisk">*</span></label>
                             <InputText class="form-input" @bind-Value="_updateSupplierModel.ContactNumber" @oninput="FilterUpdateContactNumberInput" placeholder="09123456789" maxlength="11" />
                         </div>
                         <div class="form-field full-width">
-                            <label class="field-label">Street Address</label>
-                            <InputText class="form-input" @bind-Value="_updateSupplierAddressModel.Street" placeholder="Enter street address" />
+                            <label class="field-label">Street Address <span class="required-asterisk">*</span></label>
+                            <InputText id="update-supplier-street-input" class="form-input" @bind-Value="_updateSupplierAddressModel.Street" placeholder="Enter street address" />
                         </div>
                         <div class="form-field">
-                            <label class="field-label">Province</label>
+                            <label class="field-label">Province <span class="required-asterisk">*</span></label>
                             <InputSelect class="form-input" @bind-Value="_updateSupplierAddressModel.Province" @bind-Value:after="OnUpdateProvinceChanged">
                                 <option value="">Select Province</option>
                                 @foreach (var province in _provinces)
@@ -415,7 +409,7 @@
                             </InputSelect>
                         </div>
                         <div class="form-field">
-                            <label class="field-label">City</label>
+                            <label class="field-label">City <span class="required-asterisk">*</span></label>
                             <InputSelect class="form-input" @bind-Value="_updateSupplierAddressModel.City" @bind-Value:after="OnUpdateCityChanged">
                                 <option value="">Select City</option>
                                 @foreach (var city in _updateSupplierCities)
@@ -597,7 +591,7 @@
         Nav.NavigateTo("/seller/Archive_Supplier_Record");
     }
 
-    private void HandleAddSupplier()
+    private async Task HandleAddSupplier()
     {
         _addSupplierModel = new AddSupplierModel();
         _addSupplierAddressModel.Id = 0;
@@ -608,6 +602,11 @@
         _addSupplierCities = new List<string>();
         _addSupplierEditContext = new EditContext(_addSupplierModel);
         showAddSupplierModal = true;
+        StateHasChanged();
+        await Task.Delay(100);
+        await JSRuntime.InvokeVoidAsync("setupCategoryInputFilter", "add-supplier-company-input", false);
+        await JSRuntime.InvokeVoidAsync("setupCategoryInputFilter", "add-supplier-contact-input", false);
+        await JSRuntime.InvokeVoidAsync("setupAddressFilter", "add-supplier-street-input");
     }
 
     private void CloseAddSupplierModal()
@@ -652,10 +651,57 @@
         }
     }
 
+    private void FilterAddCompanyNameInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        // Only allow letters, spaces, and digits - no special characters
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || char.IsDigit(c)).ToArray());
+        
+        // Auto-capitalize: first letter uppercase, rest lowercase unless after space
+        if (!string.IsNullOrEmpty(filtered))
+        {
+            var chars = filtered.ToCharArray();
+            bool capitalizeNext = true;
+            
+            for (int i = 0; i < chars.Length; i++)
+            {
+                if (char.IsLetter(chars[i]))
+                {
+                    if (capitalizeNext)
+                    {
+                        chars[i] = char.ToUpper(chars[i]);
+                        capitalizeNext = false;
+                    }
+                    else
+                    {
+                        chars[i] = char.ToLower(chars[i]);
+                    }
+                }
+                else if (chars[i] == ' ')
+                {
+                    capitalizeNext = true;
+                }
+            }
+            
+            filtered = new string(chars);
+        }
+        
+        _addSupplierModel.CompanyName = filtered;
+        
+        // Notify EditContext of field change
+        if (_addSupplierEditContext != null)
+        {
+            _addSupplierEditContext.NotifyFieldChanged(_addSupplierEditContext.Field(nameof(_addSupplierModel.CompanyName)));
+        }
+        
+        StateHasChanged();
+    }
+
     private void FilterAddContactPersonInput(ChangeEventArgs e)
     {
         var val = e.Value?.ToString() ?? string.Empty;
-        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        // Only allow letters and spaces - no special characters or digits
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ').ToArray());
         
         // Auto-capitalize: first letter uppercase, rest lowercase unless after space
         if (!string.IsNullOrEmpty(filtered))
@@ -733,10 +779,57 @@
         StateHasChanged();
     }
 
+    private void FilterUpdateCompanyNameInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        // Only allow letters, spaces, and digits - no special characters
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || char.IsDigit(c)).ToArray());
+        
+        // Auto-capitalize: first letter uppercase, rest lowercase unless after space
+        if (!string.IsNullOrEmpty(filtered))
+        {
+            var chars = filtered.ToCharArray();
+            bool capitalizeNext = true;
+            
+            for (int i = 0; i < chars.Length; i++)
+            {
+                if (char.IsLetter(chars[i]))
+                {
+                    if (capitalizeNext)
+                    {
+                        chars[i] = char.ToUpper(chars[i]);
+                        capitalizeNext = false;
+                    }
+                    else
+                    {
+                        chars[i] = char.ToLower(chars[i]);
+                    }
+                }
+                else if (chars[i] == ' ')
+                {
+                    capitalizeNext = true;
+                }
+            }
+            
+            filtered = new string(chars);
+        }
+        
+        _updateSupplierModel.CompanyName = filtered;
+        
+        // Notify EditContext of field change
+        if (_updateSupplierEditContext != null)
+        {
+            _updateSupplierEditContext.NotifyFieldChanged(_updateSupplierEditContext.Field(nameof(_updateSupplierModel.CompanyName)));
+        }
+        
+        StateHasChanged();
+    }
+
     private void FilterUpdateContactPersonInput(ChangeEventArgs e)
     {
         var val = e.Value?.ToString() ?? string.Empty;
-        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.').ToArray());
+        // Only allow letters and spaces - no special characters or digits
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ').ToArray());
         
         // Auto-capitalize: first letter uppercase, rest lowercase unless after space
         if (!string.IsNullOrEmpty(filtered))
@@ -851,6 +944,10 @@
             _updateSupplierEditContext = new EditContext(_updateSupplierModel);
             showUpdateSupplierModal = true;
             StateHasChanged();
+            await Task.Delay(100);
+            await JSRuntime.InvokeVoidAsync("setupCategoryInputFilter", "update-supplier-company-input", false);
+            await JSRuntime.InvokeVoidAsync("setupCategoryInputFilter", "update-supplier-contact-input", false);
+            await JSRuntime.InvokeVoidAsync("setupAddressFilter", "update-supplier-street-input");
         }
         catch (Exception)
         {
@@ -1045,8 +1142,23 @@
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            filterStartDate = date;
+            var today = DateTime.Today;
+            // Prevent future dates - cap at today
+            if (date.Date > today)
+            {
+                filterStartDate = today;
+            }
+            else
+            {
+                filterStartDate = date.Date;
+            }
             selectedDateRange = "";
+            
+            // If end date is before start date, adjust it
+            if (filterEndDate.HasValue && filterEndDate.Value < filterStartDate.Value)
+            {
+                filterEndDate = filterStartDate.Value;
+            }
         }
         else if (string.IsNullOrWhiteSpace(value))
         {
@@ -1060,7 +1172,34 @@
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            filterEndDate = date;
+            var today = DateTime.Today;
+            var parsedDate = date.Date;
+            
+            // Prevent future dates - cap at today
+            if (parsedDate > today)
+            {
+                parsedDate = today;
+            }
+            
+            // Ensure end date is never before start date - if it is, set it to startDate or today (whichever is earlier)
+            if (filterStartDate.HasValue)
+            {
+                // If end date is before start date, set it to start date
+                if (parsedDate < filterStartDate.Value)
+                {
+                    filterEndDate = filterStartDate.Value;
+                }
+                else
+                {
+                    filterEndDate = parsedDate;
+                }
+            }
+            else
+            {
+                // If no start date is set, allow any date up to today
+                filterEndDate = parsedDate;
+            }
+            
             selectedDateRange = "";
         }
         else if (string.IsNullOrWhiteSpace(value))

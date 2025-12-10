@@ -1,10 +1,11 @@
 @inject IT13_Final.Services.Auth.AuthState AuthState
 @inject IT13_Final.Services.Audit.IHistoryService HistoryService
 @inject NavigationManager Nav
+@inject IJSRuntime JSRuntime
 @inherits LayoutComponentBase
 @implements IDisposable
 
-<div class="grid min-h-screen transition-all duration-300 ease-in-out" style="grid-template-columns: @(sidebarCollapsed ? "80px" : "260px") 1fr; background: #F5F5F5;">
+<div class="grid min-h-screen transition-all duration-300 ease-in-out" style="grid-template-columns: @(sidebarCollapsed ? "80px" : "260px") 1fr; background: #e5e7eb;">
     <aside class="bg-white transition-all duration-300 ease-in-out overflow-hidden" style="border-right: 1px solid #E0E0E0; position: sticky; top: 0; height: 100vh;">
         <div class="flex items-start gap-3 py-4 px-4 cursor-pointer hover:bg-gray-50 transition-colors duration-200" style="min-height: 64px;" @onclick="ToggleSidebar" title="Toggle sidebar">
             <a href="/admin/dashboard" class="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style="border: 2px solid #5C7CFA; padding: 6px; background-color: #1a2332;" @onclick:stopPropagation>
@@ -28,7 +29,7 @@
                 }
             </a>
 
-            <button class="@GetUserMgmtButtonClass()" @onclick="() => userMgmtOpen = !userMgmtOpen" aria-expanded="@userMgmtOpen" title="User Management">
+            <button class="@GetUserMgmtButtonClass()" @onclick="ToggleUserMgmt" aria-expanded="@userMgmtOpen" title="User Management">
                 <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/admin/Admin_Record", "/admin/Seller_Record", "/admin/Permission_Requests")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                 </svg>
@@ -57,7 +58,7 @@
                 </div>
             }
 
-            <button class="@GetReportsButtonClass()" @onclick="() => reportsOpen = !reportsOpen" aria-expanded="@reportsOpen" title="Reports">
+            <button class="@GetReportsButtonClass()" @onclick="ToggleReports" aria-expanded="@reportsOpen" title="Reports">
                 <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/admin/fee-summary", "/admin/seller-fees", "/admin/monthly-collection", "/admin/audit-logs")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
@@ -144,6 +145,19 @@
     private bool profileOpen;
     private bool sidebarCollapsed = false;
     private string currentUri = string.Empty;
+
+    // Accordion behavior: close other dropdowns when one is opened
+    private void ToggleUserMgmt()
+    {
+        userMgmtOpen = !userMgmtOpen;
+        if (userMgmtOpen) reportsOpen = false;
+    }
+
+    private void ToggleReports()
+    {
+        reportsOpen = !reportsOpen;
+        if (reportsOpen) userMgmtOpen = false;
+    }
 
     protected override void OnInitialized()
     {
@@ -307,6 +321,10 @@
 
     private async void OnSignOut()
     {
+        // Confirm before logging out
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmLogout");
+        if (!confirmed) return;
+
         if (AuthState.CurrentUser is not null)
         {
             try { await HistoryService.LogAsync(AuthState.CurrentUser.Id, "logout", "Authentication", "User signed out"); } catch {}

@@ -75,7 +75,7 @@
             <option value="in-stock">In Stock</option>
             <option value="low-stock">Low Stock</option>
         </select>
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -97,12 +97,6 @@
                min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
                max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleEndDateChange" />
-        <button class="filter-btn" @onclick="ApplyFilters">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveFilters)
         {
             <button class="clear-btn" @onclick="ClearFilters" title="Clear filters">
@@ -1007,7 +1001,7 @@
         await LoadInventoriesAsync();
     }
 
-    private void HandleStartDateChange(ChangeEventArgs e)
+    private async Task HandleStartDateChange(ChangeEventArgs e)
     {
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
@@ -1020,9 +1014,10 @@
             startDate = null;
             selectedDateRange = "";
         }
+        await ApplyFilters();
     }
 
-    private void HandleEndDateChange(ChangeEventArgs e)
+    private async Task HandleEndDateChange(ChangeEventArgs e)
     {
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
@@ -1035,9 +1030,10 @@
             endDate = null;
             selectedDateRange = "";
         }
+        await ApplyFilters();
     }
 
-    private void HandleDateRangeChange()
+    private async Task HandleDateRangeChange()
     {
         var now = DateTime.Now;
         switch (selectedDateRange)
@@ -1071,6 +1067,7 @@
                 endDate = now.Date;
                 break;
         }
+        await ApplyFilters();
     }
 
     private async Task ApplyFilters()
@@ -1139,6 +1136,10 @@
 
     private async Task PrintReport()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         try
         {
             isGeneratingPDF = true;

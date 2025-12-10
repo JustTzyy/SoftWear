@@ -57,7 +57,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -79,12 +79,6 @@
                min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
                max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleToDateChange" />
-        <button class="filter-btn" @onclick="ApplyDateFilter">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
             <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
@@ -138,7 +132,6 @@
                     <th>Created By</th>
                     <th>Total Amount</th>
                     <th>Expected Delivery</th>
-                    <th>Created At</th>
                     <th>Status</th>
                     <th>Actions</th>
                 </tr>
@@ -147,13 +140,13 @@
                 @if (isLoading)
                 {
                     <tr>
-                        <td colspan="8" class="loading-cell">Loading pending purchase orders...</td>
+                        <td colspan="7" class="loading-cell">Loading pending purchase orders...</td>
                     </tr>
                 }
                 else if (pendingPurchaseOrders.Count == 0)
                 {
                     <tr>
-                        <td colspan="8" class="empty-cell">No pending purchase orders found for this filter.</td>
+                        <td colspan="7" class="empty-cell">No pending purchase orders found for this filter.</td>
                     </tr>
                 }
                 else
@@ -169,18 +162,25 @@
                             <td>
                                 @if (po.ExpectedDeliveryDate.HasValue)
                                 {
-                                    @po.ExpectedDeliveryDate.Value.ToString("MMM dd, yyyy")
+                                    <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                                        <span>@po.ExpectedDeliveryDate.Value.ToString("MMM dd, yyyy")</span>
+                                        @{
+                                            var deliveryStatus = GetDeliveryStatus(po.ExpectedDeliveryDate.Value, po.Status);
+                                        }
+                                        @if (deliveryStatus == "overdue")
+                                        {
+                                            <span class="overdue-badge" title="Overdue - Expected delivery date has passed">⚠️ Overdue</span>
+                                        }
+                                        else if (deliveryStatus == "due-today")
+                                        {
+                                            <span class="due-today-badge" title="Due Today - Expected delivery is today">⚠️ Due Today</span>
+                                        }
+                                    </div>
                                 }
                                 else
                                 {
                                     <span>N/A</span>
                                 }
-                            </td>
-                            <td>
-                                <div class="timestamp-info">
-                                    <div class="timestamp-date">@po.CreatedAt.ToString("MMM dd, yyyy")</div>
-                                    <div class="timestamp-time">@po.CreatedAt.ToString("HH:mm:ss")</div>
-                                </div>
                             </td>
                             <td>
                                 <span class="status-text status-text-pending">@po.Status</span>
@@ -508,6 +508,10 @@
 
     private async Task PrintReport()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         try
         {
             isGeneratingPDF = true;
@@ -869,6 +873,23 @@
             currentPage = page;
             await LoadPendingPurchaseOrders();
         }
+    }
+
+    private string GetDeliveryStatus(DateTime expectedDate, string status)
+    {
+        // Don't show warnings for completed or cancelled orders
+        if (status == "Completed" || status == "Cancelled")
+            return "normal";
+        
+        var today = DateTime.Today;
+        var expectedDateOnly = expectedDate.Date;
+        
+        if (expectedDateOnly < today)
+            return "overdue";
+        else if (expectedDateOnly == today)
+            return "due-today";
+        else
+            return "normal";
     }
 
     public void Dispose()

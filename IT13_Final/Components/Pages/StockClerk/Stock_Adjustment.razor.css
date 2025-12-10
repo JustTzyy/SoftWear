@@ -308,13 +308,16 @@
     justify-content: space-between;
     align-items: center;
     gap: 16px;
+    padding: 8px 0;
 }
 
 .detail-label {
     font-size: 14px;
     font-weight: 500;
     color: #6B7280;
-    min-width: 140px;
+    min-width: 180px;
+    text-align: left;
+    flex-shrink: 0;
 }
 
 .detail-value {
@@ -323,6 +326,7 @@
     color: #1F2937;
     text-align: right;
     flex: 1;
+    min-width: 0;
 }
 
 .modal-title {

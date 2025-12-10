@@ -21,6 +21,7 @@
 main.p-6 {
     overflow-y: auto;
     overflow-x: hidden;
+    background: #e5e7eb;
 }
 
 /* Responsive Layout */

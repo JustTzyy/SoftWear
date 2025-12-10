@@ -9,6 +9,7 @@
 @using Microsoft.Data.SqlClient
 @using Microsoft.AspNetCore.Components.Forms
 @using System.Linq
+@using System.Linq
 @implements IDisposable
 
 @* Welcome Header *@
@@ -54,7 +55,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -182,11 +183,11 @@
                     {
                         @foreach (var invoice in invoices)
                         {
-                            <tr>
+                            <tr class="clickable-row" @onclick='() => ViewInvoiceDetailsForItem(invoice)'>
                                 <td title="@invoice.InvoiceNumber">
                                     @if (invoice.SourceType == "StockIn")
                                     {
-                                        <span>Stock-In Group - @invoice.SupplierName (@invoice.InvoiceDate.ToString("MMM dd, yyyy"))</span>
+                                        <span>Stock-In Group</span>
                                     }
                                     else
                                     {
@@ -203,7 +204,7 @@
                                 <td style="color: #10B981;">₱@invoice.TotalPaid.ToString("N2")</td>
                                 <td style="font-weight: 600; color: @(invoice.RemainingBalance > 0 ? "#dc3545" : "#10B981");">₱@invoice.RemainingBalance.ToString("N2")</td>
                                 <td>
-                                    <span class="status-text @(invoice.PaymentStatus == "Paid" ? "status-text-approved" : invoice.PaymentStatus == "Unpaid" ? "status-text-pending" : "status-text-pending")">@invoice.PaymentStatus</span>
+                                    <span class="status-text @(invoice.PaymentStatus == "Paid" ? "status-text-approved" : invoice.PaymentStatus == "Unpaid" ? "status-text-pending" : invoice.PaymentStatus == "Partially Paid" ? "status-text-partial" : "status-text-pending")">@invoice.PaymentStatus</span>
                                 </td>
                                 <td>@invoice.SourceType</td>
                                 <td class="actions-cell" @onclick:stopPropagation="true">
@@ -213,12 +214,6 @@
                                             <circle cx="9" cy="7" r="4"></circle>
                                             <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
                                             <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                                        </svg>
-                                    </button>
-                                    <button class="action-btn approve-btn" @onclick='() => ViewInvoiceDetailsForItem(invoice)' title="View Details" disabled="@isProcessing">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                                            <circle cx="12" cy="12" r="3"></circle>
                                         </svg>
                                     </button>
                                 </td>
@@ -301,29 +296,60 @@
 
                 <div class="form-grid">
                     <div class="form-field">
-                        <label class="field-label">Amount Paid *</label>
+                        <label class="field-label">Amount Paid <span class="required-asterisk">*</span></label>
                         <input type="number" class="form-input" @bind="paymentForm.AmountPaid" step="0.01" min="0" placeholder="0.00" />
+                        <small class="field-hint">Enter the payment amount</small>
                     </div>
 
                     <div class="form-field">
-                        <label class="field-label">Payment Method *</label>
-                        <select class="form-input" @bind="paymentForm.PaymentMethod">
+                        <label class="field-label">Payment Method <span class="required-asterisk">*</span></label>
+                        <select class="form-input" @bind="paymentForm.PaymentMethod" @bind:after="HandlePaymentMethodChange">
                             <option value="">Select Payment Method</option>
                             <option value="Cash">Cash</option>
                             <option value="GCash">GCash</option>
-                            <option value="Bank">Bank</option>
                         </select>
+                        <small class="field-hint">Choose how the payment was made</small>
                     </div>
 
                     <div class="form-field">
-                        <label class="field-label">Payment Date *</label>
+                        <label class="field-label">Payment Date <span class="required-asterisk">*</span></label>
                         <input type="date" class="form-input" @bind="paymentForm.PaymentDate" max="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                        <small class="field-hint">Date when payment was received</small>
                     </div>
 
-                    <div class="form-field">
-                        <label class="field-label">Reference Number</label>
-                        <input type="text" class="form-input" @bind="paymentForm.ReferenceNumber" placeholder="Enter reference number..." />
-                    </div>
+                    @if (paymentForm.PaymentMethod == "GCash")
+                    {
+                        <div class="form-field">
+                            <label class="field-label">Reference Number <span class="required-asterisk">*</span></label>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <input type="text" 
+                                       class="form-input" 
+                                       value="@paymentForm.ReferenceNumber"
+                                       @oninput="HandleReferenceNumberInput"
+                                       maxlength="12"
+                                       placeholder="Auto-generated or enter manually..." 
+                                       style="font-family: monospace; letter-spacing: 1px; text-transform: uppercase; flex: 1;" />
+                                <button type="button" 
+                                        class="btn-secondary" 
+                                        @onclick="RegenerateReferenceNumber"
+                                        title="Generate new reference number"
+                                        style="padding: 12px 16px; white-space: nowrap; font-size: 13px;">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px; display: inline-block; vertical-align: middle; margin-right: 4px;">
+                                        <polyline points="23 4 23 10 17 10"></polyline>
+                                        <polyline points="1 20 1 14 7 14"></polyline>
+                                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                                    </svg>
+                                    Regenerate
+                                </button>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+                                <small class="field-hint">GCash transaction reference (12 characters max)</small>
+                                <small class="field-hint" style="color: @(string.IsNullOrWhiteSpace(paymentForm.ReferenceNumber) ? "#ef4444" : paymentForm.ReferenceNumber.Length == 12 ? "#10b981" : "#6b7280"); font-weight: 600;">
+                                    @(string.IsNullOrWhiteSpace(paymentForm.ReferenceNumber) ? "0" : paymentForm.ReferenceNumber.Length)/12
+                                </small>
+                            </div>
+                        </div>
+                    }
 
                     <div class="form-field full-width">
                         <label class="field-label">Notes</label>
@@ -397,7 +423,7 @@
                     <div class="info-row">
                         <span class="info-label">Status:</span>
                         <span class="info-value">
-                            <span class="status-text @(selectedInvoice.PaymentStatus == "Paid" ? "status-text-approved" : selectedInvoice.PaymentStatus == "Unpaid" ? "status-text-pending" : "status-text-pending")">@selectedInvoice.PaymentStatus</span>
+                            <span class="status-text @(selectedInvoice.PaymentStatus == "Paid" ? "status-text-approved" : selectedInvoice.PaymentStatus == "Unpaid" ? "status-text-pending" : selectedInvoice.PaymentStatus == "Partially Paid" ? "status-text-partial" : "status-text-pending")">@selectedInvoice.PaymentStatus</span>
                         </span>
                     </div>
                     @if (!string.IsNullOrEmpty(selectedInvoice.Description))
@@ -752,6 +778,64 @@
         StateHasChanged();
     }
 
+    private void HandlePaymentMethodChange()
+    {
+        if (paymentForm.PaymentMethod == "GCash")
+        {
+            // Auto-generate reference number if empty
+            if (string.IsNullOrWhiteSpace(paymentForm.ReferenceNumber))
+            {
+                paymentForm.ReferenceNumber = GenerateGCashReference();
+            }
+            // Limit to 12 characters
+            if (!string.IsNullOrWhiteSpace(paymentForm.ReferenceNumber) && paymentForm.ReferenceNumber.Length > 12)
+            {
+                paymentForm.ReferenceNumber = paymentForm.ReferenceNumber.Substring(0, 12);
+            }
+            // Convert to uppercase
+            if (!string.IsNullOrWhiteSpace(paymentForm.ReferenceNumber))
+            {
+                paymentForm.ReferenceNumber = paymentForm.ReferenceNumber.ToUpperInvariant();
+            }
+        }
+        else if (paymentForm.PaymentMethod == "Cash")
+        {
+            // Clear reference number for Cash payments
+            paymentForm.ReferenceNumber = null;
+        }
+        StateHasChanged();
+    }
+
+    private void HandleReferenceNumberInput(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString() ?? string.Empty;
+        // Limit to 12 characters
+        if (value.Length > 12)
+        {
+            value = value.Substring(0, 12);
+        }
+        // Convert to uppercase and remove spaces
+        paymentForm.ReferenceNumber = value.ToUpperInvariant().Replace(" ", "");
+        StateHasChanged();
+    }
+
+    private void RegenerateReferenceNumber()
+    {
+        paymentForm.ReferenceNumber = GenerateGCashReference();
+        StateHasChanged();
+    }
+
+    private string GenerateGCashReference()
+    {
+        // Generate a 12-character reference number
+        // Format: First 2 chars = "GC", then 10 random alphanumeric
+        var random = new Random();
+        const string chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        var randomPart = new string(Enumerable.Repeat(chars, 10)
+            .Select(s => s[random.Next(s.Length)]).ToArray());
+        return "GC" + randomPart;
+    }
+
     private void ClosePaymentModal()
     {
         showPaymentModal = false;
@@ -775,6 +859,31 @@
         {
             await JSRuntime.InvokeVoidAsync("alert", "Please select a payment method.");
             return;
+        }
+
+        // Validate GCash reference number
+        if (paymentForm.PaymentMethod == "GCash")
+        {
+            if (string.IsNullOrWhiteSpace(paymentForm.ReferenceNumber))
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Reference number is required for GCash payments.");
+                return;
+            }
+            if (paymentForm.ReferenceNumber.Length > 12)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Reference number must be 12 characters or less.");
+                return;
+            }
+            // Auto-generate if still empty (shouldn't happen, but safety check)
+            if (string.IsNullOrWhiteSpace(paymentForm.ReferenceNumber))
+            {
+                paymentForm.ReferenceNumber = GenerateGCashReference();
+            }
+        }
+        else if (paymentForm.PaymentMethod == "Cash")
+        {
+            // Clear reference number for Cash payments
+            paymentForm.ReferenceNumber = null;
         }
 
         if (selectedInvoice != null && paymentForm.AmountPaid > selectedInvoice.RemainingBalance)
@@ -889,6 +998,10 @@
 
     private async Task PrintReport()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         try
         {
             isGeneratingPDF = true;

@@ -43,7 +43,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -65,12 +65,6 @@
                min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
                max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleEndDateChange" />
-        <button class="filter-btn" @onclick="ApplyDateFilter">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
             <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
@@ -307,7 +301,7 @@
                     <div class="form-grid">
                         <div class="form-field">
                             <label class="field-label">Product Name <span class="required-asterisk">*</span></label>
-                            <InputText class="form-input" @bind-Value="_addProductModel.Name" @oninput="FilterAddProductNameInput" placeholder="e.g., Classic T-Shirt" />
+                            <InputText id="add-product-name-input" class="form-input" @bind-Value="_addProductModel.Name" @oninput="FilterAddProductNameInput" placeholder="e.g., Classic T-Shirt" />
                             <ValidationMessage For="@(() => _addProductModel.Name)" />
                         </div>
                         <div class="form-field">
@@ -322,11 +316,11 @@
                             <ValidationMessage For="@(() => _addProductModel.CategoryId)" />
                         </div>
                         <div class="form-field full-width">
-                            <label class="field-label">Description (Optional)</label>
-                            <InputTextArea class="form-textarea" @bind-Value="_addProductModel.Description" placeholder="Enter product description" rows="3" />
+                            <label class="field-label">Description</label>
+                            <InputTextArea id="add-product-description-input" class="form-textarea" @bind-Value="_addProductModel.Description" @oninput="FilterAddProductDescriptionInput" placeholder="Enter product description" rows="3" />
                         </div>
                         <div class="form-field full-width">
-                            <label class="field-label">Product Image (Optional)</label>
+                            <label class="field-label">Product Image</label>
                             <div class="image-upload-container">
                                 <InputFile OnChange="HandleAddImageSelected" class="file-input" id="addImageInput" accept="image/*" />
                                 <label for="addImageInput" class="file-input-label">
@@ -394,7 +388,7 @@
                     <div class="form-grid">
                         <div class="form-field">
                             <label class="field-label">Product Name <span class="required-asterisk">*</span></label>
-                            <InputText class="form-input" @bind-Value="_updateProductModel.Name" @oninput="FilterUpdateProductNameInput" placeholder="e.g., Classic T-Shirt" />
+                            <InputText id="update-product-name-input" class="form-input" @bind-Value="_updateProductModel.Name" @oninput="FilterUpdateProductNameInput" placeholder="e.g., Classic T-Shirt" />
                             <ValidationMessage For="@(() => _updateProductModel.Name)" />
                         </div>
                         <div class="form-field">
@@ -409,11 +403,11 @@
                             <ValidationMessage For="@(() => _updateProductModel.CategoryId)" />
                         </div>
                         <div class="form-field full-width">
-                            <label class="field-label">Description (Optional)</label>
-                            <InputTextArea class="form-textarea" @bind-Value="_updateProductModel.Description" placeholder="Enter product description" rows="3" />
+                            <label class="field-label">Description</label>
+                            <InputTextArea id="update-product-description-input" class="form-textarea" @bind-Value="_updateProductModel.Description" @oninput="FilterUpdateProductDescriptionInput" placeholder="Enter product description" rows="3" />
                         </div>
                         <div class="form-field full-width">
-                            <label class="field-label">Product Image (Optional)</label>
+                            <label class="field-label">Product Image</label>
                             <div class="image-upload-container">
                                 <InputFile OnChange="HandleUpdateImageSelected" class="file-input" id="updateImageInput" accept="image/*" />
                                 <label for="updateImageInput" class="file-input-label">
@@ -634,7 +628,7 @@
         Nav.NavigateTo("/seller/Archive_Product_Record");
     }
 
-    private void HandleAddProduct()
+    private async Task HandleAddProduct()
     {
         _addProductModel = new AddProductModel();
         _addProductEditContext = new EditContext(_addProductModel);
@@ -643,6 +637,10 @@
         _addImagePreview = null;
         _addImageFileName = null;
         showAddProductModal = true;
+        StateHasChanged();
+        await Task.Delay(100);
+        await JSRuntime.InvokeVoidAsync("setupCategoryInputFilter", "add-product-name-input", false);
+        await JSRuntime.InvokeVoidAsync("setupCategoryInputFilter", "add-product-description-input", true);
     }
 
     private async Task HandleAddImageSelected(InputFileChangeEventArgs e)
@@ -749,6 +747,10 @@
                 _updateImagePreview = null;
                 _updateImageFileName = null;
                 showUpdateProductModal = true;
+                StateHasChanged();
+                await Task.Delay(100);
+                await JSRuntime.InvokeVoidAsync("setupCategoryInputFilter", "update-product-name-input", false);
+                await JSRuntime.InvokeVoidAsync("setupCategoryInputFilter", "update-product-description-input", true);
         }
     }
         catch (Exception ex)
@@ -899,7 +901,8 @@
     private void FilterAddProductNameInput(ChangeEventArgs e)
     {
         var val = e.Value?.ToString() ?? string.Empty;
-        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.' || char.IsDigit(c)).ToArray());
+        // Only allow letters, spaces, and digits - no special characters
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || char.IsDigit(c)).ToArray());
         
         // Auto-capitalize: first letter uppercase, rest lowercase unless after space
         if (!string.IsNullOrEmpty(filtered))
@@ -944,7 +947,8 @@
     private void FilterUpdateProductNameInput(ChangeEventArgs e)
     {
         var val = e.Value?.ToString() ?? string.Empty;
-        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.' || char.IsDigit(c)).ToArray());
+        // Only allow letters, spaces, and digits - no special characters
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || char.IsDigit(c)).ToArray());
         
         // Auto-capitalize: first letter uppercase, rest lowercase unless after space
         if (!string.IsNullOrEmpty(filtered))
@@ -986,28 +990,105 @@
         StateHasChanged();
     }
 
+    private void FilterAddProductDescriptionInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        // Only allow letters, spaces, and digits - no special characters
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || char.IsDigit(c)).ToArray());
+        
+        _addProductModel.Description = filtered;
+        
+        // Notify EditContext of field change
+        if (_addProductEditContext != null)
+        {
+            _addProductEditContext.NotifyFieldChanged(_addProductEditContext.Field(nameof(_addProductModel.Description)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void FilterUpdateProductDescriptionInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        // Only allow letters, spaces, and digits - no special characters
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || char.IsDigit(c)).ToArray());
+        
+        _updateProductModel.Description = filtered;
+        
+        // Notify EditContext of field change
+        if (_updateProductEditContext != null)
+        {
+            _updateProductEditContext.NotifyFieldChanged(_updateProductEditContext.Field(nameof(_updateProductModel.Description)));
+        }
+        
+        StateHasChanged();
+    }
+
     // Date filter methods
-    private void HandleStartDateChange(ChangeEventArgs e)
+    private async Task HandleStartDateChange(ChangeEventArgs e)
     {
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            filterStartDate = date;
+            var today = DateTime.Today;
+            // Prevent future dates - cap at today
+            if (date.Date > today)
+            {
+                filterStartDate = today;
+            }
+            else
+            {
+                filterStartDate = date.Date;
+            }
             selectedDateRange = "";
+            
+            // If end date is before start date, adjust it
+            if (filterEndDate.HasValue && filterEndDate.Value < filterStartDate.Value)
+            {
+                filterEndDate = filterStartDate.Value;
+            }
         }
         else if (string.IsNullOrWhiteSpace(value))
         {
             filterStartDate = null;
             selectedDateRange = "";
         }
+        await ApplyDateFilter();
     }
 
-    private void HandleEndDateChange(ChangeEventArgs e)
+    private async Task HandleEndDateChange(ChangeEventArgs e)
     {
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            filterEndDate = date;
+            var today = DateTime.Today;
+            var parsedDate = date.Date;
+            
+            // Prevent future dates - cap at today
+            if (parsedDate > today)
+            {
+                parsedDate = today;
+            }
+            
+            // Ensure end date is never before start date - if it is, set it to startDate or today (whichever is earlier)
+            if (filterStartDate.HasValue)
+            {
+                // If end date is before start date, set it to start date
+                if (parsedDate < filterStartDate.Value)
+                {
+                    filterEndDate = filterStartDate.Value;
+                }
+                else
+                {
+                    filterEndDate = parsedDate;
+                }
+            }
+            else
+            {
+                // If no start date is set, allow any date up to today
+                filterEndDate = parsedDate;
+            }
+            
             selectedDateRange = "";
         }
         else if (string.IsNullOrWhiteSpace(value))
@@ -1015,6 +1096,7 @@
             filterEndDate = null;
             selectedDateRange = "";
         }
+        await ApplyDateFilter();
     }
 
     private void HandleDateRangeChange()

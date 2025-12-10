@@ -155,7 +155,7 @@
                 <div class="form-grid">
                     <div class="field" style="grid-column: 1 / -1;">
                         <label class="field-label">Street Address <span class="required-asterisk">*</span></label>
-                        <InputText class="input" @bind-Value="_addressModel.Street" placeholder="e.g., 123 Main St" />
+                        <InputText id="admin-street-address-input" class="input" @bind-Value="_addressModel.Street" placeholder="e.g., 123 Main St" />
                         <ValidationMessage For="@(() => _addressModel.Street)" />
                     </div>
                     <div class="field">
@@ -506,6 +506,7 @@
                 await JSRuntime.InvokeVoidAsync("filterNameInput", "firstNameInput");
                 await JSRuntime.InvokeVoidAsync("filterNameInput", "middleNameInput");
                 await JSRuntime.InvokeVoidAsync("filterNameInput", "lastNameInput");
+                await JSRuntime.InvokeVoidAsync("setupAddressFilter", "admin-street-address-input");
             }
             catch (Exception)
             {

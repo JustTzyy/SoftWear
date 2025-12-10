@@ -7,6 +7,11 @@
    - Air Superiority Blue: #82A0BC
 */
 
+/* Main content background */
+main.p-6 {
+    background: #e5e7eb;
+}
+
 /* Responsive Layout */
 @media (max-width: 1024px) {
     .grid[style*="grid-template-columns"] {

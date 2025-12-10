@@ -42,7 +42,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -64,12 +64,6 @@
                min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
                max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleEndDateChange" />
-        <button class="filter-btn" @onclick="ApplyDateFilter">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
             <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
@@ -292,12 +286,12 @@
                         </div>
                         <div class="form-field">
                             <label class="field-label">Color Name <span class="required-asterisk">*</span></label>
-                            <InputText class="form-input" @bind-Value="_addColorModel.Name" @oninput="FilterAddColorNameInput" placeholder="Auto-generated or enter custom name" />
+                            <InputText id="add-color-name-input" class="form-input" @bind-Value="_addColorModel.Name" @oninput="FilterAddColorNameInput" placeholder="Auto-generated or enter custom name" />
                             <ValidationMessage For="@(() => _addColorModel.Name)" />
                         </div>
                         <div class="form-field full-width">
-                            <label class="field-label">Description (Optional)</label>
-                            <InputTextArea class="form-textarea" @bind-Value="_addColorModel.Description" placeholder="Enter color description" rows="3" />
+                            <label class="field-label">Description</label>
+                            <InputTextArea id="add-color-description-input" class="form-textarea" @bind-Value="_addColorModel.Description" @oninput="FilterAddColorDescriptionInput" placeholder="Enter color description" rows="3" />
                         </div>
                     </div>
 
@@ -346,12 +340,12 @@
                         </div>
                         <div class="form-field">
                             <label class="field-label">Color Name <span class="required-asterisk">*</span></label>
-                            <InputText class="form-input" @bind-Value="_updateColorModel.Name" @oninput="FilterUpdateColorNameInput" placeholder="Auto-generated or enter custom name" />
+                            <InputText id="update-color-name-input" class="form-input" @bind-Value="_updateColorModel.Name" @oninput="FilterUpdateColorNameInput" placeholder="Auto-generated or enter custom name" />
                             <ValidationMessage For="@(() => _updateColorModel.Name)" />
                         </div>
                         <div class="form-field full-width">
-                            <label class="field-label">Description (Optional)</label>
-                            <InputTextArea class="form-textarea" @bind-Value="_updateColorModel.Description" placeholder="Enter color description" rows="3" />
+                            <label class="field-label">Description</label>
+                            <InputTextArea id="update-color-description-input" class="form-textarea" @bind-Value="_updateColorModel.Description" @oninput="FilterUpdateColorDescriptionInput" placeholder="Enter color description" rows="3" />
                         </div>
                     </div>
 
@@ -515,12 +509,15 @@
         Nav.NavigateTo("/seller/Archive_Color_Record");
     }
 
-    private void HandleAddColor()
+    private async Task HandleAddColor()
     {
         showAddColorModal = true;
         _addColorModel.Reset();
         _addColorEditContext = new EditContext(_addColorModel);
         StateHasChanged();
+        await Task.Delay(100);
+        await JSRuntime.InvokeVoidAsync("setupCategoryInputFilter", "add-color-name-input", false);
+        await JSRuntime.InvokeVoidAsync("setupCategoryInputFilter", "add-color-description-input", true);
     }
 
     private void CloseAddColorModal()
@@ -590,6 +587,9 @@
             _updateColorEditContext = new EditContext(_updateColorModel);
             showUpdateColorModal = true;
             StateHasChanged();
+            await Task.Delay(100);
+            await JSRuntime.InvokeVoidAsync("setupCategoryInputFilter", "update-color-name-input", false);
+            await JSRuntime.InvokeVoidAsync("setupCategoryInputFilter", "update-color-description-input", true);
         }
         catch (Exception)
         {
@@ -912,7 +912,8 @@
     private void FilterAddColorNameInput(ChangeEventArgs e)
     {
         var val = e.Value?.ToString() ?? string.Empty;
-        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.' || char.IsDigit(c)).ToArray());
+        // Only allow letters, spaces, and digits - no special characters
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || char.IsDigit(c)).ToArray());
         
         // Auto-capitalize: first letter uppercase, rest lowercase unless after space
         if (!string.IsNullOrEmpty(filtered))
@@ -957,7 +958,8 @@
     private void FilterUpdateColorNameInput(ChangeEventArgs e)
     {
         var val = e.Value?.ToString() ?? string.Empty;
-        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.' || char.IsDigit(c)).ToArray());
+        // Only allow letters, spaces, and digits - no special characters
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || char.IsDigit(c)).ToArray());
         
         // Auto-capitalize: first letter uppercase, rest lowercase unless after space
         if (!string.IsNullOrEmpty(filtered))
@@ -999,14 +1001,63 @@
         StateHasChanged();
     }
 
+    private void FilterAddColorDescriptionInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        // Only allow letters, spaces, and digits - no special characters
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || char.IsDigit(c)).ToArray());
+        
+        _addColorModel.Description = filtered;
+        
+        // Notify EditContext of field change
+        if (_addColorEditContext != null)
+        {
+            _addColorEditContext.NotifyFieldChanged(_addColorEditContext.Field(nameof(_addColorModel.Description)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void FilterUpdateColorDescriptionInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        // Only allow letters, spaces, and digits - no special characters
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || char.IsDigit(c)).ToArray());
+        
+        _updateColorModel.Description = filtered;
+        
+        // Notify EditContext of field change
+        if (_updateColorEditContext != null)
+        {
+            _updateColorEditContext.NotifyFieldChanged(_updateColorEditContext.Field(nameof(_updateColorModel.Description)));
+        }
+        
+        StateHasChanged();
+    }
+
     // Date filter methods
     private void HandleStartDateChange(ChangeEventArgs e)
     {
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            filterStartDate = date;
+            var today = DateTime.Today;
+            // Prevent future dates - cap at today
+            if (date.Date > today)
+            {
+                filterStartDate = today;
+            }
+            else
+            {
+                filterStartDate = date.Date;
+            }
             selectedDateRange = "";
+            
+            // If end date is before start date, adjust it
+            if (filterEndDate.HasValue && filterEndDate.Value < filterStartDate.Value)
+            {
+                filterEndDate = filterStartDate.Value;
+            }
         }
         else if (string.IsNullOrWhiteSpace(value))
         {
@@ -1020,7 +1071,34 @@
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            filterEndDate = date;
+            var today = DateTime.Today;
+            var parsedDate = date.Date;
+            
+            // Prevent future dates - cap at today
+            if (parsedDate > today)
+            {
+                parsedDate = today;
+            }
+            
+            // Ensure end date is never before start date - if it is, set it to startDate or today (whichever is earlier)
+            if (filterStartDate.HasValue)
+            {
+                // If end date is before start date, set it to start date
+                if (parsedDate < filterStartDate.Value)
+                {
+                    filterEndDate = filterStartDate.Value;
+                }
+                else
+                {
+                    filterEndDate = parsedDate;
+                }
+            }
+            else
+            {
+                // If no start date is set, allow any date up to today
+                filterEndDate = parsedDate;
+            }
+            
             selectedDateRange = "";
         }
         else if (string.IsNullOrWhiteSpace(value))

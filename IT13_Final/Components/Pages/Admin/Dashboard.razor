@@ -16,6 +16,22 @@
         <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
     </div>
     <div class="header-actions">
+        <button class="action-btn visibility-btn @(hideConfidential ? "hidden-mode" : "")" @onclick="ToggleConfidentialVisibility" title="@(hideConfidential ? "Show Confidential Info" : "Hide Confidential Info")">
+            @if (hideConfidential)
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                </svg>
+            }
+            else
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+            }
+        </button>
         <button class="action-btn print-btn" @onclick="PrintDashboard" title="Print Dashboard">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="6 9 6 2 18 2 18 9"></polyline>
@@ -45,7 +61,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -59,23 +75,17 @@
                value="@(startDate?.ToString("yyyy-MM-dd"))" 
                min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
                max="@DateTime.Now.ToString("yyyy-MM-dd")"
-               @onchange="HandleStartDateChange" />
+               @onchange="HandleFromDateChange" />
         <span class="date-separator">to</span>
         <input type="date" 
                class="date-input" 
                value="@(endDate?.ToString("yyyy-MM-dd"))" 
-               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               min="@(startDate?.ToString("yyyy-MM-dd") ?? DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd"))"
                max="@DateTime.Now.ToString("yyyy-MM-dd")"
-               @onchange="HandleEndDateChange" />
-        <button class="filter-btn" @onclick="LoadDashboardData">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
+               @onchange="HandleToDateChange" />
         @if (HasActiveDateFilters)
         {
-            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear">
+            <button class="clear-btn" @onclick="ClearAllFilters" title="Clear Filters">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
                     <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -130,7 +140,7 @@ else
             </div>
             <div class="kpi-content">
                 <span class="kpi-label">Total Admin Fees</span>
-                <span class="kpi-value">₱@totalAdminFees.ToString("N2")</span>
+                <span class="kpi-value @(hideConfidential ? "masked" : "")">₱@MaskValue(totalAdminFees)</span>
                 <span class="kpi-trend trend-up">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
                     <span>2% of all revenue</span>
@@ -147,7 +157,7 @@ else
             </div>
             <div class="kpi-content">
                 <span class="kpi-label">Seller Revenue</span>
-                <span class="kpi-value">₱@totalSellerRevenue.ToString("N2")</span>
+                <span class="kpi-value @(hideConfidential ? "masked" : "")">₱@MaskValue(totalSellerRevenue)</span>
                 <span class="kpi-trend">
                     <span>Total seller sales</span>
                 </span>
@@ -260,16 +270,33 @@ else
                         <path d="@fillPath" fill="url(#feeGradient)" />
                         <path d="@linePath" fill="none" stroke="#5C7CFA" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
 
-                        @* Data points *@
+                        @* Data points with tooltips *@
                         @for (int i = 0; i < dailyFeeData.Count; i++)
                         {
                             var item = dailyFeeData[i];
                             var x = 60 + (i * pointSpacing);
                             var y = maxAmount > 0 ? 240 - ((double)item.AdminFee / (double)maxAmount) * chartHeight : 240;
+                            var tooltipY = y - 45;
+                            if (tooltipY < 10) tooltipY = y + 15;
                             
-                            if (item.AdminFee > 0 && (i == 0 || i == dailyFeeData.Count - 1 || i % 5 == 0))
+                            if (item.AdminFee > 0)
+                            {
+                                <g class="chart-point-group">
+                                    @* Invisible larger hit area for easier hover *@
+                                    <circle cx="@x" cy="@y" r="15" fill="transparent" class="chart-hit-area" />
+                                    @* Visible data point *@
+                                    @if (i == 0 || i == dailyFeeData.Count - 1 || i % 5 == 0)
                             {
                                 <circle cx="@x" cy="@y" r="5" fill="#5C7CFA" stroke="#fff" stroke-width="2" class="data-point" />
+                                    }
+                                    @* Tooltip *@
+                                    <g class="chart-tooltip" transform="translate(@x, @tooltipY)">
+                                        <rect x="-55" y="-20" width="110" height="40" rx="6" fill="#1f2937" opacity="0.95" />
+                                        <text x="0" y="-2" font-size="11" fill="#9ca3af" text-anchor="middle">@item.Date.ToString("MMM dd, yyyy")</text>
+                                        <text x="0" y="14" font-size="13" fill="#5C7CFA" text-anchor="middle" font-weight="600">₱@item.AdminFee.ToString("N2")</text>
+                                        <polygon points="0,22 -6,28 6,28" fill="#1f2937" transform="translate(0, -2)" />
+                                    </g>
+                                </g>
                             }
                         }
 
@@ -316,30 +343,30 @@ else
                     <div class="bar-row">
                         <span class="bar-label">Revenue</span>
                         <div class="bar-track">
-                            <div class="bar-fill bar-revenue" style="width: @((totalSellerRevenue > 0 ? (double)totalSellerRevenue / finMax * 100 : 0).ToString("F1"))%"></div>
+                            <div class="bar-fill bar-revenue" style="width: @(hideConfidential ? "0" : (totalSellerRevenue > 0 ? (double)totalSellerRevenue / finMax * 100 : 0).ToString("F1"))%"></div>
                         </div>
-                        <span class="bar-value">₱@totalSellerRevenue.ToString("N0")</span>
+                        <span class="bar-value @(hideConfidential ? "masked" : "")">₱@MaskValue(totalSellerRevenue)</span>
                     </div>
                     <div class="bar-row">
                         <span class="bar-label">Admin Fee</span>
                         <div class="bar-track">
-                            <div class="bar-fill bar-fee" style="width: @((totalAdminFees > 0 ? (double)totalAdminFees / finMax * 100 : 0).ToString("F1"))%"></div>
+                            <div class="bar-fill bar-fee" style="width: @(hideConfidential ? "0" : (totalAdminFees > 0 ? (double)totalAdminFees / finMax * 100 : 0).ToString("F1"))%"></div>
                         </div>
-                        <span class="bar-value">₱@totalAdminFees.ToString("N0")</span>
+                        <span class="bar-value @(hideConfidential ? "masked" : "")">₱@MaskValue(totalAdminFees)</span>
                     </div>
                     <div class="bar-row">
                         <span class="bar-label">Net to Sellers</span>
                         <div class="bar-track">
-                            <div class="bar-fill bar-net" style="width: @(((double)(totalSellerRevenue - totalAdminFees) / finMax * 100).ToString("F1"))%"></div>
+                            <div class="bar-fill bar-net" style="width: @(hideConfidential ? "0" : ((double)(totalSellerRevenue - totalAdminFees) / finMax * 100).ToString("F1"))%"></div>
                         </div>
-                        <span class="bar-value">₱@((totalSellerRevenue - totalAdminFees).ToString("N0"))</span>
+                        <span class="bar-value @(hideConfidential ? "masked" : "")">₱@MaskValue(totalSellerRevenue - totalAdminFees)</span>
                     </div>
                     <div class="bar-row">
                         <span class="bar-label">Avg/Seller</span>
                         <div class="bar-track">
-                            <div class="bar-fill bar-avg" style="width: @((avgFeePerSeller > 0 ? (double)avgFeePerSeller * 100 / finMax * 100 : 0).ToString("F1"))%"></div>
+                            <div class="bar-fill bar-avg" style="width: @(hideConfidential ? "0" : (avgFeePerSeller > 0 ? (double)avgFeePerSeller * 100 / finMax * 100 : 0).ToString("F1"))%"></div>
                         </div>
-                        <span class="bar-value">₱@avgFeePerSeller.ToString("N0")</span>
+                        <span class="bar-value @(hideConfidential ? "masked" : "")">₱@MaskValue(avgFeePerSeller)</span>
                     </div>
                 </div>
             </div>
@@ -470,12 +497,12 @@ else
                             <span class="seller-email">@seller.Email</span>
                         </div>
                         <div class="seller-revenue">
-                            <span class="revenue-value">₱@seller.Revenue.ToString("N0")</span>
                             <span class="revenue-label">Revenue</span>
+                            <span class="revenue-value @(hideConfidential ? "masked" : "")">₱@MaskValue(seller.Revenue)</span>
                         </div>
                         <div class="seller-fee">
-                            <span class="fee-value">₱@seller.AdminFee.ToString("N2")</span>
                             <span class="fee-label">Admin Fee</span>
+                            <span class="fee-value @(hideConfidential ? "masked" : "")">₱@MaskValue(seller.AdminFee)</span>
                         </div>
                     </div>
                 }
@@ -512,6 +539,7 @@ else
 @code {
     private bool isLoading = true;
     private bool showSecurityAlert = false;
+    private bool hideConfidential = false;
     private string searchTerm = "";
     private string selectedDateRange = "";
     private DateTime? startDate;
@@ -520,6 +548,69 @@ else
     private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue;
     private System.Timers.Timer? refreshTimer;
     private System.Threading.Timer? _searchTimer;
+
+    private void ToggleConfidentialVisibility()
+    {
+        hideConfidential = !hideConfidential;
+        StateHasChanged();
+    }
+
+    private string MaskValue(decimal value, string format = "N0")
+    {
+        if (hideConfidential) return "•••••";
+        return FormatCompactNumber(value);
+    }
+
+    private string MaskValue(int value)
+    {
+        if (hideConfidential) return "•••";
+        return FormatCompactNumber(value);
+    }
+
+    private string FormatCompactNumber(decimal value)
+    {
+        var absValue = Math.Abs(value);
+        var sign = value < 0 ? "-" : "";
+        
+        if (absValue >= 1_000_000_000_000m) // Trillion
+        {
+            var num = absValue / 1_000_000_000_000m;
+            return sign + FormatWithMaxDigits(num) + "T";
+        }
+        else if (absValue >= 1_000_000_000m) // Billion
+        {
+            var num = absValue / 1_000_000_000m;
+            return sign + FormatWithMaxDigits(num) + "B";
+        }
+        else if (absValue >= 1_000_000m) // Million
+        {
+            var num = absValue / 1_000_000m;
+            return sign + FormatWithMaxDigits(num) + "M";
+        }
+        else if (absValue >= 10_000m) // Thousand (10K+)
+        {
+            var num = absValue / 1_000m;
+            return sign + FormatWithMaxDigits(num) + "K";
+        }
+        else
+        {
+            return value.ToString("N0");
+        }
+    }
+
+    private string FormatCompactNumber(int value)
+    {
+        return FormatCompactNumber((decimal)value);
+    }
+
+    private string FormatWithMaxDigits(decimal num)
+    {
+        // Format to max 4 significant digits
+        if (num >= 1000) return num.ToString("N0");
+        if (num >= 100) return num.ToString("F1");
+        if (num >= 10) return num.ToString("F2");
+        return num.ToString("F3");
+    }
 
     // Fee stats
     private decimal totalAdminFees = 0;
@@ -604,27 +695,72 @@ else
         _searchTimer?.Dispose();
     }
 
-    private void HandleStartDateChange(ChangeEventArgs e)
+    private async Task HandleFromDateChange(ChangeEventArgs e)
     {
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            startDate = date;
+            var today = DateTime.Today;
+            // Prevent future dates - cap at today
+            if (date.Date > today)
+            {
+                startDate = today;
+            }
+            else
+            {
+                startDate = date.Date;
+            }
             selectedDateRange = "";
+            
+            // If end date is before start date, adjust it
+            if (endDate.HasValue && endDate.Value < startDate.Value)
+            {
+                endDate = startDate.Value;
+            }
         }
         else if (string.IsNullOrWhiteSpace(value))
         {
             startDate = null;
             selectedDateRange = "";
         }
+        
+        await LoadDashboardData();
+        StateHasChanged();
     }
 
-    private void HandleEndDateChange(ChangeEventArgs e)
+    private async Task HandleToDateChange(ChangeEventArgs e)
     {
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            endDate = date;
+            var today = DateTime.Today;
+            var parsedDate = date.Date;
+            
+            // Prevent future dates - cap at today
+            if (parsedDate > today)
+            {
+                parsedDate = today;
+            }
+            
+            // Ensure end date is never before start date - if it is, set it to startDate or today (whichever is earlier)
+            if (startDate.HasValue)
+            {
+                // If end date is before start date, set it to start date
+                if (parsedDate < startDate.Value)
+                {
+                    endDate = startDate.Value;
+                }
+                else
+                {
+                    endDate = parsedDate;
+                }
+            }
+            else
+            {
+                // If no start date is set, allow any date up to today
+                endDate = parsedDate;
+            }
+            
             selectedDateRange = "";
         }
         else if (string.IsNullOrWhiteSpace(value))
@@ -632,9 +768,12 @@ else
             endDate = null;
             selectedDateRange = "";
         }
+        
+        await LoadDashboardData();
+        StateHasChanged();
     }
 
-    private void HandleDateRangeChange()
+    private async Task HandleDateRangeChange()
     {
         var now = DateTime.Now;
         switch (selectedDateRange)
@@ -668,15 +807,27 @@ else
                 endDate = now.Date;
                 break;
         }
-        _ = LoadDashboardData();
+        await LoadDashboardData();
+        StateHasChanged();
     }
 
-    private void ClearDateFilter()
+    private async Task ClearDateFilter()
     {
         selectedDateRange = "";
         startDate = null;
         endDate = null;
-        _ = LoadDashboardData();
+        await LoadDashboardData();
+        StateHasChanged();
+    }
+
+    private async Task ClearAllFilters()
+    {
+        searchTerm = string.Empty;
+        selectedDateRange = "";
+        startDate = null;
+        endDate = null;
+        await LoadDashboardData();
+        StateHasChanged();
     }
 
     private void HandleSearchInput()
@@ -743,6 +894,10 @@ else
 
     private async Task PrintDashboard()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         var dashboardData = new
         {
             title = "Admin Dashboard Report",

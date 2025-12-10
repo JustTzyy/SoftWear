@@ -4,7 +4,6 @@
 @inject IT13_Final.Services.Data.ISalesService SalesService
 @inject IT13_Final.Services.Audit.IHistoryService HistoryService
 @inject IJSRuntime JSRuntime
-@implements IDisposable
 @using System.Linq
 @using Microsoft.Data.SqlClient
 
@@ -15,6 +14,22 @@
         <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
     </div>
     <div class="header-actions">
+        <button class="action-btn visibility-btn" @onclick="ToggleConfidentialInfo" title="@(showConfidentialInfo ? "Hide Amounts" : "Show Amounts")">
+            @if (showConfidentialInfo)
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+            }
+            else
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                </svg>
+            }
+        </button>
         <button class="action-btn print-btn" @onclick="PrintReport" disabled="@isGeneratingPDF" title="Print Report">
             @if (isGeneratingPDF)
             {
@@ -58,7 +73,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -67,28 +82,22 @@
             <option value="thismonth">This Month</option>
             <option value="thisyear">This Year</option>
         </select>
-        <input type="date"
-               class="date-input"
-               value="@(startDate?.ToString("yyyy-MM-dd"))"
+        <input type="date" 
+               class="date-input" 
+               value="@(startDate?.ToString("yyyy-MM-dd"))" 
                min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
-               max="@(endDate?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd"))"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleFromDateChange" />
         <span class="date-separator">to</span>
-        <input type="date"
-               class="date-input"
-               value="@(endDate?.ToString("yyyy-MM-dd"))"
-               min="@(startDate?.ToString("yyyy-MM-dd"))"
-               max="@DateTime.Today.ToString("yyyy-MM-dd")"
+        <input type="date" 
+               class="date-input" 
+               value="@(endDate?.ToString("yyyy-MM-dd"))" 
+               min="@(startDate?.ToString("yyyy-MM-dd") ?? DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd"))"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleToDateChange" />
-        <button class="filter-btn" @onclick="ApplyFilters">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
-            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear">
+            <button class="clear-btn" @onclick="ClearAllFilters" title="Clear Filters">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
                     <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -111,7 +120,9 @@
         <div class="summary-grid">
             <div class="summary-box">
                 <div class="summary-label">Total Sales Amount</div>
-                <div class="summary-value">₱@totalSalesAmount.ToString("N2")</div>
+                <div class="summary-value @(!showConfidentialInfo ? "hidden-value" : "")">
+                    @(showConfidentialInfo ? $"₱{totalSalesAmount:N2}" : "••••••••")
+                </div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Total Transactions</div>
@@ -119,11 +130,15 @@
             </div>
             <div class="summary-box">
                 <div class="summary-label">VAT (12%)</div>
-                <div class="summary-value">₱@vatAmount.ToString("N2")</div>
+                <div class="summary-value @(!showConfidentialInfo ? "hidden-value" : "")">
+                    @(showConfidentialInfo ? $"₱{vatAmount:N2}" : "••••••••")
+                </div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Admin Fee (2%)</div>
-                <div class="summary-value">₱@adminFeeAmount.ToString("N2")</div>
+                <div class="summary-value @(!showConfidentialInfo ? "hidden-value" : "")">
+                    @(showConfidentialInfo ? $"₱{adminFeeAmount:N2}" : "••••••••")
+                </div>
             </div>
         </div>
     </div>
@@ -147,7 +162,7 @@
                     <th>Payment Method</th>
                     <th>Cashier</th>
                     <th>Date</th>
-                    <th>Actions</th>
+                    <th style="text-align: center;">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -168,9 +183,11 @@
                     @foreach (var sale in sales)
                     {
                         var cleanAmount = sale.Amount.ToString("N2");
-                        <tr class="clickable-row" @onclick="() => HandleSaleClick(sale.Id)">
+                        <tr>
                             <td>@sale.SaleNumber</td>
-                            <td style="text-align: right; font-weight: 600;">₱@cleanAmount</td>
+                            <td style="text-align: right; font-weight: 600;" class="@(!showConfidentialInfo ? "hidden-value" : "")">
+                                @(showConfidentialInfo ? $"₱{cleanAmount}" : "••••••")
+                            </td>
                             <td>@sale.PaymentMethod</td>
                             <td>@sale.CashierName</td>
                             <td>
@@ -181,7 +198,7 @@
                             </td>
                             <td class="actions-cell" @onclick:stopPropagation="true">
                                 <button class="action-btn print-row-btn" @onclick="() => HandlePrintSale(sale.Id)" title="Print Receipt">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M6 9V2h12v7"></path>
                                         <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
                                         <rect x="6" y="14" width="12" height="8"></rect>
@@ -228,106 +245,6 @@
     }
 </div>
 
-@* Sale Details Modal *@
-@if (showSaleDetailsModal && selectedSale != null)
-{
-    <div class="modal-overlay" @onclick="CloseSaleDetailsModal">
-        <div class="add-admin-modal" @onclick:stopPropagation>
-            <div class="modal-header">
-                <h2 class="modal-title-text">Sale Details - @selectedSale.SaleNumber</h2>
-                <button class="modal-close-btn" @onclick="CloseSaleDetailsModal" title="Close">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                        <path d="M18 6 6 18"></path>
-                        <path d="m6 6 12 12"></path>
-                    </svg>
-                </button>
-            </div>
-            <div class="modal-body">
-                <div class="sale-info">
-                    <div class="info-row">
-                        <span class="info-label">Sale Number:</span>
-                        <span class="info-value">@selectedSale.SaleNumber</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">Date:</span>
-                        <span class="info-value">@selectedSale.Timestamps.ToString("MMM dd, yyyy HH:mm:ss")</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">Cashier:</span>
-                        <span class="info-value">@selectedSale.CashierName</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">Payment Method:</span>
-                        <span class="info-value">@selectedSale.PaymentMethod</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">Amount Paid:</span>
-                        <span class="info-value">₱@selectedSale.AmountPaid.ToString("N2")</span>
-                    </div>
-                    @if (selectedSale.PaymentMethod == "Cash" && selectedSale.ChangeGiven > 0)
-                    {
-                        <div class="info-row">
-                            <span class="info-label">Change Given:</span>
-                            <span class="info-value">₱@selectedSale.ChangeGiven.ToString("N2")</span>
-                        </div>
-                    }
-                    @if (selectedSale.PaymentMethod == "GCash" && !string.IsNullOrEmpty(selectedSale.ReferenceNumber))
-                    {
-                        <div class="info-row">
-                            <span class="info-label">Reference Number:</span>
-                            <span class="info-value">@selectedSale.ReferenceNumber</span>
-                        </div>
-                    }
-                    <div class="info-row">
-                        <span class="info-label">Total Amount:</span>
-                        <span class="info-value total-amount">₱@selectedSale.Amount.ToString("N2")</span>
-                    </div>
-                </div>
-
-                <div class="items-section">
-                    <h4>Items Purchased</h4>
-                    <table class="items-table">
-                        <thead>
-                            <tr>
-                                <th>Product</th>
-                                <th>Size</th>
-                                <th>Color</th>
-                                <th>Qty</th>
-                                <th>Price</th>
-                                <th>Subtotal</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var item in saleItems)
-                            {
-                                <tr>
-                                    <td>@item.ProductName - @item.VariantName</td>
-                                    <td>@(item.SizeName ?? "N/A")</td>
-                                    <td>@(item.ColorName ?? "N/A")</td>
-                                    <td>@item.Quantity</td>
-                                    <td>₱@item.Price.ToString("N2")</td>
-                                    <td>₱@item.Subtotal.ToString("N2")</td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="save-admin-btn" @onclick="() => HandlePrintSale(selectedSale.Id)">
-                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="6 9 6 2 18 2 18 9"></polyline>
-                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-                        <rect x="6" y="14" width="12" height="8"></rect>
-                    </svg>
-                    <span>Print Receipt</span>
-                </button>
-                <button class="cancel-btn" @onclick="CloseSaleDetailsModal">Close</button>
-            </div>
-        </div>
-    </div>
-}
-
 @code {
     private List<IT13_Final.Services.Data.SaleReportModel> sales = new();
     private List<IT13_Final.Services.Data.SaleReportModel> allSalesForPrint = new();
@@ -342,6 +259,7 @@
 
     private bool isLoading = false;
     private bool isGeneratingPDF = false;
+    private bool showConfidentialInfo = true;
 
     private int currentPage = 1;
     private int pageSize = 10;
@@ -353,11 +271,6 @@
     private decimal adminFeeAmount = 0m;
 
     private System.Threading.Timer? _searchTimer;
-    
-    // Modal state
-    private bool showSaleDetailsModal = false;
-    private IT13_Final.Services.Data.SaleReportModel? selectedSale = null;
-    private List<IT13_Final.Services.Data.SaleReportItemModel> saleItems = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -392,7 +305,9 @@
                 sales = await SalesService.GetSalesForReportsAsync(allCashiers, searchTerm, startDate, endDate, onlyApprovedDays, currentPage, pageSize);
             }
 
-            totalSalesAmount = sales.Sum(s => s.Amount);
+            // Calculate totals from ALL sales matching the filter (not just current page)
+            var allSalesForSummary = await SalesService.GetSalesForReportsAsync(allCashiers, searchTerm, startDate, endDate, onlyApprovedDays, 1, 10000);
+            totalSalesAmount = allSalesForSummary.Sum(s => s.Amount);
             
             // Calculate VAT (12% on total sales)
             vatAmount = totalSalesAmount * 0.12m;
@@ -407,6 +322,8 @@
             sales = new List<IT13_Final.Services.Data.SaleReportModel>();
             totalCount = 0;
             totalSalesAmount = 0;
+            vatAmount = 0;
+            adminFeeAmount = 0;
         }
         finally
         {
@@ -417,42 +334,94 @@
 
     private async Task HandleFromDateChange(ChangeEventArgs e)
     {
-        selectedDateRange = string.Empty;
-        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        var value = e.Value?.ToString()?.Trim();
+        if (string.IsNullOrWhiteSpace(value))
         {
-            var value = date.Date;
-            if (endDate.HasValue && value > endDate.Value)
+            startDate = null;
+        }
+        else if (DateTime.TryParseExact(value, "MM/dd/yyyy", null, System.Globalization.DateTimeStyles.None, out var exactDate))
+        {
+            if (endDate.HasValue && exactDate.Date > endDate.Value.Date)
             {
                 await JSRuntime.InvokeVoidAsync("alert", "From date cannot be later than To date.");
                 return;
             }
-            startDate = value;
+            startDate = exactDate.Date;
+        }
+        else if (DateTime.TryParseExact(value, "M/d/yyyy", null, System.Globalization.DateTimeStyles.None, out var shortDate))
+        {
+            if (endDate.HasValue && shortDate.Date > endDate.Value.Date)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "From date cannot be later than To date.");
+                return;
+            }
+            startDate = shortDate.Date;
+        }
+        else if (DateTime.TryParse(value, out var date))
+        {
+            if (endDate.HasValue && date.Date > endDate.Value.Date)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "From date cannot be later than To date.");
+                return;
+            }
+            startDate = date.Date;
         }
         else
         {
-            startDate = null;
+            // Invalid date format, keep current value
+            return;
         }
+        
+        // Clear preset range when manually entering dates
+        selectedDateRange = "";
         await ApplyFilters();
+        StateHasChanged();
     }
 
     private async Task HandleToDateChange(ChangeEventArgs e)
     {
-        selectedDateRange = string.Empty;
-        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        var value = e.Value?.ToString()?.Trim();
+        if (string.IsNullOrWhiteSpace(value))
         {
-            var value = date.Date;
-            if (startDate.HasValue && value < startDate.Value)
+            endDate = null;
+        }
+        else if (DateTime.TryParseExact(value, "MM/dd/yyyy", null, System.Globalization.DateTimeStyles.None, out var exactDate))
+        {
+            if (startDate.HasValue && exactDate.Date < startDate.Value.Date)
             {
                 await JSRuntime.InvokeVoidAsync("alert", "To date cannot be earlier than From date.");
                 return;
             }
-            endDate = value;
+            endDate = exactDate.Date;
+        }
+        else if (DateTime.TryParseExact(value, "M/d/yyyy", null, System.Globalization.DateTimeStyles.None, out var shortDate))
+        {
+            if (startDate.HasValue && shortDate.Date < startDate.Value.Date)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "To date cannot be earlier than From date.");
+                return;
+            }
+            endDate = shortDate.Date;
+        }
+        else if (DateTime.TryParse(value, out var date))
+        {
+            if (startDate.HasValue && date.Date < startDate.Value.Date)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "To date cannot be earlier than From date.");
+                return;
+            }
+            endDate = date.Date;
         }
         else
         {
-            endDate = null;
+            // Invalid date format, keep current value
+            return;
         }
+        
+        // Clear preset range when manually entering dates
+        selectedDateRange = "";
         await ApplyFilters();
+        StateHasChanged();
     }
 
     private async Task HandleDateRangeChange()
@@ -473,11 +442,11 @@
                 endDate = today.AddDays(-1);
                 break;
             case "last7days":
-                startDate = today.AddDays(-7);
+                startDate = today.AddDays(-6);
                 endDate = today;
                 break;
             case "last30days":
-                startDate = today.AddDays(-30);
+                startDate = today.AddDays(-29);
                 endDate = today;
                 break;
             case "thismonth":
@@ -490,6 +459,7 @@
                 break;
         }
         await ApplyFilters();
+        StateHasChanged();
     }
 
     private string GetDateRangeText()
@@ -507,6 +477,18 @@
         startDate = null;
         endDate = null;
         await ApplyFilters();
+        StateHasChanged();
+    }
+
+    private async Task ClearAllFilters()
+    {
+        searchTerm = string.Empty;
+        selectedDateRange = string.Empty;
+        startDate = null;
+        endDate = null;
+        currentPage = 1;
+        await LoadSales();
+        StateHasChanged();
     }
 
     private async Task ApplyFilters()
@@ -556,112 +538,10 @@
         }
     }
 
-    private async Task HandleSaleClick(int saleId)
+    private void ToggleConfidentialInfo()
     {
-        try
-        {
-            // For accounting, we can view any sale (pass 0 for no cashier filter)
-            selectedSale = await SalesService.GetSaleForReportAsync(saleId, 0);
-            if (selectedSale == null)
-            {
-                await JSRuntime.InvokeVoidAsync("alert", "Sale not found.");
-                return;
-            }
-
-            saleItems = await SalesService.GetSaleItemsForReportAsync(saleId);
-            showSaleDetailsModal = true;
-            
-            try
-            {
-                if (AuthState.CurrentUser != null)
-                {
-                    await HistoryService.LogAsync(
-                        AuthState.CurrentUser.Id,
-                        "view",
-                        "Accounting_Sales_Report",
-                        $"Viewed sale details: {selectedSale.SaleNumber}"
-                    );
-                }
-            }
-            catch { }
-            
-            StateHasChanged();
-        }
-        catch (Exception ex)
-        {
-            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading sale details: {ex.Message}");
-            await JSRuntime.InvokeVoidAsync("alert", "Failed to load sale details. Please try again.");
-        }
-    }
-
-    private void CloseSaleDetailsModal()
-    {
-        showSaleDetailsModal = false;
-        selectedSale = null;
-        saleItems.Clear();
+        showConfidentialInfo = !showConfidentialInfo;
         StateHasChanged();
-    }
-
-    private async Task HandlePrintSale(int saleId)
-    {
-        try
-        {
-            var sale = await SalesService.GetSaleForReportAsync(saleId, 0);
-            if (sale == null)
-            {
-                await JSRuntime.InvokeVoidAsync("alert", "Sale not found.");
-                return;
-            }
-
-            var items = await SalesService.GetSaleItemsForReportAsync(saleId);
-            if (items == null || items.Count == 0)
-            {
-                await JSRuntime.InvokeVoidAsync("alert", "No items found for this sale.");
-                return;
-            }
-
-            var receiptData = new
-            {
-                saleNumber = sale.SaleNumber,
-                dateTime = sale.Timestamps.ToString("MMM dd, yyyy HH:mm:ss"),
-                cashierName = sale.CashierName,
-                items = items.Select(item => new
-                {
-                    productName = item.ProductName,
-                    variantName = item.VariantName,
-                    sizeName = item.SizeName ?? "",
-                    colorName = item.ColorName ?? "",
-                    quantity = item.Quantity,
-                    subtotal = item.Subtotal
-                }).ToArray(),
-                totalAmount = sale.Amount,
-                paymentMethod = sale.PaymentMethod,
-                amountPaid = sale.AmountPaid,
-                changeGiven = sale.ChangeGiven,
-                referenceNumber = sale.ReferenceNumber
-            };
-
-            await JSRuntime.InvokeVoidAsync("printReceipt", receiptData);
-            
-            try
-            {
-                if (AuthState.CurrentUser != null)
-                {
-                    await HistoryService.LogAsync(
-                        AuthState.CurrentUser.Id,
-                        "print",
-                        "Accounting_Sales_Report",
-                        $"Printed receipt for sale: {sale.SaleNumber}"
-                    );
-                }
-            }
-            catch { }
-        }
-        catch (Exception ex)
-        {
-            await JSRuntime.InvokeVoidAsync("console.error", $"Error printing sale: {ex.Message}");
-            await JSRuntime.InvokeVoidAsync("alert", "Failed to print receipt. Please try again.");
-        }
     }
 
     private async Task CalculateAdminFee()
@@ -734,6 +614,10 @@
 
     private async Task PrintReport()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         try
         {
             isGeneratingPDF = true;
@@ -868,6 +752,69 @@
         {
             isGeneratingPDF = false;
             StateHasChanged();
+        }
+    }
+
+    private async Task HandlePrintSale(int saleId)
+    {
+        try
+        {
+            // For accounting view, allow printing any sale (no cashier restriction)
+            var sale = await SalesService.GetSaleForReportAsync(saleId, 0);
+            if (sale == null)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Sale not found or you don't have permission to access it.");
+                return;
+            }
+
+            var items = await SalesService.GetSaleItemsForReportAsync(saleId);
+            if (items == null || items.Count == 0)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "No items found for this sale.");
+                return;
+            }
+
+            var receiptData = new
+            {
+                saleNumber = sale.SaleNumber,
+                dateTime = sale.Timestamps.ToString("MMM dd, yyyy HH:mm:ss"),
+                cashierName = sale.CashierName,
+                items = items.Select(item => new
+                {
+                    productName = item.ProductName,
+                    variantName = item.VariantName,
+                    sizeName = item.SizeName ?? string.Empty,
+                    colorName = item.ColorName ?? string.Empty,
+                    quantity = item.Quantity,
+                    subtotal = item.Subtotal
+                }).ToArray(),
+                totalAmount = sale.Amount,
+                paymentMethod = sale.PaymentMethod,
+                amountPaid = sale.AmountPaid,
+                changeGiven = sale.ChangeGiven,
+                referenceNumber = sale.ReferenceNumber
+            };
+
+            await JSRuntime.InvokeVoidAsync("printReceipt", receiptData);
+
+            try
+            {
+                if (AuthState.CurrentUser != null)
+                {
+                    await HistoryService.LogAsync(
+                        AuthState.CurrentUser.Id,
+                        "print",
+                        "Accounting_Sales_Report",
+                        $"Printed receipt for sale: {sale.SaleNumber}"
+                    );
+                }
+            }
+            catch { }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error printing sale: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to print receipt. Please try again.");
         }
     }
 

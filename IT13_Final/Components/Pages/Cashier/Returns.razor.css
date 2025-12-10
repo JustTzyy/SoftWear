@@ -70,6 +70,21 @@
     height: 18px;
 }
 
+.visibility-btn.hidden-mode {
+    background: rgba(239, 68, 68, 0.3);
+}
+
+.visibility-btn.hidden-mode:hover {
+    background: rgba(239, 68, 68, 0.5);
+}
+
+/* Masked/Hidden Values */
+.masked {
+    filter: blur(0);
+    letter-spacing: 2px;
+    font-family: monospace;
+}
+
 .header-actions .toggle-view-btn.active {
     background: rgba(255, 255, 255, 0.3);
 }
@@ -200,6 +215,26 @@
 .date-input::placeholder {
     color: #9ca3af;
     font-size: 13px;
+}
+
+.date-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.date-input-with-icon {
+    width: 140px;
+    padding-right: 36px;
+}
+
+.date-input-icon {
+    position: absolute;
+    right: 10px;
+    width: 18px;
+    height: 18px;
+    color: #9ca3af;
+    pointer-events: none;
 }
 
 .date-select:hover,

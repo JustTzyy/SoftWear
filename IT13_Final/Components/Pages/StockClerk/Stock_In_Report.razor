@@ -56,7 +56,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -78,12 +78,6 @@
                min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
                max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleEndDateChange" />
-        <button class="filter-btn" @onclick="ApplyFilters">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
             <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
@@ -137,65 +131,57 @@
     </div>
     
     <div class="card-body">
-        <div class="table-container">
-            <table class="admin-table">
-                <thead>
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th style="text-align: left;">Product</th>
+                    <th style="text-align: left;">Variant</th>
+                    <th style="text-align: right;">Quantity</th>
+                    <th style="text-align: left;">Date</th>
+                    <th style="text-align: center;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
                     <tr>
-                        <th style="text-align: left;">Product</th>
-                        <th style="text-align: left;">Variant</th>
-                        <th style="text-align: right;">Quantity</th>
-                        <th style="text-align: right;">Cost Price</th>
-                        <th style="text-align: right;">Total Cost</th>
-                        <th style="text-align: left;">Supplier</th>
-                        <th style="text-align: left;">Date</th>
-                        <th style="text-align: center;">Actions</th>
+                        <td colspan="5" class="loading-cell">Loading stock in records...</td>
                     </tr>
-                </thead>
-                <tbody>
-                    @if (isLoading)
+                }
+                else if (stockIns.Count == 0)
+                {
+                    <tr>
+                        <td colspan="5" class="empty-cell">No stock in records found for this filter.</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var stockIn in stockIns)
                     {
-                        <tr>
-                            <td colspan="8" class="loading-cell">Loading stock in records...</td>
+                        <tr class="clickable-row" @onclick="() => HandleStockInClick(stockIn.Id)">
+                            <td class="sale-number" style="text-align: left;">@stockIn.ProductName</td>
+                            <td style="text-align: left;">@stockIn.VariantName</td>
+                            <td style="text-align: right;">@stockIn.QuantityAdded</td>
+                            <td>
+                                <div class="timestamp-info">
+                                    <div class="timestamp-date">@stockIn.Timestamps.ToString("MMM dd, yyyy")</div>
+                                    <div class="timestamp-time">@stockIn.Timestamps.ToString("HH:mm:ss")</div>
+                                </div>
+                            </td>
+                            <td class="actions-cell" @onclick:stopPropagation="true">
+                                <button class="action-btn print-row-btn" @onclick="() => HandlePrintStockIn(stockIn.Id)" title="Print Details">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M6 9V2h12v7"></path>
+                                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                                        <rect x="6" y="14" width="12" height="8"></rect>
+                                    </svg>
+                                </button>
+                            </td>
                         </tr>
                     }
-                    else if (stockIns.Count == 0)
-                    {
-                        <tr>
-                            <td colspan="8" class="empty-cell">No stock in records found for this filter.</td>
-                        </tr>
-                    }
-                    else
-                    {
-                        @foreach (var stockIn in stockIns)
-                        {
-                            <tr class="clickable-row" @onclick="() => HandleStockInClick(stockIn.Id)">
-                                <td class="sale-number" style="text-align: left;">@stockIn.ProductName</td>
-                                <td style="text-align: left;">@stockIn.VariantName</td>
-                                <td style="text-align: right;">@stockIn.QuantityAdded</td>
-                                <td style="text-align: right;">₱@stockIn.CostPrice.ToString("N2")</td>
-                                <td style="text-align: right;">₱@((stockIn.QuantityAdded * stockIn.CostPrice).ToString("N2"))</td>
-                                <td style="text-align: left;">@(stockIn.SupplierName ?? "N/A")</td>
-                                <td>
-                                    <div class="timestamp-info">
-                                        <div class="timestamp-date">@stockIn.Timestamps.ToString("MMM dd, yyyy")</div>
-                                        <div class="timestamp-time">@stockIn.Timestamps.ToString("HH:mm:ss")</div>
-                                    </div>
-                                </td>
-                                <td class="actions-cell" @onclick:stopPropagation="true">
-                                    <button class="action-btn print-row-btn" @onclick="() => HandlePrintStockIn(stockIn.Id)" title="Print Details">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                            <path d="M6 9V2h12v7"></path>
-                                            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-                                            <rect x="6" y="14" width="12" height="8"></rect>
-                                        </svg>
-                                    </button>
-                                </td>
-                            </tr>
-                        }
-                    }
-                </tbody>
-            </table>
-        </div>
+                }
+            </tbody>
+        </table>
     </div>
 
     @if (totalPages > 1)
@@ -643,6 +629,10 @@
 
     private async Task PrintReport()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         try
         {
             isGeneratingPDF = true;

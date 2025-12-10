@@ -23,6 +23,7 @@ main.p-6 {
     overflow-x: hidden;
     /* Ensure modals inside can escape the overflow context */
     position: relative;
+    background: #e5e7eb;
 }
 
 /* Responsive Layout */

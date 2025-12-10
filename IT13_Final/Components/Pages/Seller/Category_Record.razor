@@ -42,7 +42,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -64,12 +64,6 @@
                min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
                max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleEndDateChange" />
-        <button class="filter-btn" @onclick="ApplyDateFilter">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
             <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
@@ -275,12 +269,21 @@
                     <div class="form-grid">
                         <div class="form-field">
                             <label class="field-label">Category Name <span class="required-asterisk">*</span></label>
-                            <InputText class="form-input" @bind-Value="_addCategoryModel.Name" @oninput="FilterAddCategoryNameInput" placeholder="e.g., T-shirts, Pants, Accessories" />
+                            <InputText id="add-category-name-input" class="form-input" 
+                                       Value="@_addCategoryModel.Name" 
+                                       ValueChanged="@((string value) => FilterAddCategoryNameInput(value))" 
+                                       ValueExpression="@(() => _addCategoryModel.Name)" 
+                                       placeholder="e.g., T-shirts, Pants, Accessories" />
                             <ValidationMessage For="@(() => _addCategoryModel.Name)" />
                         </div>
                         <div class="form-field full-width">
-                            <label class="field-label">Description (Optional)</label>
-                            <InputTextArea class="form-textarea" @bind-Value="_addCategoryModel.Description" placeholder="Enter Category description" rows="3" />
+                            <label class="field-label">Description</label>
+                            <InputTextArea id="add-category-description-input" class="form-textarea" 
+                                           Value="@_addCategoryModel.Description" 
+                                           ValueChanged="@((string value) => FilterAddCategoryDescriptionInput(value))" 
+                                           ValueExpression="@(() => _addCategoryModel.Description)" 
+                                           placeholder="Enter Category description" 
+                                           rows="3" />
                         </div>
                     </div>
 
@@ -323,12 +326,21 @@
                     <div class="form-grid">
                         <div class="form-field">
                             <label class="field-label">Category Name <span class="required-asterisk">*</span></label>
-                            <InputText class="form-input" @bind-Value="_updateCategoryModel.Name" @oninput="FilterUpdateCategoryNameInput" placeholder="e.g., T-shirts, Pants, Accessories" />
+                            <InputText id="update-category-name-input" class="form-input" 
+                                       Value="@_updateCategoryModel.Name" 
+                                       ValueChanged="@((string value) => FilterUpdateCategoryNameInput(value))" 
+                                       ValueExpression="@(() => _updateCategoryModel.Name)" 
+                                       placeholder="e.g., T-shirts, Pants, Accessories" />
                             <ValidationMessage For="@(() => _updateCategoryModel.Name)" />
                         </div>
                         <div class="form-field full-width">
-                            <label class="field-label">Description (Optional)</label>
-                            <InputTextArea class="form-textarea" @bind-Value="_updateCategoryModel.Description" placeholder="Enter Category description" rows="3" />
+                            <label class="field-label">Description</label>
+                            <InputTextArea id="update-category-description-input" class="form-textarea" 
+                                           Value="@_updateCategoryModel.Description" 
+                                           ValueChanged="@((string value) => FilterUpdateCategoryDescriptionInput(value))" 
+                                           ValueExpression="@(() => _updateCategoryModel.Description)" 
+                                           placeholder="Enter Category description" 
+                                           rows="3" />
                         </div>
                     </div>
 
@@ -493,11 +505,15 @@
         Nav.NavigateTo("/seller/Archive_Category_Record");
     }
 
-    private void HandleAddCategory()
+    private async Task HandleAddCategory()
     {
         _addCategoryModel = new AddCategoryModel();
         _addCategoryEditContext = new EditContext(_addCategoryModel);
         showAddCategoryModal = true;
+        StateHasChanged();
+        await Task.Delay(100); // Wait for modal to render
+        await JSRuntime.InvokeVoidAsync("setupCategoryInputFilter", "add-category-name-input", false);
+        await JSRuntime.InvokeVoidAsync("setupCategoryInputFilter", "add-category-description-input", true);
     }
 
     private void CloseAddCategoryModal()
@@ -539,6 +555,10 @@
             };
             _updateCategoryEditContext = new EditContext(_updateCategoryModel);
             showUpdateCategoryModal = true;
+            StateHasChanged();
+            await Task.Delay(100); // Wait for modal to render
+            await JSRuntime.InvokeVoidAsync("setupCategoryInputFilter", "update-category-name-input", false);
+            await JSRuntime.InvokeVoidAsync("setupCategoryInputFilter", "update-category-description-input", true);
         }
     }
 
@@ -619,7 +639,7 @@
     }
 
     // Date filter methods
-    private void HandleStartDateChange(ChangeEventArgs e)
+    private async Task HandleStartDateChange(ChangeEventArgs e)
     {
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
@@ -632,9 +652,10 @@
             filterStartDate = null;
             selectedDateRange = "";
         }
+        await ApplyDateFilter();
     }
 
-    private void HandleEndDateChange(ChangeEventArgs e)
+    private async Task HandleEndDateChange(ChangeEventArgs e)
     {
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
@@ -647,12 +668,18 @@
             filterEndDate = null;
             selectedDateRange = "";
         }
+        await ApplyDateFilter();
     }
 
-    private void FilterAddCategoryNameInput(ChangeEventArgs e)
+    private void FilterAddCategoryNameInput(string value)
     {
-        var val = e.Value?.ToString() ?? string.Empty;
-        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.' || char.IsDigit(c)).ToArray());
+        var val = value ?? string.Empty;
+        // Allow letters, digits, spaces, and basic punctuation
+        var filtered = new string(val.Where(c => 
+            char.IsLetterOrDigit(c) || 
+            char.IsWhiteSpace(c) || 
+            c == ',' || c == '.' || c == '-' || c == '&' || c == '(' || c == ')'
+        ).ToArray());
         
         // Auto-capitalize: first letter uppercase, rest lowercase unless after space
         if (!string.IsNullOrEmpty(filtered))
@@ -674,7 +701,7 @@
                         chars[i] = char.ToLower(chars[i]);
                     }
                 }
-                else if (chars[i] == ' ')
+                else if (char.IsWhiteSpace(chars[i]))
                 {
                     capitalizeNext = true;
                 }
@@ -693,11 +720,38 @@
         
         StateHasChanged();
     }
-
-    private void FilterUpdateCategoryNameInput(ChangeEventArgs e)
+    
+    private void FilterAddCategoryDescriptionInput(string value)
     {
-        var val = e.Value?.ToString() ?? string.Empty;
-        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.' || char.IsDigit(c)).ToArray());
+        var val = value ?? string.Empty;
+        // Allow letters, digits, spaces, and basic punctuation
+        var filtered = new string(val.Where(c => 
+            char.IsLetterOrDigit(c) || 
+            char.IsWhiteSpace(c) || 
+            c == ',' || c == '.' || c == '-' || c == '&' || c == '(' || c == ')' || 
+            c == '!' || c == '?' || c == ':' || c == ';' || c == '\'' || c == '\"'
+        ).ToArray());
+        
+        _addCategoryModel.Description = filtered;
+        
+        // Notify EditContext of field change
+        if (_addCategoryEditContext != null)
+        {
+            _addCategoryEditContext.NotifyFieldChanged(_addCategoryEditContext.Field(nameof(_addCategoryModel.Description)));
+        }
+        
+        StateHasChanged();
+    }
+
+private void FilterUpdateCategoryNameInput(string value)
+    {
+        var val = value ?? string.Empty;
+        // Allow letters, digits, spaces, and basic punctuation
+        var filtered = new string(val.Where(c => 
+            char.IsLetterOrDigit(c) || 
+            char.IsWhiteSpace(c) || 
+            c == ',' || c == '.' || c == '-' || c == '&' || c == '(' || c == ')'
+        ).ToArray());
         
         // Auto-capitalize: first letter uppercase, rest lowercase unless after space
         if (!string.IsNullOrEmpty(filtered))
@@ -719,7 +773,7 @@
                         chars[i] = char.ToLower(chars[i]);
                     }
                 }
-                else if (chars[i] == ' ')
+                else if (char.IsWhiteSpace(chars[i]))
                 {
                     capitalizeNext = true;
                 }
@@ -734,6 +788,28 @@
         if (_updateCategoryEditContext != null)
         {
             _updateCategoryEditContext.NotifyFieldChanged(_updateCategoryEditContext.Field(nameof(_updateCategoryModel.Name)));
+        }
+        
+        StateHasChanged();
+    }
+    
+    private void FilterUpdateCategoryDescriptionInput(string value)
+    {
+        var val = value ?? string.Empty;
+        // Allow letters, digits, spaces, and basic punctuation
+        var filtered = new string(val.Where(c => 
+            char.IsLetterOrDigit(c) || 
+            char.IsWhiteSpace(c) || 
+            c == ',' || c == '.' || c == '-' || c == '&' || c == '(' || c == ')' || 
+            c == '!' || c == '?' || c == ':' || c == ';' || c == '\'' || c == '\"'
+        ).ToArray());
+        
+        _updateCategoryModel.Description = filtered;
+        
+        // Notify EditContext of field change
+        if (_updateCategoryEditContext != null)
+        {
+            _updateCategoryEditContext.NotifyFieldChanged(_updateCategoryEditContext.Field(nameof(_updateCategoryModel.Description)));
         }
         
         StateHasChanged();

@@ -88,12 +88,109 @@
     flex-wrap: wrap;
 }
 
+.search-wrapper {
+    position: relative;
+    flex: 1;
+    min-width: 200px;
+    max-width: 400px;
+    display: flex;
+    align-items: center;
+}
+
+.search-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    color: #9ca3af;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.search-input {
+    width: 100%;
+    height: 42px;
+    padding: 0 40px 0 44px;
+    border: 2px solid #e5e7eb;
+    border-radius: 10px;
+    font-size: 14px;
+    background: #f9fafb;
+    transition: all 0.2s;
+    color: #374151;
+}
+
+.search-input:hover {
+    border-color: #d1d5db;
+    background: #f3f4f6;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: #5C7CFA;
+    background-color: white;
+    box-shadow: 0 0 0 3px rgba(92, 124, 250, 0.1);
+}
+
+.search-input::placeholder {
+    color: #9ca3af;
+}
+
+.clear-search-btn {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: #6b7280;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    z-index: 1;
+}
+
+.clear-search-btn:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: #1a1a1a;
+}
+
+.clear-search-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
 .date-filters {
     display: flex;
     align-items: center;
     gap: 12px;
     flex-wrap: wrap;
-    width: 100%;
+}
+
+.date-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.date-input-with-icon {
+    padding-right: 36px;
+}
+
+.date-input-icon {
+    position: absolute;
+    right: 12px;
+    width: 16px;
+    height: 16px;
+    color: #9ca3af;
+    pointer-events: none;
 }
 
 .date-select,
@@ -272,24 +369,28 @@
    Summary Grid
 ======================================== */
 .summary-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    display: flex;
+    flex-wrap: wrap;
     gap: 16px;
+    margin-bottom: 24px;
 }
 
 .summary-box {
-    background: #f8fafc;
+    flex: 1 1 calc(20% - 13px);
+    min-width: 180px;
+    background: white;
     border: 1px solid #e5e7eb;
-    border-radius: 12px;
+    border-radius: 16px;
     padding: 20px;
     transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .summary-box:hover {
     background: #eef2ff;
     border-color: #c7d2fe;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(92, 124, 250, 0.1);
+    transform: translateY(-4px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
 }
 
 .summary-label {
@@ -298,13 +399,37 @@
     color: #6b7280;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
     margin-bottom: 8px;
 }
 
 .summary-value {
-    font-size: 24px;
+    font-size: clamp(11px, 1.2vw, 20px);
     font-weight: 700;
     color: #1a1a1a;
+    letter-spacing: -0.5px;
+    line-height: 1.2;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    flex-shrink: 1;
+}
+
+.summary-box {
+    min-width: 0;
+    overflow: hidden;
+}
+
+.summary-box .summary-value {
+    white-space: normal;
+    word-break: break-all;
+    overflow-wrap: anywhere;
+    hyphens: auto;
 }
 
 /* ========================================
@@ -362,6 +487,25 @@
     font-weight: 600;
     color: #1a1a1a;
     text-align: right;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    min-width: 0;
+    flex-shrink: 1;
+    font-size: clamp(10px, 1vw, 14px);
+    max-width: 50%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.amount-value {
+    word-break: break-word;
+    overflow-wrap: break-word;
+    min-width: 0;
+    flex-shrink: 1;
+    font-size: clamp(10px, 1vw, 14px);
+    max-width: 50%;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .simple-list li.total-row {
@@ -378,8 +522,15 @@
 }
 
 .simple-list li.total-row span:last-child {
-    font-size: 18px;
+    font-size: clamp(11px, 1.1vw, 16px);
     color: #1a1a1a;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    min-width: 0;
+    flex-shrink: 1;
+    max-width: 50%;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* ========================================
@@ -418,8 +569,14 @@
 }
 
 .net-profit-value {
-    font-size: 28px;
+    font-size: clamp(12px, 1.3vw, 22px);
     font-weight: 700;
+    word-break: break-all;
+    overflow-wrap: anywhere;
+    max-width: 100%;
+    min-width: 0;
+    flex-shrink: 1;
+    hyphens: auto;
 }
 
 .net-profit-box.profit .net-profit-value {
@@ -447,6 +604,10 @@
         flex-direction: column;
         align-items: stretch;
         gap: 16px;
+    }
+
+    .search-wrapper {
+        max-width: none;
     }
 
     .date-filters {
@@ -486,8 +647,12 @@
         align-items: stretch;
     }
 
-    .summary-grid {
-        grid-template-columns: 1fr;
+    .summary-box {
+        min-width: 150px;
+    }
+    
+    .summary-value {
+        font-size: clamp(12px, 3.5vw, 18px);
     }
 
     .profit-loss-columns {
@@ -515,7 +680,7 @@
     }
 
     .summary-value {
-        font-size: 20px;
+        font-size: clamp(11px, 3vw, 16px);
     }
 }
 

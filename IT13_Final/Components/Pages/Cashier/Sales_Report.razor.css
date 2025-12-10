@@ -345,12 +345,14 @@
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin-bottom: 8px;
+    text-align: left;
 }
 
 .summary-value {
     font-size: 24px;
     font-weight: 700;
     color: #1a1a1a;
+    text-align: right;
 }
 
 /* ========================================
@@ -401,6 +403,12 @@
     padding: 16px 20px;
     color: #2d2d2d;
     vertical-align: middle;
+}
+
+/* Right-align numeric columns - Amount (2nd column) */
+.admin-table th:nth-child(2),
+.admin-table td:nth-child(2) {
+    text-align: right;
 }
 
 .admin-table th:last-child,

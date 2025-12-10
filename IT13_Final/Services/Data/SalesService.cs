@@ -119,6 +119,7 @@ namespace IT13_Final.Services.Data
         Task<string> GenerateSaleNumberAsync(CancellationToken ct = default);
         Task<List<SaleReportModel>> GetSalesForReportsAsync(int cashierUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, bool onlyApprovedDays = false, int page = 1, int pageSize = 10, CancellationToken ct = default);
         Task<int> GetSalesCountForReportsAsync(int cashierUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, bool onlyApprovedDays = false, CancellationToken ct = default);
+        Task<decimal> GetTotalSalesAmountAsync(int cashierUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, bool onlyApprovedDays = false, CancellationToken ct = default);
         Task<SaleReportModel?> GetSaleForReportAsync(int saleId, int cashierUserId, CancellationToken ct = default);
         Task<List<SaleReportItemModel>> GetSaleItemsForReportAsync(int saleId, CancellationToken ct = default);
         Task<DashboardStatsModel> GetDashboardStatsAsync(int cashierUserId, CancellationToken ct = default);
@@ -817,6 +818,66 @@ namespace IT13_Final.Services.Data
 
             var result = await cmd.ExecuteScalarAsync(ct);
             return result != null ? Convert.ToDecimal(result) : 0;
+        }
+
+        public async Task<decimal> GetTotalSalesAmountAsync(int cashierUserId, string? searchTerm = null, DateTime? startDate = null, DateTime? endDate = null, bool onlyApprovedDays = false, CancellationToken ct = default)
+        {
+            using var conn = new SqlConnection(_connectionString);
+            await conn.OpenAsync(ct);
+
+            var sql = @"
+                SELECT COALESCE(SUM(s.amount), 0)
+                FROM dbo.tbl_sales s
+                WHERE s.archives IS NULL 
+                AND s.status = 'Completed'
+                AND (@CashierUserId = 0 OR s.user_id = @CashierUserId)";
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                sql += " AND (s.sale_number LIKE @SearchTerm)";
+            }
+
+            if (startDate.HasValue)
+            {
+                sql += " AND CAST(s.timestamps AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                sql += " AND CAST(s.timestamps AS DATE) <= @EndDate";
+            }
+
+            if (onlyApprovedDays)
+            {
+                sql += @"
+                    AND EXISTS (
+                        SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
+                        WHERE dsv.cashier_user_id = s.user_id
+                        AND CAST(dsv.sale_date AS DATE) = CAST(s.timestamps AS DATE)
+                        AND dsv.status = 'Approved'
+                        AND dsv.archived_at IS NULL)";
+            }
+
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@CashierUserId", cashierUserId);
+            
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
+            }
+            
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+            }
+
+            var result = await cmd.ExecuteScalarAsync(ct);
+            return result != DBNull.Value ? Convert.ToDecimal(result) : 0m;
         }
     }
 }

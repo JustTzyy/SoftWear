@@ -42,7 +42,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -64,12 +64,6 @@
                min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
                max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleEndDateChange" />
-        <button class="filter-btn" @onclick="ApplyDateFilter">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
             <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
@@ -275,12 +269,12 @@
                     <div class="form-grid">
                         <div class="form-field">
                             <label class="field-label">Size Name <span class="required-asterisk">*</span></label>
-                            <InputText class="form-input" @bind-Value="_addSizeModel.Name" @oninput="FilterAddSizeNameInput" placeholder="e.g., Small, Medium, Large" />
+                            <InputText id="add-size-name-input" class="form-input" @bind-Value="_addSizeModel.Name" @oninput="FilterAddSizeNameInput" placeholder="e.g., Small, Medium, Large" />
                             <ValidationMessage For="@(() => _addSizeModel.Name)" />
                         </div>
                         <div class="form-field full-width">
-                            <label class="field-label">Description (Optional)</label>
-                            <InputTextArea class="form-textarea" @bind-Value="_addSizeModel.Description" placeholder="Enter size description" rows="3" />
+                            <label class="field-label">Description</label>
+                            <InputTextArea id="add-size-description-input" class="form-textarea" @bind-Value="_addSizeModel.Description" @oninput="FilterAddSizeDescriptionInput" placeholder="Enter size description" rows="3" />
                         </div>
                     </div>
 
@@ -323,12 +317,12 @@
                     <div class="form-grid">
                         <div class="form-field">
                             <label class="field-label">Size Name <span class="required-asterisk">*</span></label>
-                            <InputText class="form-input" @bind-Value="_updateSizeModel.Name" @oninput="FilterUpdateSizeNameInput" placeholder="e.g., Small, Medium, Large" />
+                            <InputText id="update-size-name-input" class="form-input" @bind-Value="_updateSizeModel.Name" @oninput="FilterUpdateSizeNameInput" placeholder="e.g., Small, Medium, Large" />
                             <ValidationMessage For="@(() => _updateSizeModel.Name)" />
                         </div>
                         <div class="form-field full-width">
-                            <label class="field-label">Description (Optional)</label>
-                            <InputTextArea class="form-textarea" @bind-Value="_updateSizeModel.Description" placeholder="Enter size description" rows="3" />
+                            <label class="field-label">Description</label>
+                            <InputTextArea id="update-size-description-input" class="form-textarea" @bind-Value="_updateSizeModel.Description" @oninput="FilterUpdateSizeDescriptionInput" placeholder="Enter size description" rows="3" />
                         </div>
                     </div>
 
@@ -493,11 +487,15 @@
         Nav.NavigateTo("/seller/Archive_Size_Record");
     }
 
-    private void HandleAddSize()
+    private async Task HandleAddSize()
     {
         _addSizeModel = new AddSizeModel();
         _addSizeEditContext = new EditContext(_addSizeModel);
         showAddSizeModal = true;
+        StateHasChanged();
+        await Task.Delay(100);
+        await JSRuntime.InvokeVoidAsync("setupCategoryInputFilter", "add-size-name-input", false);
+        await JSRuntime.InvokeVoidAsync("setupCategoryInputFilter", "add-size-description-input", true);
     }
 
     private void CloseAddSizeModal()
@@ -538,6 +536,10 @@
             };
             _updateSizeEditContext = new EditContext(_updateSizeModel);
             showUpdateSizeModal = true;
+            StateHasChanged();
+            await Task.Delay(100);
+            await JSRuntime.InvokeVoidAsync("setupCategoryInputFilter", "update-size-name-input", false);
+            await JSRuntime.InvokeVoidAsync("setupCategoryInputFilter", "update-size-description-input", true);
         }
     }
 
@@ -623,8 +625,23 @@
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            filterStartDate = date;
+            var today = DateTime.Today;
+            // Prevent future dates - cap at today
+            if (date.Date > today)
+            {
+                filterStartDate = today;
+            }
+            else
+            {
+                filterStartDate = date.Date;
+            }
             selectedDateRange = "";
+            
+            // If end date is before start date, adjust it
+            if (filterEndDate.HasValue && filterEndDate.Value < filterStartDate.Value)
+            {
+                filterEndDate = filterStartDate.Value;
+            }
         }
         else if (string.IsNullOrWhiteSpace(value))
         {
@@ -638,7 +655,34 @@
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            filterEndDate = date;
+            var today = DateTime.Today;
+            var parsedDate = date.Date;
+            
+            // Prevent future dates - cap at today
+            if (parsedDate > today)
+            {
+                parsedDate = today;
+            }
+            
+            // Ensure end date is never before start date - if it is, set it to startDate or today (whichever is earlier)
+            if (filterStartDate.HasValue)
+            {
+                // If end date is before start date, set it to start date
+                if (parsedDate < filterStartDate.Value)
+                {
+                    filterEndDate = filterStartDate.Value;
+                }
+                else
+                {
+                    filterEndDate = parsedDate;
+                }
+            }
+            else
+            {
+                // If no start date is set, allow any date up to today
+                filterEndDate = parsedDate;
+            }
+            
             selectedDateRange = "";
         }
         else if (string.IsNullOrWhiteSpace(value))
@@ -651,7 +695,8 @@
     private void FilterAddSizeNameInput(ChangeEventArgs e)
     {
         var val = e.Value?.ToString() ?? string.Empty;
-        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.' || char.IsDigit(c)).ToArray());
+        // Only allow letters, spaces, and digits - no special characters
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || char.IsDigit(c)).ToArray());
         
         // Auto-capitalize: first letter uppercase, rest lowercase unless after space
         if (!string.IsNullOrEmpty(filtered))
@@ -696,7 +741,8 @@
     private void FilterUpdateSizeNameInput(ChangeEventArgs e)
     {
         var val = e.Value?.ToString() ?? string.Empty;
-        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || c == '\'' || c == '-' || c == '.' || char.IsDigit(c)).ToArray());
+        // Only allow letters, spaces, and digits - no special characters
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || char.IsDigit(c)).ToArray());
         
         // Auto-capitalize: first letter uppercase, rest lowercase unless after space
         if (!string.IsNullOrEmpty(filtered))
@@ -733,6 +779,40 @@
         if (_updateSizeEditContext != null)
         {
             _updateSizeEditContext.NotifyFieldChanged(_updateSizeEditContext.Field(nameof(_updateSizeModel.Name)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void FilterAddSizeDescriptionInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        // Only allow letters, spaces, and digits - no special characters
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || char.IsDigit(c)).ToArray());
+        
+        _addSizeModel.Description = filtered;
+        
+        // Notify EditContext of field change
+        if (_addSizeEditContext != null)
+        {
+            _addSizeEditContext.NotifyFieldChanged(_addSizeEditContext.Field(nameof(_addSizeModel.Description)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void FilterUpdateSizeDescriptionInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        // Only allow letters, spaces, and digits - no special characters
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || char.IsDigit(c)).ToArray());
+        
+        _updateSizeModel.Description = filtered;
+        
+        // Notify EditContext of field change
+        if (_updateSizeEditContext != null)
+        {
+            _updateSizeEditContext.NotifyFieldChanged(_updateSizeEditContext.Field(nameof(_updateSizeModel.Description)));
         }
         
         StateHasChanged();

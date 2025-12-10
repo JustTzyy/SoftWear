@@ -16,6 +16,22 @@
         <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
     </div>
     <div class="header-actions">
+        <button class="action-btn visibility-btn @(hideConfidential ? "hidden-mode" : "")" @onclick="ToggleConfidentialVisibility" title="@(hideConfidential ? "Show Confidential Info" : "Hide Confidential Info")">
+            @if (hideConfidential)
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                </svg>
+            }
+            else
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+            }
+        </button>
         <button class="action-btn print-btn" @onclick="PrintReport" disabled="@isGeneratingPDF" title="Print Report">
             @if (isGeneratingPDF)
             {
@@ -53,7 +69,7 @@
         <input type="text" 
                id="returns-search-input"
                class="search-input" 
-               placeholder="@(showPendingReturns ? "Search by return number or sale number..." : "Search by sale number...")" 
+               placeholder="Search sellers, metrics..." 
                @bind="searchTerm" 
                @bind:event="oninput" 
                @bind:after="HandleSearchInput"
@@ -69,7 +85,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -78,31 +94,25 @@
             <option value="thismonth">This Month</option>
             <option value="thisyear">This Year</option>
         </select>
-        <input type="date"
-               class="date-input"
-               value="@(startDate?.ToString("yyyy-MM-dd"))"
+        <input type="date" 
+               class="date-input" 
+               value="@(startDate?.ToString("yyyy-MM-dd"))" 
                min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
                max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleStartDateChange" />
         <span class="date-separator">to</span>
-        <input type="date"
-               class="date-input"
-               value="@(endDate?.ToString("yyyy-MM-dd"))"
-               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+        <input type="date" 
+               class="date-input" 
+               value="@(endDate?.ToString("yyyy-MM-dd"))" 
+               min="@(startDate?.ToString("yyyy-MM-dd") ?? DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd"))"
                max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleEndDateChange" />
-        <button class="filter-btn" @onclick="ApplyFilters">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
-            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M18 6 6 18"></path>
-                    <path d="m6 6 12 12"></path>
+            <button class="clear-btn" @onclick="ClearAllFilters" title="Clear Filters">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
                 </svg>
             </button>
         }
@@ -536,6 +546,7 @@
     private string searchTerm = string.Empty;
     private bool isLoading = true;
     private bool isGeneratingPDF = false;
+    private bool hideConfidential = false;
     private bool showPendingReturns = false;
     private int currentPage = 1;
     private int pageSize = 10;
@@ -594,6 +605,22 @@
             Condition = item.ReturnCondition
         })
         .ToList();
+
+    private void ToggleConfidentialVisibility()
+    {
+        hideConfidential = !hideConfidential;
+        StateHasChanged();
+    }
+
+    private string MaskValue(decimal value, string format = "N2")
+    {
+        return hideConfidential ? "•••••" : value.ToString(format);
+    }
+
+    private string MaskValue(int value)
+    {
+        return hideConfidential ? "•••" : value.ToString();
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -745,33 +772,41 @@
     private async void HandleStartDateChange(ChangeEventArgs e)
     {
         var value = e.Value?.ToString();
-        if (DateTime.TryParse(value, out var date))
-        {
-            startDate = date;
-            selectedDateRange = "";
-        }
-        else if (string.IsNullOrWhiteSpace(value))
+        if (string.IsNullOrWhiteSpace(value))
         {
             startDate = null;
-            selectedDateRange = "";
         }
+        else if (DateTime.TryParseExact(value, "MM/dd/yyyy", null, System.Globalization.DateTimeStyles.None, out var exactDate))
+        {
+            startDate = exactDate;
+        }
+        else if (DateTime.TryParse(value, out var date))
+        {
+            startDate = date;
+        }
+        selectedDateRange = "";
         await ApplyFilters();
+        StateHasChanged();
     }
 
     private async void HandleEndDateChange(ChangeEventArgs e)
     {
         var value = e.Value?.ToString();
-        if (DateTime.TryParse(value, out var date))
-        {
-            endDate = date;
-            selectedDateRange = "";
-        }
-        else if (string.IsNullOrWhiteSpace(value))
+        if (string.IsNullOrWhiteSpace(value))
         {
             endDate = null;
-            selectedDateRange = "";
         }
+        else if (DateTime.TryParseExact(value, "MM/dd/yyyy", null, System.Globalization.DateTimeStyles.None, out var exactDate))
+        {
+            endDate = exactDate;
+        }
+        else if (DateTime.TryParse(value, out var date))
+        {
+            endDate = date;
+        }
+        selectedDateRange = "";
         await ApplyFilters();
+        StateHasChanged();
     }
 
     private async Task HandleDateRangeChange()
@@ -831,6 +866,17 @@
         endDate = null;
         currentPage = 1;
         await ApplyFilters();
+    }
+
+    private async Task ClearAllFilters()
+    {
+        searchTerm = string.Empty;
+        selectedDateRange = "";
+        startDate = null;
+        endDate = null;
+        currentPage = 1;
+        await ApplyFilters();
+        StateHasChanged();
     }
 
     private void HandleSearchInput()
@@ -1239,6 +1285,10 @@
 
     private async Task PrintReport()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         try
         {
             isGeneratingPDF = true;
