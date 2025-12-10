@@ -752,12 +752,15 @@
     justify-content: space-between;
     align-items: center;
     gap: 16px;
+    padding: 8px 0;
 }
 
 .detail-label {
     font-size: 14px;
     font-weight: 500;
     color: #6b7280;
+    min-width: 180px;
+    text-align: left;
     flex-shrink: 0;
 }
 
@@ -766,6 +769,8 @@
     font-weight: 400;
     color: #1a1a1a;
     text-align: right;
+    flex: 1;
+    min-width: 0;
 }
 
 .detail-value.requested {

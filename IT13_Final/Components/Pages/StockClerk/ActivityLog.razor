@@ -64,7 +64,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -82,15 +82,9 @@
         <input type="date" 
                class="date-input" 
                value="@(toDate?.ToString("yyyy-MM-dd"))" 
-               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               min="@(fromDate?.ToString("yyyy-MM-dd") ?? DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd"))"
                max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleToDateChange" />
-        <button class="filter-btn" @onclick="ApplyFilters">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
             <button class="clear-btn" @onclick="ClearDateFilter" title="Clear">
@@ -111,7 +105,7 @@
             <thead>
                 <tr>
                     <th>Status</th>
-                    <th>Module</th>
+                    <th>Activity</th>
                     <th>Description</th>
                     <th>Date</th>
                 </tr>
@@ -423,6 +417,10 @@
 
     private async Task PrintReport()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         try
         {
             isGeneratingPDF = true;

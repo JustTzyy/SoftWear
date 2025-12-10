@@ -33,8 +33,8 @@
 
 @* Date Filters *@
 <div class="dashboard-filters">
-    <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+    <div class="date-filters" style="margin-left: auto;">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -56,12 +56,6 @@
                min="@(startDate?.ToString("yyyy-MM-dd"))"
                max="@DateTime.Today.ToString("yyyy-MM-dd")"
                @onchange="HandleToDateChange" />
-        <button class="filter-btn" @onclick="LoadData">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
             <button class="clear-btn" @onclick="ClearFilters" title="Clear">
@@ -236,11 +230,11 @@ else
                     </svg>
                 </button>
 
-                @for (int i = 1; i <= totalPages; i++)
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                var pageNum = i;
+                @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
                 {
-                    var pageNum = i;
-                    @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
-                    {
                         @if (i == currentPage)
                         {
                             <button style="min-width:36px; height:36px; padding:0 12px; border:1px solid #5C7CFA; border-radius:8px; background:linear-gradient(135deg, #5C7CFA 0%, #4c6ef5 100%); color:white; font-weight:600; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(92,124,250,0.3);" @onclick="() => GoToPage(pageNum)">
@@ -250,15 +244,15 @@ else
                         else
                         {
                             <button style="min-width:36px; height:36px; padding:0 12px; border:1px solid #e5e7eb; border-radius:8px; background:white; color:#374151; font-weight:600; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center;" @onclick="() => GoToPage(pageNum)">
-                                @i
-                            </button>
+                        @i
+                    </button>
                         }
-                    }
-                    else if (i == currentPage - 2 || i == currentPage + 2)
-                    {
-                        <span style="padding:0 8px; color:#9ca3af; font-weight:600;">...</span>
-                    }
                 }
+                else if (i == currentPage - 2 || i == currentPage + 2)
+                {
+                        <span style="padding:0 8px; color:#9ca3af; font-weight:600;">...</span>
+                }
+            }
 
                 <button style="min-width:36px; height:36px; padding:0 12px; border:1px solid #e5e7eb; border-radius:8px; background:white; color:#374151; font-weight:600; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center;" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
                     <svg style="width:16px; height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -277,7 +271,7 @@ else
     private string selectedDateRange = string.Empty;
     private bool onlyApprovedDays = true; // Default to only show approved daily sales verification
 
-    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue || onlyApprovedDays;
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue;
     private bool isGeneratingPDF = false;
 
     private int sellerUserId = 0;
@@ -592,8 +586,24 @@ else
     {
         if (DateTime.TryParse(e.Value?.ToString(), out var date))
         {
+            var today = DateTime.Today;
+            // Prevent future dates - cap at today
+            if (date.Date > today)
+            {
+                startDate = today;
+            }
+            else
+            {
+                startDate = date.Date;
+            }
+            
+            // If end date is before start date, adjust it
+            if (endDate.HasValue && endDate.Value < startDate.Value)
+            {
+                endDate = startDate.Value;
+            }
+            
             currentPage = 1;
-            startDate = date;
             await LoadData();
         }
     }
@@ -602,8 +612,35 @@ else
     {
         if (DateTime.TryParse(e.Value?.ToString(), out var date))
         {
+            var today = DateTime.Today;
+            var parsedDate = date.Date;
+            
+            // Prevent future dates - cap at today
+            if (parsedDate > today)
+            {
+                parsedDate = today;
+            }
+            
+            // Ensure end date is never before start date - if it is, set it to startDate or today (whichever is earlier)
+            if (startDate.HasValue)
+            {
+                // If end date is before start date, set it to start date
+                if (parsedDate < startDate.Value)
+                {
+                    endDate = startDate.Value;
+                }
+                else
+                {
+                    endDate = parsedDate;
+                }
+            }
+            else
+            {
+                // If no start date is set, allow any date up to today
+                endDate = parsedDate;
+            }
+            
             currentPage = 1;
-            endDate = date;
             await LoadData();
         }
     }
@@ -638,6 +675,10 @@ else
 
     private async Task PrintReport()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         try
         {
             isGeneratingPDF = true;
@@ -646,7 +687,7 @@ else
             var reportData = new
             {
                 title = "Tax Report",
-                printedBy = AuthState.CurrentUser?.FullName ?? "Seller",
+                printedBy = AuthState.CurrentUser?.FullName ?? "Admin",
                 printedAt = DateTime.Now.ToString("MMMM dd, yyyy hh:mm tt"),
                 dateRange = GetDateRangeText(),
                 

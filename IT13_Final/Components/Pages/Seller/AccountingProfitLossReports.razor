@@ -33,8 +33,8 @@
 
 @* Date Filters *@
 <div class="dashboard-filters">
-    <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+    <div class="date-filters" style="margin-left: auto;">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -56,12 +56,6 @@
                min="@(startDate?.ToString("yyyy-MM-dd"))"
                max="@DateTime.Today.ToString("yyyy-MM-dd")"
                @onchange="HandleToDateChange" />
-        <button class="filter-btn" @onclick="LoadData">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
             <button class="clear-btn" @onclick="ClearFilters" title="Clear">
@@ -210,7 +204,7 @@ else
     private string selectedDateRange = string.Empty;
     private bool onlyApprovedDays = true; // Default to only show approved daily sales verification
 
-    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue || onlyApprovedDays;
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue;
 
     private decimal grossSales;
     private decimal returns;
@@ -479,7 +473,23 @@ else
     {
         if (DateTime.TryParse(e.Value?.ToString(), out var date))
         {
-            startDate = date;
+            var today = DateTime.Today;
+            // Prevent future dates - cap at today
+            if (date.Date > today)
+            {
+                startDate = today;
+            }
+            else
+            {
+                startDate = date.Date;
+            }
+            
+            // If end date is before start date, adjust it
+            if (endDate.HasValue && endDate.Value < startDate.Value)
+            {
+                endDate = startDate.Value;
+            }
+            
             await LoadData();
         }
     }
@@ -488,7 +498,34 @@ else
     {
         if (DateTime.TryParse(e.Value?.ToString(), out var date))
         {
-            endDate = date;
+            var today = DateTime.Today;
+            var parsedDate = date.Date;
+            
+            // Prevent future dates - cap at today
+            if (parsedDate > today)
+            {
+                parsedDate = today;
+            }
+            
+            // Ensure end date is never before start date - if it is, set it to startDate or today (whichever is earlier)
+            if (startDate.HasValue)
+            {
+                // If end date is before start date, set it to start date
+                if (parsedDate < startDate.Value)
+                {
+                    endDate = startDate.Value;
+                }
+                else
+                {
+                    endDate = parsedDate;
+                }
+            }
+            else
+            {
+                // If no start date is set, allow any date up to today
+                endDate = parsedDate;
+            }
+            
             await LoadData();
         }
     }
@@ -513,6 +550,10 @@ else
 
     private async Task PrintReport()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         try
         {
             isGeneratingPDF = true;
@@ -521,7 +562,7 @@ else
             var reportData = new
             {
                 title = "Profit & Loss Statement",
-                printedBy = AuthState.CurrentUser?.FullName ?? "Seller",
+                printedBy = AuthState.CurrentUser?.FullName ?? "Admin",
                 printedAt = DateTime.Now.ToString("MMMM dd, yyyy hh:mm tt"),
                 dateRange = GetDateRangeText(),
                 

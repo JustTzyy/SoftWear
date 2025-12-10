@@ -40,7 +40,7 @@
         <input type="text" 
                id="stock-adjustment-report-search-input"
                class="search-input" 
-               placeholder="Search by product, variant, or reason..." 
+               placeholder="Search by product or variant..." 
                @bind="searchTerm" 
                @bind:event="oninput" 
                @bind:after="HandleSearchInput"
@@ -56,7 +56,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -83,12 +83,6 @@
             <option value="Increase">Increase</option>
             <option value="Decrease">Decrease</option>
         </select>
-        <button class="filter-btn" @onclick="ApplyFilters">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
             <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
@@ -147,9 +141,7 @@
                 <tr>
                     <th style="text-align: left;">Product</th>
                     <th style="text-align: left;">Variant</th>
-                    <th style="text-align: left;">Adjustment Type</th>
                     <th style="text-align: right;">Quantity</th>
-                    <th style="text-align: left;">Reason</th>
                     <th style="text-align: left;">Date</th>
                     <th style="text-align: center;">Actions</th>
                 </tr>
@@ -158,13 +150,13 @@
                 @if (isLoading)
                 {
                     <tr>
-                        <td colspan="7" class="loading-cell">Loading stock adjustment records...</td>
+                        <td colspan="5" class="loading-cell">Loading stock adjustment records...</td>
                     </tr>
                 }
                 else if (stockAdjustments.Count == 0)
                 {
                     <tr>
-                        <td colspan="7" class="empty-cell">No stock adjustment records found for this filter.</td>
+                        <td colspan="5" class="empty-cell">No stock adjustment records found for this filter.</td>
                     </tr>
                 }
                 else
@@ -174,11 +166,7 @@
                         <tr class="clickable-row" @onclick="() => HandleStockAdjustmentClick(adjustment.Id)">
                             <td class="sale-number" style="text-align: left;">@adjustment.ProductName</td>
                             <td style="text-align: left;">@adjustment.VariantName</td>
-                            <td style="text-align: left;">
-                                <span style="color: @(adjustment.AdjustmentType == "Increase" ? "#10b981" : "#f43f5e"); font-weight: 600;">@adjustment.AdjustmentType</span>
-                            </td>
                             <td style="text-align: right;">@adjustment.QuantityAdjusted</td>
-                            <td style="text-align: left;">@(adjustment.Reason ?? "N/A")</td>
                             <td>
                                 <div class="timestamp-info">
                                     <div class="timestamp-date">@adjustment.Timestamps.ToString("MMM dd, yyyy")</div>
@@ -628,6 +616,10 @@
 
     private async Task PrintReport()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         try
         {
             isGeneratingPDF = true;

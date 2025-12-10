@@ -7,6 +7,7 @@
 @inject NavigationManager Nav
 @using System.Linq
 @using System.Text.Json
+@using System.Text.RegularExpressions
 @implements IDisposable
 
 @* Welcome Header *@
@@ -45,7 +46,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -67,12 +68,6 @@
                min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
                max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleEndDateChange" />
-        <button class="filter-btn" @onclick="ApplyDateFilter">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
             <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
@@ -302,14 +297,34 @@
                             {
                                 IT13_Final.Services.Data.PersonalInfoRequestData? requestedPersonalData = null;
                                 
-                                if (requestDetails.RequestType == "personal_info")
+                                if (!string.IsNullOrWhiteSpace(requestDetails.RequestDataJson))
                                 {
-                                    requestedPersonalData = JsonSerializer.Deserialize<IT13_Final.Services.Data.PersonalInfoRequestData>(requestDetails.RequestDataJson);
-                                }
-                                else if (requestDetails.RequestType == "combined")
-                                {
-                                    var combined = JsonSerializer.Deserialize<IT13_Final.Services.Data.CombinedRequestData>(requestDetails.RequestDataJson);
-                                    requestedPersonalData = combined?.PersonalInfo;
+                                    try
+                                    {
+                                        var jsonOptions = IT13_Final.Services.Data.JsonOptionsHelper.GetJsonOptions();
+                                        
+                                        // Sanitize JSON: replace common invalid values
+                                        var sanitizedJson = requestDetails.RequestDataJson
+                                            .Replace("\"NULL\"", "null", StringComparison.OrdinalIgnoreCase)
+                                            .Replace("\"N\"", "null", StringComparison.OrdinalIgnoreCase)
+                                            .Replace("'NULL'", "null", StringComparison.OrdinalIgnoreCase)
+                                            .Replace("'N'", "null", StringComparison.OrdinalIgnoreCase);
+                                        
+                                        if (requestDetails.RequestType == "personal_info")
+                                        {
+                                            requestedPersonalData = JsonSerializer.Deserialize<IT13_Final.Services.Data.PersonalInfoRequestData>(sanitizedJson, jsonOptions);
+                                        }
+                                        else if (requestDetails.RequestType == "combined")
+                                        {
+                                            var combined = JsonSerializer.Deserialize<IT13_Final.Services.Data.CombinedRequestData>(sanitizedJson, jsonOptions);
+                                            requestedPersonalData = combined?.PersonalInfo;
+                                        }
+                                    }
+                                    catch (JsonException)
+                                    {
+                                        // If deserialization fails, show error message
+                                        requestedPersonalData = null;
+                                    }
                                 }
                                 
                                 @if (requestedPersonalData != null)
@@ -343,20 +358,49 @@
                                         <span class="detail-value requested">@(string.IsNullOrEmpty(requestedPersonalData.Sex) ? "N/A" : requestedPersonalData.Sex)</span>
                                     </div>
                                 }
+                                else if (!string.IsNullOrWhiteSpace(requestDetails.RequestDataJson))
+                                {
+                                    <div class="detail-item" style="color: #dc3545; padding: 8px;">
+                                        <span>Unable to parse requested data. The data may be corrupted.</span>
+                                    </div>
+                                }
                             }
                             
                             @if (requestDetails.RequestType == "address" || requestDetails.RequestType == "combined")
                             {
                                 IT13_Final.Services.Data.AddressRequestData? requestedAddressData = null;
                                 
-                                if (requestDetails.RequestType == "address")
+                                if (!string.IsNullOrWhiteSpace(requestDetails.RequestDataJson))
                                 {
-                                    requestedAddressData = JsonSerializer.Deserialize<IT13_Final.Services.Data.AddressRequestData>(requestDetails.RequestDataJson);
-                                }
-                                else if (requestDetails.RequestType == "combined")
-                                {
-                                    var combined = JsonSerializer.Deserialize<IT13_Final.Services.Data.CombinedRequestData>(requestDetails.RequestDataJson);
-                                    requestedAddressData = combined?.Address;
+                                    try
+                                    {
+                                        var jsonOptions = IT13_Final.Services.Data.JsonOptionsHelper.GetJsonOptions();
+                                        
+                                        // Sanitize JSON: replace common invalid values
+                                        var sanitizedJson = requestDetails.RequestDataJson
+                                            .Replace("\"NULL\"", "null", StringComparison.OrdinalIgnoreCase)
+                                            .Replace("\"N\"", "null", StringComparison.OrdinalIgnoreCase)
+                                            .Replace("'NULL'", "null", StringComparison.OrdinalIgnoreCase)
+                                            .Replace("'N'", "null", StringComparison.OrdinalIgnoreCase);
+                                        
+                                        // Handle unquoted NULL or N values (e.g., "Age": N or "Age": NULL)
+                                        sanitizedJson = Regex.Replace(sanitizedJson, @":\s*(NULL|N)(\s*[,}])", ": null$2", RegexOptions.IgnoreCase);
+                                        
+                                        if (requestDetails.RequestType == "address")
+                                        {
+                                            requestedAddressData = JsonSerializer.Deserialize<IT13_Final.Services.Data.AddressRequestData>(sanitizedJson, jsonOptions);
+                                        }
+                                        else if (requestDetails.RequestType == "combined")
+                                        {
+                                            var combined = JsonSerializer.Deserialize<IT13_Final.Services.Data.CombinedRequestData>(sanitizedJson, jsonOptions);
+                                            requestedAddressData = combined?.Address;
+                                        }
+                                    }
+                                    catch (JsonException)
+                                    {
+                                        // If deserialization fails, show error message
+                                        requestedAddressData = null;
+                                    }
                                 }
                                 
                                 @if (requestedAddressData != null)
@@ -376,6 +420,12 @@
                                     <div class="detail-item">
                                         <span class="detail-label">Zip code</span>
                                         <span class="detail-value requested">@(requestedAddressData.Zip ?? "N/A")</span>
+                                    </div>
+                                }
+                                else if (!string.IsNullOrWhiteSpace(requestDetails.RequestDataJson))
+                                {
+                                    <div class="detail-item" style="color: #dc3545; padding: 8px;">
+                                        <span>Unable to parse requested data. The data may be corrupted.</span>
                                     </div>
                                 }
                             }
@@ -739,8 +789,23 @@
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            filterStartDate = date;
+            var today = DateTime.Today;
+            // Prevent future dates - cap at today
+            if (date.Date > today)
+            {
+                filterStartDate = today;
+            }
+            else
+            {
+                filterStartDate = date.Date;
+            }
             selectedDateRange = "";
+            
+            // If end date is before start date, adjust it
+            if (filterEndDate.HasValue && filterEndDate.Value < filterStartDate.Value)
+            {
+                filterEndDate = filterStartDate.Value;
+            }
         }
         else if (string.IsNullOrWhiteSpace(value))
         {
@@ -754,7 +819,34 @@
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            filterEndDate = date;
+            var today = DateTime.Today;
+            var parsedDate = date.Date;
+            
+            // Prevent future dates - cap at today
+            if (parsedDate > today)
+            {
+                parsedDate = today;
+            }
+            
+            // Ensure end date is never before start date - if it is, set it to startDate or today (whichever is earlier)
+            if (filterStartDate.HasValue)
+            {
+                // If end date is before start date, set it to start date
+                if (parsedDate < filterStartDate.Value)
+                {
+                    filterEndDate = filterStartDate.Value;
+                }
+                else
+                {
+                    filterEndDate = parsedDate;
+                }
+            }
+            else
+            {
+                // If no start date is set, allow any date up to today
+                filterEndDate = parsedDate;
+            }
+            
             selectedDateRange = "";
         }
         else if (string.IsNullOrWhiteSpace(value))
@@ -857,3 +949,4 @@
         _successBannerTimer?.Dispose();
     }
 }
+        

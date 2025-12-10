@@ -356,6 +356,10 @@ else
 
     private async Task PrintReport()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         var reportData = new
         {
             title = "Monthly Fee Collection Report",

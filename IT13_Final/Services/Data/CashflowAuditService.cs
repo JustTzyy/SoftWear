@@ -29,6 +29,17 @@ namespace IT13_Final.Services.Data
         {
             var movements = new List<CashMovementModel>();
 
+            // Normalize date range to avoid SqlDateTime overflow and respect business minimum date
+            var minDate = new DateTime(2015, 12, 11);
+            if (startDate.HasValue && startDate.Value < minDate)
+            {
+                startDate = minDate;
+            }
+            if (endDate.HasValue && endDate.Value < minDate)
+            {
+                endDate = minDate;
+            }
+
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync(ct);
 

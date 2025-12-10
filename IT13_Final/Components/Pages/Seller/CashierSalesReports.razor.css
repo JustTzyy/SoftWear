@@ -403,6 +403,12 @@
     vertical-align: middle;
 }
 
+/* Right-align numeric columns - Amount (2nd column) */
+.admin-table th:nth-child(2),
+.admin-table td:nth-child(2) {
+    text-align: right;
+}
+
 .admin-table th:last-child,
 .admin-table td:last-child {
     text-align: center;

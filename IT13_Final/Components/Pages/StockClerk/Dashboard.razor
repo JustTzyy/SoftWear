@@ -20,6 +20,22 @@
         <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
     </div>
     <div class="header-actions">
+        <button class="action-btn visibility-btn @(hideConfidential ? "hidden-mode" : "")" @onclick="ToggleConfidentialVisibility" title="@(hideConfidential ? "Show Confidential Info" : "Hide Confidential Info")">
+            @if (hideConfidential)
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                </svg>
+            }
+            else
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+            }
+        </button>
         <button class="action-btn print-btn" @onclick="PrintDashboard" title="Print Dashboard">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="6 9 6 2 18 2 18 9"></polyline>
@@ -49,8 +65,8 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
-            <option value="">Custom</option>
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
+            <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
             <option value="last7days">Last 7 Days</option>
@@ -58,20 +74,22 @@
             <option value="thismonth">This Month</option>
             <option value="thisyear">This Year</option>
         </select>
-        <input type="text" 
+        <input type="date" 
                class="date-input" 
-               value="@(startDate?.ToString("MM/dd/yyyy"))" 
-               placeholder="mm/dd/yyyy"
+               value="@(startDate?.ToString("yyyy-MM-dd"))" 
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleFromDateChange" />
         <span class="date-separator">to</span>
-        <input type="text" 
+        <input type="date" 
                class="date-input" 
-               value="@(endDate?.ToString("MM/dd/yyyy"))" 
-               placeholder="mm/dd/yyyy"
+               value="@(endDate?.ToString("yyyy-MM-dd"))" 
+               min="@(startDate?.ToString("yyyy-MM-dd") ?? DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd"))"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleToDateChange" />
         @if (HasActiveDateFilters)
         {
-            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear">
+            <button class="clear-btn" @onclick="ClearAllFilters" title="Clear Filters">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
                     <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -125,10 +143,10 @@ else
             </div>
             <div class="kpi-content">
                 <span class="kpi-label">Stock In</span>
-                <span class="kpi-value">@stats.TotalStockIn</span>
+                <span class="kpi-value @(hideConfidential ? "masked" : "")">@MaskValue(stats.TotalStockIn)</span>
                 <span class="kpi-trend trend-up">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
-                    <span>@stats.TodayStockIn today</span>
+                    <span>@(hideConfidential ? "•••" : stats.TodayStockIn.ToString()) today</span>
                 </span>
             </div>
         </div>
@@ -141,10 +159,10 @@ else
             </div>
             <div class="kpi-content">
                 <span class="kpi-label">Stock Out</span>
-                <span class="kpi-value">@stats.TotalStockOut</span>
+                <span class="kpi-value @(hideConfidential ? "masked" : "")">@MaskValue(stats.TotalStockOut)</span>
                 <span class="kpi-trend trend-down">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                    <span>@stats.TodayStockOut today</span>
+                    <span>@(hideConfidential ? "•••" : stats.TodayStockOut.ToString()) today</span>
                 </span>
             </div>
         </div>
@@ -158,9 +176,9 @@ else
             </div>
             <div class="kpi-content">
                 <span class="kpi-label">Adjustments</span>
-                <span class="kpi-value">@stats.TotalAdjustments</span>
+                <span class="kpi-value @(hideConfidential ? "masked" : "")">@MaskValue(stats.TotalAdjustments)</span>
                 <span class="kpi-trend">
-                    <span>@stats.TodayAdjustments today</span>
+                    <span>@(hideConfidential ? "•••" : stats.TodayAdjustments.ToString()) today</span>
                 </span>
             </div>
         </div>
@@ -175,7 +193,7 @@ else
             </div>
             <div class="kpi-content">
                 <span class="kpi-label">Low Stock Alert</span>
-                <span class="kpi-value @(stats.LowStockItems > 0 ? "alert-value" : "")">@stats.LowStockItems</span>
+                <span class="kpi-value @(stats.LowStockItems > 0 ? "alert-value" : "") @(hideConfidential ? "masked" : "")">@MaskValue(stats.LowStockItems)</span>
                 <span class="kpi-trend @(stats.LowStockItems > 0 ? "trend-warning" : "trend-success")">
                     @if (stats.LowStockItems > 0)
                     {
@@ -201,7 +219,7 @@ else
             </div>
             <div class="kpi-content">
                 <span class="kpi-label">Total Products</span>
-                <span class="kpi-value">@stats.TotalProducts</span>
+                <span class="kpi-value @(hideConfidential ? "masked" : "")">@MaskValue(stats.TotalProducts)</span>
                 <span class="kpi-trend">
                     <span>Product variants</span>
                 </span>
@@ -284,16 +302,58 @@ else
                         <path d="@inLinePath" fill="none" stroke="#0d9488" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
                         <path d="@outLinePath" fill="none" stroke="#f43f5e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="8,4" />
 
-                        @* Data points for Stock In *@
+                        @* Data points for Stock In with tooltips *@
                         @for (int i = 0; i < stockInData.Count; i++)
                         {
                             var item = stockInData[i];
                             var x = 60 + (i * pointSpacing);
                             var y = maxAmount > 0 ? 240 - ((double)item.Count / (double)maxAmount) * chartHeight : 240;
+                            var tooltipY = y - 45;
+                            if (tooltipY < 10) tooltipY = y + 15;
                             
-                            if (item.Count > 0 && (i == 0 || i == stockInData.Count - 1 || i % 5 == 0))
+                            if (item.Count > 0)
+                            {
+                                <g class="chart-point-group">
+                                    @* Invisible larger hit area for easier hover *@
+                                    <circle cx="@x" cy="@y" r="15" fill="transparent" class="chart-hit-area" />
+                                    @* Visible data point *@
+                                    @if (i == 0 || i == stockInData.Count - 1 || i % 5 == 0)
                             {
                                 <circle cx="@x" cy="@y" r="5" fill="#0d9488" stroke="#fff" stroke-width="2" class="data-point" />
+                                    }
+                                    @* Tooltip *@
+                                    <g class="chart-tooltip" transform="translate(@x, @tooltipY)">
+                                        <rect x="-50" y="-20" width="100" height="40" rx="6" fill="#1f2937" opacity="0.95" />
+                                        <text x="0" y="-2" font-size="11" fill="#9ca3af" text-anchor="middle">@item.Date.ToString("MMM dd, yyyy")</text>
+                                        <text x="0" y="14" font-size="13" fill="#0d9488" text-anchor="middle" font-weight="600">Stock In: @item.Count</text>
+                                        <polygon points="0,22 -6,28 6,28" fill="#1f2937" transform="translate(0, -2)" />
+                                    </g>
+                                </g>
+                            }
+                        }
+                        
+                        @* Data points for Stock Out with tooltips *@
+                        @for (int i = 0; i < stockOutData.Count; i++)
+                        {
+                            var item = stockOutData[i];
+                            var x = 60 + (i * pointSpacing);
+                            var y = maxAmount > 0 ? 240 - ((double)item.Count / (double)maxAmount) * chartHeight : 240;
+                            var tooltipY = y - 45;
+                            if (tooltipY < 10) tooltipY = y + 15;
+                            
+                            if (item.Count > 0)
+                            {
+                                <g class="chart-point-group">
+                                    @* Invisible larger hit area for easier hover *@
+                                    <circle cx="@x" cy="@y" r="15" fill="transparent" class="chart-hit-area" />
+                                    @* Tooltip for Stock Out *@
+                                    <g class="chart-tooltip" transform="translate(@x, @tooltipY)">
+                                        <rect x="-50" y="-20" width="100" height="40" rx="6" fill="#1f2937" opacity="0.95" />
+                                        <text x="0" y="-2" font-size="11" fill="#9ca3af" text-anchor="middle">@item.Date.ToString("MMM dd, yyyy")</text>
+                                        <text x="0" y="14" font-size="13" fill="#f43f5e" text-anchor="middle" font-weight="600">Stock Out: @item.Count</text>
+                                        <polygon points="0,22 -6,28 6,28" fill="#1f2937" transform="translate(0, -2)" />
+                                    </g>
+                                </g>
                             }
                         }
 
@@ -314,11 +374,13 @@ else
                             <line x1="60" y1="@y" x2="760" y2="@y" stroke="#e5e7eb" stroke-width="1" stroke-dasharray="4"/>
                         }
 
-                        @* Legend *@
-                        <rect x="580" y="10" width="12" height="12" fill="#0d9488" rx="2" />
-                        @: <text x="597" y="20" font-size="11" fill="#6b7280">Stock In</text>
-                        <rect x="660" y="10" width="12" height="12" fill="#f43f5e" rx="2" />
-                        @: <text x="677" y="20" font-size="11" fill="#6b7280">Stock Out</text>
+                        @* Legend at bottom - larger and more visible *@
+                        <g transform="translate(400, 280)">
+                            <rect x="-80" y="-8" width="18" height="18" fill="#0d9488" rx="3" />
+                            <text x="-55" y="4" font-size="16" fill="#1f2937" font-weight="600">Stock In</text>
+                            <rect x="40" y="-8" width="18" height="18" fill="#f43f5e" rx="3" />
+                            <text x="65" y="4" font-size="16" fill="#1f2937" font-weight="600">Stock Out</text>
+                        </g>
                     }
                     else
                     {
@@ -581,6 +643,7 @@ else
 @code {
     private bool showSecurityAlert = false;
     private bool isLoading = true;
+    private bool hideConfidential = false;
     private int sellerUserId = 0;
     private IT13_Final.Services.Data.InventoryDashboardStatsModel stats = new();
     private List<IT13_Final.Services.Data.DailyStockInData> stockInData = new();
@@ -1050,42 +1113,78 @@ else
         StateHasChanged();
     }
 
-    private async void HandleFromDateChange(ChangeEventArgs e)
+    private async Task HandleFromDateChange(ChangeEventArgs e)
     {
         var value = e.Value?.ToString();
-        if (string.IsNullOrWhiteSpace(value))
+        if (DateTime.TryParse(value, out var date))
+        {
+            var today = DateTime.Today;
+            // Prevent future dates - cap at today
+            if (date.Date > today)
+            {
+                startDate = today;
+            }
+            else
+            {
+                startDate = date.Date;
+            }
+            selectedDateRange = "";
+            
+            // If end date is before start date, adjust it
+            if (endDate.HasValue && endDate.Value < startDate.Value)
+            {
+                endDate = startDate.Value;
+            }
+        }
+        else if (string.IsNullOrWhiteSpace(value))
         {
             startDate = null;
+            selectedDateRange = "";
         }
-        else if (DateTime.TryParseExact(value, "MM/dd/yyyy", null, System.Globalization.DateTimeStyles.None, out var exactDate))
-        {
-            startDate = exactDate;
-        }
-        else if (DateTime.TryParse(value, out var date))
-        {
-            startDate = date;
-        }
-        selectedDateRange = "";
+        
         await LoadDashboardData();
         StateHasChanged();
     }
 
-    private async void HandleToDateChange(ChangeEventArgs e)
+    private async Task HandleToDateChange(ChangeEventArgs e)
     {
         var value = e.Value?.ToString();
-        if (string.IsNullOrWhiteSpace(value))
+        if (DateTime.TryParse(value, out var date))
+        {
+            var today = DateTime.Today;
+            var parsedDate = date.Date;
+            
+            // Prevent future dates - cap at today
+            if (parsedDate > today)
+            {
+                parsedDate = today;
+            }
+            
+            // Ensure end date is never before start date
+            if (startDate.HasValue)
+            {
+                if (parsedDate < startDate.Value)
+                {
+                    endDate = startDate.Value;
+                }
+                else
+                {
+                    endDate = parsedDate;
+                }
+            }
+            else
+            {
+                endDate = parsedDate;
+            }
+            
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
         {
             endDate = null;
+            selectedDateRange = "";
         }
-        else if (DateTime.TryParseExact(value, "MM/dd/yyyy", null, System.Globalization.DateTimeStyles.None, out var exactDate))
-        {
-            endDate = exactDate;
-        }
-        else if (DateTime.TryParse(value, out var date))
-        {
-            endDate = date;
-        }
-        selectedDateRange = "";
+        
         await LoadDashboardData();
         StateHasChanged();
     }
@@ -1099,8 +1198,22 @@ else
         StateHasChanged();
     }
 
+    private async Task ClearAllFilters()
+    {
+        searchTerm = string.Empty;
+        selectedDateRange = "";
+        startDate = null;
+        endDate = null;
+        await LoadDashboardData();
+        StateHasChanged();
+    }
+
     private async Task PrintDashboard()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         try
         {
             if (AuthState.CurrentUser != null)
@@ -1148,6 +1261,69 @@ else
             await JSRuntime.InvokeVoidAsync("printStockClerkDashboard", dashboardData);
         }
         catch { }
+    }
+
+    private void ToggleConfidentialVisibility()
+    {
+        hideConfidential = !hideConfidential;
+        StateHasChanged();
+    }
+
+    private string MaskValue(decimal value, string format = "N0")
+    {
+        if (hideConfidential) return "•••••";
+        return FormatCompactNumber(value);
+    }
+
+    private string MaskValue(int value)
+    {
+        if (hideConfidential) return "•••";
+        return FormatCompactNumber(value);
+    }
+
+    private string FormatCompactNumber(decimal value)
+    {
+        var absValue = Math.Abs(value);
+        var sign = value < 0 ? "-" : "";
+        
+        if (absValue >= 1_000_000_000_000m) // Trillion
+        {
+            var num = absValue / 1_000_000_000_000m;
+            return sign + FormatWithMaxDigits(num) + "T";
+        }
+        else if (absValue >= 1_000_000_000m) // Billion
+        {
+            var num = absValue / 1_000_000_000m;
+            return sign + FormatWithMaxDigits(num) + "B";
+        }
+        else if (absValue >= 1_000_000m) // Million
+        {
+            var num = absValue / 1_000_000m;
+            return sign + FormatWithMaxDigits(num) + "M";
+        }
+        else if (absValue >= 10_000m) // Thousand (10K+)
+        {
+            var num = absValue / 1_000m;
+            return sign + FormatWithMaxDigits(num) + "K";
+        }
+        else
+        {
+            return value.ToString("N0");
+        }
+    }
+
+    private string FormatCompactNumber(int value)
+    {
+        return FormatCompactNumber((decimal)value);
+    }
+
+    private string FormatWithMaxDigits(decimal num)
+    {
+        // Format to max 4 significant digits
+        if (num >= 1000) return num.ToString("N0");
+        if (num >= 100) return num.ToString("F1");
+        if (num >= 10) return num.ToString("F2");
+        return num.ToString("F3");
     }
 
     public void Dispose()

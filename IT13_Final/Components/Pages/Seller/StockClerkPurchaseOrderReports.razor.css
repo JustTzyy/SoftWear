@@ -1,5 +1,28 @@
 /* Purchase Order Reports Page - Matching Sales Report Design */
 
+/* Delivery Status Badges */
+.overdue-badge {
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    display: inline-block;
+    background: #EF4444;
+    color: #FFFFFF;
+    white-space: nowrap;
+}
+
+.due-today-badge {
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    display: inline-block;
+    background: #F59E0B;
+    color: #FFFFFF;
+    white-space: nowrap;
+}
+
 /* ========================================
    Welcome Header - Match Dashboard
 ======================================== */

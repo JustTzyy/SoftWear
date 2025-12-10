@@ -64,7 +64,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">Custom</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -81,12 +81,6 @@
                class="date-input" 
                value="@(toDate?.ToString("yyyy-MM-dd"))" 
                @onchange="HandleToDateChange" />
-        <button class="filter-btn" @onclick="ApplyFilters">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
             <button class="clear-btn" @onclick="ClearDateFilter" title="Clear">
@@ -442,9 +436,22 @@
         var val = e.Value?.ToString() ?? string.Empty;
         if (DateTime.TryParse(val, out var date))
         {
-            fromDate = date.Date;
+            var today = DateTime.Today;
+            // Prevent future dates - cap at today
+            if (date.Date > today)
+            {
+                fromDate = today;
+            }
+            else
+            {
+                fromDate = date.Date;
+            }
+            
+            // If end date is before start date, adjust it
             if (toDate.HasValue && toDate.Value < fromDate.Value)
-                toDate = null;
+            {
+                toDate = fromDate.Value;
+            }
         }
         else
         {
@@ -459,10 +466,33 @@
         var val = e.Value?.ToString() ?? string.Empty;
         if (DateTime.TryParse(val, out var date))
         {
-            var dateValue = date.Date;
-            if (fromDate.HasValue && dateValue < fromDate.Value)
-                return;
-            toDate = dateValue;
+            var today = DateTime.Today;
+            var parsedDate = date.Date;
+            
+            // Prevent future dates - cap at today
+            if (parsedDate > today)
+            {
+                parsedDate = today;
+            }
+            
+            // Ensure end date is never before start date - if it is, set it to fromDate or today (whichever is earlier)
+            if (fromDate.HasValue)
+            {
+                // If end date is before start date, set it to start date
+                if (parsedDate < fromDate.Value)
+                {
+                    toDate = fromDate.Value;
+                }
+                else
+                {
+                    toDate = parsedDate;
+                }
+            }
+            else
+            {
+                // If no start date is set, allow any date up to today
+                toDate = parsedDate;
+            }
         }
         else
         {
@@ -546,6 +576,10 @@
 
     private async Task PrintReport()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         try
         {
             isGeneratingPDF = true;

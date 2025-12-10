@@ -62,6 +62,21 @@
     height: 20px;
 }
 
+.visibility-btn.hidden-mode {
+    background: rgba(239, 68, 68, 0.3);
+}
+
+.visibility-btn.hidden-mode:hover {
+    background: rgba(239, 68, 68, 0.5);
+}
+
+/* Masked/Hidden Values */
+.masked {
+    filter: blur(0);
+    letter-spacing: 2px;
+    font-family: monospace;
+}
+
 /* Dashboard Filters */
 .dashboard-filters {
     display: flex;
@@ -181,6 +196,29 @@
     font-size: 13px;
 }
 
+.date-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.date-input-with-icon {
+    width: 140px;
+    padding-right: 36px;
+}
+
+.date-input-icon {
+    position: absolute;
+    right: 10px;
+    width: 16px;
+    height: 16px;
+    max-width: 16px;
+    max-height: 16px;
+    color: #9ca3af;
+    pointer-events: none;
+    flex-shrink: 0;
+}
+
 .date-select:hover,
 .date-input:hover {
     border-color: #d1d5db;
@@ -275,15 +313,16 @@
 
 /* KPI Cards Row */
 .kpi-row {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    display: flex;
+    flex-wrap: wrap;
     gap: 16px;
     margin-bottom: 24px;
 }
 
-@media (max-width: 1400px) { .kpi-row { grid-template-columns: repeat(3, 1fr); } }
-@media (max-width: 900px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 600px) { .kpi-row { grid-template-columns: 1fr; } }
+.kpi-row > .kpi-card {
+    flex: 1 1 calc(20% - 13px);
+    min-width: 180px;
+}
 
 .kpi-card {
     background: white;
@@ -331,24 +370,23 @@
     gap: 4px;
     flex: 1;
     min-width: 0;
-    text-align: right; /* Align content to right */
 }
 
 .kpi-label {
     font-size: 13px;
     color: #6b7280;
     font-weight: 500;
-    text-align: left; /* Labels stay left */
+    text-align: left;
 }
 
 .kpi-value {
-    font-size: 24px;
+    font-size: clamp(13px, 1.6vw, 24px);
     font-weight: 700;
     color: #1a1a1a;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    text-align: right; /* Numbers align right */
+    letter-spacing: -0.5px;
+    line-height: 1.2;
+    word-break: break-word;
+    text-align: right;
 }
 
 .kpi-value.active { color: #10b981; }
@@ -357,10 +395,11 @@
 .kpi-trend {
     display: flex;
     align-items: center;
-    justify-content: flex-end; /* Trend aligned right */
+    justify-content: flex-start; /* Trend aligned left */
     gap: 4px;
     font-size: 12px;
     color: #9ca3af;
+    text-align: left;
 }
 
 .kpi-trend svg { width: 14px; height: 14px; }
@@ -406,7 +445,7 @@
 /* Charts Grid */
 .charts-grid {
     display: grid;
-    grid-template-columns: 2fr 1fr;
+    grid-template-columns: 1.5fr 1fr;
     gap: 20px;
     margin-bottom: 24px;
 }
@@ -470,6 +509,30 @@
     r: 7;
 }
 
+/* Chart tooltip styles */
+.chart-point-group {
+    cursor: pointer;
+}
+
+.chart-tooltip {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease-in-out;
+}
+
+.chart-point-group:hover .chart-tooltip {
+    opacity: 1;
+}
+
+.chart-point-group:hover .data-point {
+    r: 8;
+    filter: drop-shadow(0 0 6px rgba(92, 124, 250, 0.5));
+}
+
+.chart-hit-area {
+    cursor: pointer;
+}
+
 /* Horizontal Bar Chart */
 .horizontal-bars {
     display: flex;
@@ -489,7 +552,7 @@
     font-size: 13px;
     font-weight: 500;
     color: #6b7280;
-    text-align: right;
+    text-align: left;
     flex-shrink: 0;
 }
 
@@ -826,8 +889,11 @@
 }
 
 .seller-revenue, .seller-fee {
-    text-align: right;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
     flex-shrink: 0;
+    min-width: 100px;
 }
 
 .revenue-value, .fee-value {
@@ -835,6 +901,7 @@
     font-weight: 700;
     font-size: 15px;
     color: #1a1a1a;
+    text-align: right;
 }
 
 .fee-value { color: #5C7CFA; }
@@ -843,6 +910,7 @@
     display: block;
     font-size: 11px;
     color: #9ca3af;
+    text-align: right;
 }
 
 .empty-state {

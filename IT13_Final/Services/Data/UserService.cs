@@ -3,9 +3,67 @@ using Microsoft.Data.SqlClient;
 using System;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace IT13_Final.Services.Data
 {
+    // JSON Converter for DateOnly to handle serialization/deserialization
+    public class DateOnlyJsonConverter : JsonConverter<DateOnly?>
+    {
+        public override DateOnly? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            if (reader.TokenType == JsonTokenType.Null)
+                return null;
+
+            if (reader.TokenType == JsonTokenType.String)
+            {
+                var value = reader.GetString();
+                if (string.IsNullOrWhiteSpace(value))
+                    return null;
+
+                // Try parsing various date formats
+                if (DateOnly.TryParse(value, out var date))
+                    return date;
+
+                // Try parsing as DateTime and converting to DateOnly
+                if (DateTime.TryParse(value, out var dateTime))
+                    return DateOnly.FromDateTime(dateTime);
+            }
+            else if (reader.TokenType == JsonTokenType.Number)
+            {
+                // Handle numeric date formats if needed
+                return null;
+            }
+
+            return null;
+        }
+
+        public override void Write(Utf8JsonWriter writer, DateOnly? value, JsonSerializerOptions options)
+        {
+            if (value == null)
+            {
+                writer.WriteNullValue();
+            }
+            else
+            {
+                writer.WriteStringValue(value.Value.ToString("yyyy-MM-dd"));
+            }
+        }
+    }
+
+    public static class JsonOptionsHelper
+    {
+        public static JsonSerializerOptions GetJsonOptions()
+        {
+            return new JsonSerializerOptions
+            {
+                Converters = { new DateOnlyJsonConverter() },
+                PropertyNameCaseInsensitive = true,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            };
+        }
+    }
     public class EmailAlreadyExistsException : Exception
     {
         public EmailAlreadyExistsException() : base("Email address already exists.")
@@ -2227,12 +2285,14 @@ namespace IT13_Final.Services.Data
                 // There's an existing request - merge them
                 var combined = new CombinedRequestData();
 
+                var jsonOptions = JsonOptionsHelper.GetJsonOptions();
+
                 // Parse existing request
                 if (existingRequestType == "personal_info")
                 {
                     try
                     {
-                        combined.PersonalInfo = System.Text.Json.JsonSerializer.Deserialize<PersonalInfoRequestData>(existingRequestDataJson);
+                        combined.PersonalInfo = JsonSerializer.Deserialize<PersonalInfoRequestData>(existingRequestDataJson, jsonOptions);
                     }
                     catch { }
                 }
@@ -2240,7 +2300,7 @@ namespace IT13_Final.Services.Data
                 {
                     try
                     {
-                        combined.Address = System.Text.Json.JsonSerializer.Deserialize<AddressRequestData>(existingRequestDataJson);
+                        combined.Address = JsonSerializer.Deserialize<AddressRequestData>(existingRequestDataJson, jsonOptions);
                     }
                     catch { }
                 }
@@ -2249,7 +2309,7 @@ namespace IT13_Final.Services.Data
                     // Already a combined request - deserialize and update
                     try
                     {
-                        combined = System.Text.Json.JsonSerializer.Deserialize<CombinedRequestData>(existingRequestDataJson) ?? new CombinedRequestData();
+                        combined = JsonSerializer.Deserialize<CombinedRequestData>(existingRequestDataJson, jsonOptions) ?? new CombinedRequestData();
                     }
                     catch { }
                 }
@@ -2259,7 +2319,7 @@ namespace IT13_Final.Services.Data
                 {
                     try
                     {
-                        combined.PersonalInfo = System.Text.Json.JsonSerializer.Deserialize<PersonalInfoRequestData>(requestDataJson);
+                        combined.PersonalInfo = JsonSerializer.Deserialize<PersonalInfoRequestData>(requestDataJson, jsonOptions);
                     }
                     catch { }
                 }
@@ -2267,13 +2327,13 @@ namespace IT13_Final.Services.Data
                 {
                     try
                     {
-                        combined.Address = System.Text.Json.JsonSerializer.Deserialize<AddressRequestData>(requestDataJson);
+                        combined.Address = JsonSerializer.Deserialize<AddressRequestData>(requestDataJson, jsonOptions);
                     }
                     catch { }
                 }
 
                 finalRequestType = "combined";
-                finalRequestDataJson = System.Text.Json.JsonSerializer.Serialize(combined);
+                finalRequestDataJson = JsonSerializer.Serialize(combined, jsonOptions);
             }
             else
             {
@@ -2491,10 +2551,12 @@ namespace IT13_Final.Services.Data
 
             try
             {
+                var jsonOptions = JsonOptionsHelper.GetJsonOptions();
+
                 // Handle combined requests
                 if (requestType == "combined")
                 {
-                    var combined = System.Text.Json.JsonSerializer.Deserialize<CombinedRequestData>(requestDataJson);
+                    var combined = JsonSerializer.Deserialize<CombinedRequestData>(requestDataJson, jsonOptions);
                     if (combined != null)
                     {
                         bool personalSuccess = true;
@@ -2517,7 +2579,7 @@ namespace IT13_Final.Services.Data
                 }
                 else if (requestType == "personal_info")
                 {
-                    var data = System.Text.Json.JsonSerializer.Deserialize<PersonalInfoRequestData>(requestDataJson);
+                    var data = JsonSerializer.Deserialize<PersonalInfoRequestData>(requestDataJson, jsonOptions);
                     if (data != null)
                     {
                         success = await ProcessPersonalInfoUpdateAsync(conn, userId, data, ct);
@@ -2525,7 +2587,7 @@ namespace IT13_Final.Services.Data
                 }
                 else if (requestType == "address")
                 {
-                    var data = System.Text.Json.JsonSerializer.Deserialize<AddressRequestData>(requestDataJson);
+                    var data = JsonSerializer.Deserialize<AddressRequestData>(requestDataJson, jsonOptions);
                     if (data != null)
                     {
                         success = await ProcessAddressUpdateAsync(conn, userId, data, ct);

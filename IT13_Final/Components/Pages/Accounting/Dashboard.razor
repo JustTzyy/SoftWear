@@ -22,6 +22,22 @@
         <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
     </div>
     <div class="header-actions">
+        <button class="action-btn visibility-btn @(hideConfidential ? "hidden-mode" : "")" @onclick="ToggleConfidentialVisibility" title="@(hideConfidential ? "Show Confidential Info" : "Hide Confidential Info")">
+            @if (hideConfidential)
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                </svg>
+            }
+            else
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+            }
+        </button>
         <button class="action-btn print-btn" @onclick="PrintDashboard" title="Print Dashboard">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="6 9 6 2 18 2 18 9"></polyline>
@@ -39,7 +55,7 @@
             <circle cx="11" cy="11" r="8"></circle>
             <path d="m21 21-4.35-4.35"></path>
         </svg>
-        <input type="text" id="dashboard-search-input" class="search-input" placeholder="Search metrics, transactions..." @bind="searchTerm" @bind:event="oninput" @bind:after="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        <input type="text" id="dashboard-search-input" class="search-input" placeholder="Search sellers, metrics..." @bind="searchTerm" @bind:event="oninput" @bind:after="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
         @if (!string.IsNullOrWhiteSpace(searchTerm))
         {
             <button class="clear-search-btn" @onclick="HandleClearSearch" title="Clear">
@@ -51,7 +67,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -60,20 +76,22 @@
             <option value="thismonth">This Month</option>
             <option value="thisyear">This Year</option>
         </select>
-        <input type="text" 
+        <input type="date" 
                class="date-input" 
-               value="@(startDate?.ToString("MM/dd/yyyy"))" 
-               placeholder="mm/dd/yyyy"
+               value="@(startDate?.ToString("yyyy-MM-dd"))" 
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleFromDateChange" />
         <span class="date-separator">to</span>
-        <input type="text" 
+        <input type="date" 
                class="date-input" 
-               value="@(endDate?.ToString("MM/dd/yyyy"))" 
-               placeholder="mm/dd/yyyy"
+               value="@(endDate?.ToString("yyyy-MM-dd"))" 
+               min="@(startDate?.ToString("yyyy-MM-dd") ?? DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd"))"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleToDateChange" />
         @if (HasActiveDateFilters)
         {
-            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear">
+            <button class="clear-btn" @onclick="ClearAllFilters" title="Clear Filters">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
                     <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -128,7 +146,7 @@ else
             </div>
             <div class="kpi-content">
                 <span class="kpi-label">Gross Sales</span>
-                <span class="kpi-value">₱@stats.GrossSales.ToString("N0")</span>
+                <span class="kpi-value @(hideConfidential ? "masked" : "")">₱@MaskValue(stats.GrossSales)</span>
                 <span class="kpi-trend trend-up">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
                     <span>Total revenue</span>
@@ -145,7 +163,7 @@ else
             </div>
             <div class="kpi-content">
                 <span class="kpi-label">Net Profit</span>
-                <span class="kpi-value @(stats.NetProfit >= 0 ? "positive" : "negative")">₱@stats.NetProfit.ToString("N0")</span>
+                <span class="kpi-value @(stats.NetProfit >= 0 ? "positive" : "negative") @(hideConfidential ? "masked" : "")">₱@MaskValue(stats.NetProfit)</span>
                 <span class="kpi-trend @(stats.NetProfit >= 0 ? "trend-up" : "trend-down")">
                     @if (stats.NetProfit >= 0)
                     {
@@ -169,7 +187,7 @@ else
             </div>
             <div class="kpi-content">
                 <span class="kpi-label">Total Expenses</span>
-                <span class="kpi-value">₱@stats.TotalExpenses.ToString("N0")</span>
+                <span class="kpi-value @(hideConfidential ? "masked" : "")">₱@MaskValue(stats.TotalExpenses)</span>
                 <span class="kpi-trend trend-down">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
                     <span>Operating costs</span>
@@ -186,7 +204,7 @@ else
             </div>
             <div class="kpi-content">
                 <span class="kpi-label">Pending Approvals</span>
-                <span class="kpi-value @(stats.PendingApprovals > 0 ? "warning" : "")">@stats.PendingApprovals</span>
+                <span class="kpi-value @(stats.PendingApprovals > 0 ? "warning" : "") @(hideConfidential ? "masked" : "")">@MaskValue(stats.PendingApprovals)</span>
                 <span class="kpi-trend">
                     <span>Awaiting review</span>
                 </span>
@@ -201,7 +219,7 @@ else
             </div>
             <div class="kpi-content">
                 <span class="kpi-label">Cash Flow</span>
-                <span class="kpi-value @(stats.NetCashMovement >= 0 ? "positive" : "negative")">₱@stats.NetCashMovement.ToString("N0")</span>
+                <span class="kpi-value @(stats.NetCashMovement >= 0 ? "positive" : "negative") @(hideConfidential ? "masked" : "")">₱@MaskValue(stats.NetCashMovement)</span>
                 <span class="kpi-trend @(stats.NetCashMovement >= 0 ? "trend-up" : "trend-down")">
                     @if (stats.NetCashMovement >= 0)
                     {
@@ -270,17 +288,28 @@ else
                         <path d="@fillPath" fill="url(#salesGradient)" />
                         <path d="@linePath" fill="none" stroke="#059669" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
 
-                        @* Data points *@
+                        @* Data points with tooltips *@
                         @for (int i = 0; i < salesData.Count; i++)
                         {
                             var item = salesData[i];
                             var x = 60 + (i * pointSpacing);
                             var y = maxAmount > 0 ? 240 - ((double)item.Amount / (double)maxAmount) * chartHeight : 240;
+                            var tooltipY = y - 45;
+                            if (tooltipY < 10) tooltipY = y + 15;
                             
-                            if (item.Amount > 0 && (i == 0 || i == salesData.Count - 1 || i % 5 == 0))
-                            {
+                            <g class="chart-point-group">
+                                @* Invisible larger hit area for easier hover *@
+                                <circle cx="@x" cy="@y" r="15" fill="transparent" class="chart-hit-area" />
+                                @* Visible data point *@
                                 <circle cx="@x" cy="@y" r="5" fill="#059669" stroke="#fff" stroke-width="2" class="data-point" />
-                            }
+                                @* Tooltip *@
+                                <g class="chart-tooltip" transform="translate(@x, @tooltipY)">
+                                    <rect x="-55" y="-20" width="110" height="40" rx="6" fill="#1f2937" opacity="0.95" />
+                                    <text x="0" y="-2" font-size="11" fill="#9ca3af" text-anchor="middle">@item.Date.ToString("MMM dd, yyyy")</text>
+                                    <text x="0" y="14" font-size="13" fill="#10b981" text-anchor="middle" font-weight="600">₱@item.Amount.ToString("N2")</text>
+                                    <polygon points="0,22 -6,28 6,28" fill="#1f2937" transform="translate(0, -2)" />
+                                </g>
+                            </g>
                         }
 
                         @* X-axis labels *@
@@ -323,30 +352,30 @@ else
                     <div class="bar-row">
                         <span class="bar-label">Gross Sales</span>
                         <div class="bar-track">
-                            <div class="bar-fill bar-income" style="width: @((stats.GrossSales > 0 ? (double)stats.GrossSales / finMax * 100 : 0).ToString("F1"))%"></div>
+                            <div class="bar-fill bar-income" style="width: @(hideConfidential ? "0" : (stats.GrossSales > 0 ? (double)stats.GrossSales / finMax * 100 : 0).ToString("F1"))%"></div>
                         </div>
-                        <span class="bar-value">₱@stats.GrossSales.ToString("N0")</span>
+                        <span class="bar-value @(hideConfidential ? "masked" : "")">₱@MaskValue(stats.GrossSales)</span>
                     </div>
                     <div class="bar-row">
                         <span class="bar-label">Returns</span>
                         <div class="bar-track">
-                            <div class="bar-fill bar-returns" style="width: @((stats.Returns > 0 ? (double)stats.Returns / finMax * 100 : 0).ToString("F1"))%"></div>
+                            <div class="bar-fill bar-returns" style="width: @(hideConfidential ? "0" : (stats.Returns > 0 ? (double)stats.Returns / finMax * 100 : 0).ToString("F1"))%"></div>
                         </div>
-                        <span class="bar-value">₱@stats.Returns.ToString("N0")</span>
+                        <span class="bar-value @(hideConfidential ? "masked" : "")">₱@MaskValue(stats.Returns)</span>
                     </div>
                     <div class="bar-row">
                         <span class="bar-label">Expenses</span>
                         <div class="bar-track">
-                            <div class="bar-fill bar-expense" style="width: @((stats.TotalExpenses > 0 ? (double)stats.TotalExpenses / finMax * 100 : 0).ToString("F1"))%"></div>
+                            <div class="bar-fill bar-expense" style="width: @(hideConfidential ? "0" : (stats.TotalExpenses > 0 ? (double)stats.TotalExpenses / finMax * 100 : 0).ToString("F1"))%"></div>
                         </div>
-                        <span class="bar-value">₱@stats.TotalExpenses.ToString("N0")</span>
+                        <span class="bar-value @(hideConfidential ? "masked" : "")">₱@MaskValue(stats.TotalExpenses)</span>
                     </div>
                     <div class="bar-row">
                         <span class="bar-label">Net Profit</span>
                         <div class="bar-track">
-                            <div class="bar-fill @(stats.NetProfit >= 0 ? "bar-profit" : "bar-loss")" style="width: @((stats.NetProfit != 0 ? Math.Abs((double)stats.NetProfit) / finMax * 100 : 0).ToString("F1"))%"></div>
+                            <div class="bar-fill @(stats.NetProfit >= 0 ? "bar-profit" : "bar-loss")" style="width: @(hideConfidential ? "0" : (stats.NetProfit != 0 ? Math.Abs((double)stats.NetProfit) / finMax * 100 : 0).ToString("F1"))%"></div>
                         </div>
-                        <span class="bar-value @(stats.NetProfit >= 0 ? "positive" : "negative")">₱@stats.NetProfit.ToString("N0")</span>
+                        <span class="bar-value @(stats.NetProfit >= 0 ? "positive" : "negative") @(hideConfidential ? "masked" : "")">₱@MaskValue(stats.NetProfit)</span>
                     </div>
                 </div>
             </div>
@@ -380,7 +409,7 @@ else
                         <span class="tax-label">VAT (12%)</span>
                         <span class="tax-desc">Value Added Tax on sales</span>
                     </div>
-                    <span class="tax-amount">₱@stats.VAT.ToString("N0")</span>
+                    <span class="tax-amount @(hideConfidential ? "masked" : "")">₱@MaskValue(stats.VAT)</span>
                 </div>
                 <div class="tax-divider"></div>
                 <div class="tax-item">
@@ -395,7 +424,7 @@ else
                         <span class="tax-label">Admin Fee (2%)</span>
                         <span class="tax-desc">Platform fee per product</span>
                     </div>
-                    <span class="tax-amount">₱@stats.AdminFee.ToString("N0")</span>
+                    <span class="tax-amount @(hideConfidential ? "masked" : "")">₱@MaskValue(stats.AdminFee)</span>
                 </div>
                 <div class="tax-divider"></div>
                 <div class="tax-item tax-total">
@@ -409,7 +438,7 @@ else
                         <span class="tax-label">Total Tax & Fees</span>
                         <span class="tax-desc">Combined obligations</span>
                     </div>
-                    <span class="tax-amount total">₱@((stats.VAT + stats.AdminFee).ToString("N0"))</span>
+                    <span class="tax-amount total @(hideConfidential ? "masked" : "")">₱@MaskValue(stats.VAT + stats.AdminFee)</span>
                 </div>
             </div>
         </div>
@@ -427,7 +456,7 @@ else
                 </svg>
             </div>
             <div class="stat-info">
-                <span class="stat-value">₱@stats.NetIncome.ToString("N0")</span>
+                <span class="stat-value @(hideConfidential ? "masked" : "")">₱@MaskValue(stats.NetIncome)</span>
                 <span class="stat-label">Net Income</span>
             </div>
             <span class="stat-badge">After returns</span>
@@ -441,7 +470,7 @@ else
                 </svg>
             </div>
             <div class="stat-info">
-                <span class="stat-value">@stats.TotalTransactions</span>
+                <span class="stat-value @(hideConfidential ? "masked" : "")">@MaskValue(stats.TotalTransactions)</span>
                 <span class="stat-label">Transactions</span>
             </div>
             <span class="stat-badge">All completed</span>
@@ -455,7 +484,7 @@ else
                 </svg>
             </div>
             <div class="stat-info">
-                <span class="stat-value">₱@stats.Returns.ToString("N0")</span>
+                <span class="stat-value @(hideConfidential ? "masked" : "")">₱@MaskValue(stats.Returns)</span>
                 <span class="stat-label">Returns</span>
             </div>
             <span class="stat-badge">Refunded</span>
@@ -470,7 +499,7 @@ else
                 </svg>
             </div>
             <div class="stat-info">
-                <span class="stat-value">₱@stats.AccountsPayable.ToString("N0")</span>
+                <span class="stat-value @(hideConfidential ? "masked" : "")">₱@MaskValue(stats.AccountsPayable)</span>
                 <span class="stat-label">Accounts Payable</span>
             </div>
             <span class="stat-badge badge-warning">To suppliers</span>
@@ -485,7 +514,7 @@ else
                 </svg>
             </div>
             <div class="stat-info">
-                <span class="stat-value">₱@stats.AccountsReceivable.ToString("N0")</span>
+                <span class="stat-value @(hideConfidential ? "masked" : "")">₱@MaskValue(stats.AccountsReceivable)</span>
                 <span class="stat-label">Accounts Receivable</span>
             </div>
             <span class="stat-badge badge-success">From customers</span>
@@ -500,8 +529,8 @@ else
                 </svg>
             </div>
             <div class="stat-info">
-                <span class="stat-value @(stats.NetIncome > 0 && (stats.NetProfit / stats.NetIncome * 100) >= 10 ? "positive" : "warning")">
-                    @(stats.NetIncome > 0 ? $"{((stats.NetProfit / stats.NetIncome) * 100):F1}%" : "N/A")
+                <span class="stat-value @(stats.NetIncome > 0 && (stats.NetProfit / stats.NetIncome * 100) >= 10 ? "positive" : "warning") @(hideConfidential ? "masked" : "")">
+                    @(hideConfidential ? "•••%" : (stats.NetIncome > 0 ? $"{((stats.NetProfit / stats.NetIncome) * 100):F1}%" : "N/A"))
                 </span>
                 <span class="stat-label">Profit Margin</span>
             </div>
@@ -533,7 +562,7 @@ else
                                 <span class="item-name">@item.CashierName</span>
                                 <span class="item-detail">@item.SaleDate.ToString("MMM dd, yyyy") • @item.TotalTransactions transactions</span>
                             </div>
-                            <span class="item-value">₱@item.TotalSales.ToString("N0")</span>
+                            <span class="item-value @(hideConfidential ? "masked" : "")">₱@MaskValue(item.TotalSales)</span>
                         </div>
                     }
                 }
@@ -570,7 +599,7 @@ else
                                 <span class="item-name">@item.Type</span>
                                 <span class="item-detail">@item.Count transactions</span>
                             </div>
-                            <span class="item-value">₱@item.Total.ToString("N0")</span>
+                            <span class="item-value @(hideConfidential ? "masked" : "")">₱@MaskValue(item.Total)</span>
                         </div>
                     }
                 }
@@ -634,14 +663,14 @@ else
                 <div class="insights-grid">
                     <div class="insight-item">
                         <span class="insight-label">Profit Margin</span>
-                        <span class="insight-value @(stats.NetIncome > 0 && (stats.NetProfit / stats.NetIncome * 100) >= 10 ? "text-success" : "text-warning")">
-                            @(stats.NetIncome > 0 ? $"{((stats.NetProfit / stats.NetIncome) * 100):F1}%" : "N/A")
+                        <span class="insight-value @(stats.NetIncome > 0 && (stats.NetProfit / stats.NetIncome * 100) >= 10 ? "text-success" : "text-warning") @(hideConfidential ? "masked" : "")">
+                            @(hideConfidential ? "•••%" : (stats.NetIncome > 0 ? $"{((stats.NetProfit / stats.NetIncome) * 100):F1}%" : "N/A"))
                         </span>
                     </div>
                     <div class="insight-item">
                         <span class="insight-label">Return Rate</span>
-                        <span class="insight-value @(stats.GrossSales > 0 && (stats.Returns / stats.GrossSales * 100) < 5 ? "text-success" : "text-warning")">
-                            @(stats.GrossSales > 0 ? $"{((stats.Returns / stats.GrossSales) * 100):F1}%" : "0%")
+                        <span class="insight-value @(stats.GrossSales > 0 && (stats.Returns / stats.GrossSales * 100) < 5 ? "text-success" : "text-warning") @(hideConfidential ? "masked" : "")">
+                            @(hideConfidential ? "•••%" : (stats.GrossSales > 0 ? $"{((stats.Returns / stats.GrossSales) * 100):F1}%" : "0%"))
                         </span>
                     </div>
                 </div>
@@ -673,7 +702,7 @@ else
                             <li>All daily sales verifications are up to date</li>
                             @if (stats.NetProfit > 0)
                             {
-                                <li>Business is profitable with ₱@stats.NetProfit.ToString("N0") net profit</li>
+                                <li>Business is profitable with <span class="@(hideConfidential ? "masked" : "")">₱@MaskValue(stats.NetProfit)</span> net profit</li>
                             }
                         </ul>
                     </div>
@@ -740,6 +769,7 @@ else
 
     private bool showSecurityAlert = false;
     private bool isLoading = true;
+    private bool hideConfidential = false;
     private int sellerUserId = 0;
     private DashboardStats stats = new();
     private List<DailySalesData> salesData = new();
@@ -774,6 +804,70 @@ else
         
         var searchLower = searchTerm.ToLowerInvariant();
         return keywords.Any(k => k.Contains(searchLower) || searchLower.Contains(k));
+    }
+
+    private void ToggleConfidentialVisibility()
+    {
+        hideConfidential = !hideConfidential;
+        StateHasChanged();
+    }
+
+    private string MaskValue(decimal value, string format = "N0")
+    {
+        if (hideConfidential) return "•••••";
+        return FormatCompactNumber(value);
+    }
+
+    private string MaskValue(int value)
+    {
+        if (hideConfidential) return "•••";
+        return FormatCompactNumber(value);
+    }
+
+    private string FormatCompactNumber(decimal value)
+    {
+        var absValue = Math.Abs(value);
+        var sign = value < 0 ? "-" : "";
+        
+        if (absValue >= 1_000_000_000_000m) // Trillion
+        {
+            var num = absValue / 1_000_000_000_000m;
+            return sign + FormatWithMaxDigits(num) + "T";
+        }
+        else if (absValue >= 1_000_000_000m) // Billion
+        {
+            var num = absValue / 1_000_000_000m;
+            return sign + FormatWithMaxDigits(num) + "B";
+        }
+        else if (absValue >= 1_000_000m) // Million
+        {
+            var num = absValue / 1_000_000m;
+            return sign + FormatWithMaxDigits(num) + "M";
+        }
+        else if (absValue >= 10_000m) // Thousand (10K+)
+        {
+            var num = absValue / 1_000m;
+            return sign + FormatWithMaxDigits(num) + "K";
+        }
+        else
+        {
+            return value.ToString("N0");
+        }
+    }
+
+    private string FormatWithMaxDigits(decimal num)
+    {
+        // Format to max 4 significant digits
+        if (num >= 1000) return num.ToString("N0");
+        if (num >= 100) return num.ToString("F1");
+        if (num >= 10) return num.ToString("F2");
+        return num.ToString("F3");
+    }
+
+    private string MaskPercentage(decimal? value)
+    {
+        if (!value.HasValue) return hideConfidential ? "•••%" : "N/A";
+        return hideConfidential ? "•••%" : $"{value:F1}%";
     }
 
     private string GetGreeting()
@@ -1501,42 +1595,78 @@ else
         await LoadDashboardData();
     }
 
-    private async void HandleFromDateChange(ChangeEventArgs e)
+    private async Task HandleFromDateChange(ChangeEventArgs e)
     {
         var value = e.Value?.ToString();
-        if (string.IsNullOrWhiteSpace(value))
+        if (DateTime.TryParse(value, out var date))
+        {
+            var today = DateTime.Today;
+            // Prevent future dates - cap at today
+            if (date.Date > today)
+            {
+                startDate = today;
+            }
+            else
+            {
+                startDate = date.Date;
+            }
+            selectedDateRange = "";
+            
+            // If end date is before start date, adjust it
+            if (endDate.HasValue && endDate.Value < startDate.Value)
+            {
+                endDate = startDate.Value;
+            }
+        }
+        else if (string.IsNullOrWhiteSpace(value))
         {
             startDate = null;
+            selectedDateRange = "";
         }
-        else if (DateTime.TryParseExact(value, "MM/dd/yyyy", null, System.Globalization.DateTimeStyles.None, out var exactDate))
-        {
-            startDate = exactDate;
-        }
-        else if (DateTime.TryParse(value, out var date))
-        {
-            startDate = date;
-        }
-        selectedDateRange = "";
+        
         await LoadDashboardData();
         StateHasChanged();
     }
 
-    private async void HandleToDateChange(ChangeEventArgs e)
+    private async Task HandleToDateChange(ChangeEventArgs e)
     {
         var value = e.Value?.ToString();
-        if (string.IsNullOrWhiteSpace(value))
+        if (DateTime.TryParse(value, out var date))
+        {
+            var today = DateTime.Today;
+            var parsedDate = date.Date;
+            
+            // Prevent future dates - cap at today
+            if (parsedDate > today)
+            {
+                parsedDate = today;
+            }
+            
+            // Ensure end date is never before start date
+            if (startDate.HasValue)
+            {
+                if (parsedDate < startDate.Value)
+                {
+                    endDate = startDate.Value;
+                }
+                else
+                {
+                    endDate = parsedDate;
+                }
+            }
+            else
+            {
+                endDate = parsedDate;
+            }
+            
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
         {
             endDate = null;
+            selectedDateRange = "";
         }
-        else if (DateTime.TryParseExact(value, "MM/dd/yyyy", null, System.Globalization.DateTimeStyles.None, out var exactDate))
-        {
-            endDate = exactDate;
-        }
-        else if (DateTime.TryParse(value, out var date))
-        {
-            endDate = date;
-        }
-        selectedDateRange = "";
+        
         await LoadDashboardData();
         StateHasChanged();
     }
@@ -1550,8 +1680,22 @@ else
         StateHasChanged();
     }
 
+    private async Task ClearAllFilters()
+    {
+        searchTerm = string.Empty;
+        selectedDateRange = "";
+        startDate = null;
+        endDate = null;
+        await LoadDashboardData();
+        StateHasChanged();
+    }
+
     private async Task PrintDashboard()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         try
         {
             if (AuthState.CurrentUser != null)

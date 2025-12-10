@@ -6,6 +6,7 @@
 @inject IT13_Final.Services.Audit.IHistoryService HistoryService
 @inject IJSRuntime JSRuntime
 @using Microsoft.Data.SqlClient
+@implements IDisposable
 
 @* Welcome Header *@
 <div class="welcome-header">
@@ -33,8 +34,8 @@
 
 @* Date Filters *@
 <div class="dashboard-filters">
-    <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+    <div class="date-filters" style="margin-left: auto;">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -43,28 +44,22 @@
             <option value="thismonth">This Month</option>
             <option value="thisyear">This Year</option>
         </select>
-        <input type="date"
-               class="date-input"
-               value="@(startDate?.ToString("yyyy-MM-dd"))"
+        <input type="date" 
+               class="date-input" 
+               value="@(startDate?.ToString("yyyy-MM-dd"))" 
                min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
-               max="@(endDate?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd"))"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleFromDateChange" />
         <span class="date-separator">to</span>
-        <input type="date"
-               class="date-input"
-               value="@(endDate?.ToString("yyyy-MM-dd"))"
-               min="@(startDate?.ToString("yyyy-MM-dd"))"
-               max="@DateTime.Today.ToString("yyyy-MM-dd")"
+        <input type="date" 
+               class="date-input" 
+               value="@(endDate?.ToString("yyyy-MM-dd"))" 
+               min="@(startDate?.ToString("yyyy-MM-dd") ?? DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd"))"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleToDateChange" />
-        <button class="filter-btn" @onclick="LoadData">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
-            <button class="clear-btn" @onclick="ClearFilters" title="Clear">
+            <button class="clear-btn" @onclick="ClearAllFilters" title="Clear Filters">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
                     <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -143,15 +138,15 @@ else
                     <ul class="simple-list">
                         <li>
                             <span>Gross Sales</span>
-                            <span>₱@grossSales.ToString("N2")</span>
+                            <span class="amount-value">₱@grossSales.ToString("N2")</span>
                         </li>
                         <li>
                             <span>Less: Returns</span>
-                            <span style="color: #dc3545;">₱@returns.ToString("N2")</span>
+                            <span class="amount-value" style="color: #dc3545;">₱@returns.ToString("N2")</span>
                         </li>
                         <li class="total-row">
                             <span>Net Sales</span>
-                            <span>₱@netSales.ToString("N2")</span>
+                            <span class="amount-value">₱@netSales.ToString("N2")</span>
                         </li>
                     </ul>
                 </div>
@@ -168,16 +163,16 @@ else
                         }
                         else
                         {
-                            @foreach (var row in expenseBreakdown)
+                            @foreach (var row in filteredExpenseBreakdown)
                             {
                                 <li>
                                     <span>@row.Type</span>
-                                    <span style="color: #dc3545;">₱@row.Total.ToString("N2")</span>
+                                    <span class="amount-value" style="color: #dc3545;">₱@row.Total.ToString("N2")</span>
                                 </li>
                             }
                             <li class="total-row">
                                 <span>Total Expenses</span>
-                                <span style="color: #dc3545;">₱@totalExpenses.ToString("N2")</span>
+                                <span class="amount-value" style="color: #dc3545;">₱@totalExpenses.ToString("N2")</span>
                             </li>
                         }
                     </ul>
@@ -203,6 +198,7 @@ else
 
     private bool isLoading = false;
     private bool isGeneratingPDF = false;
+    private string searchTerm = string.Empty;
 
     private int sellerUserId = 0;
     private DateTime? startDate;
@@ -210,7 +206,8 @@ else
     private string selectedDateRange = string.Empty;
     private bool onlyApprovedDays = true; // Default to only show approved daily sales verification
 
-    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue || onlyApprovedDays;
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue;
+    private System.Threading.Timer? _searchTimer;
 
     private decimal grossSales;
     private decimal returns;
@@ -222,11 +219,23 @@ else
     private decimal adminFeeAmount = 0m;
 
     private List<ExpenseRow> expenseBreakdown = new();
+    private List<ExpenseRow> filteredExpenseBreakdown => expenseBreakdown
+        .Where(e => string.IsNullOrWhiteSpace(searchTerm) || 
+                    e.Type.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+        .ToList();
 
     protected override async Task OnInitializedAsync()
     {
         await LoadSellerUserId();
         await LoadData();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JSRuntime.InvokeVoidAsync("setupSearchInputFilter", "profit-loss-search-input");
+        }
     }
 
     private async Task LoadSellerUserId()
@@ -465,6 +474,10 @@ else
         var today = DateTime.Today;
         switch (selectedDateRange)
         {
+            case "":
+                startDate = null;
+                endDate = null;
+                break;
             case "today":
                 startDate = today;
                 endDate = today;
@@ -474,11 +487,11 @@ else
                 endDate = today.AddDays(-1);
                 break;
             case "last7days":
-                startDate = today.AddDays(-7);
+                startDate = today.AddDays(-6);
                 endDate = today;
                 break;
             case "last30days":
-                startDate = today.AddDays(-30);
+                startDate = today.AddDays(-29);
                 endDate = today;
                 break;
             case "thismonth":
@@ -489,28 +502,67 @@ else
                 startDate = new DateTime(today.Year, 1, 1);
                 endDate = today;
                 break;
-            default:
-                break;
         }
         await LoadData();
+        StateHasChanged();
     }
 
     private async Task HandleFromDateChange(ChangeEventArgs e)
     {
-        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        var value = e.Value?.ToString()?.Trim();
+        if (string.IsNullOrWhiteSpace(value))
         {
-            startDate = date;
-            await LoadData();
+            startDate = null;
         }
+        else if (DateTime.TryParseExact(value, "MM/dd/yyyy", null, System.Globalization.DateTimeStyles.None, out var exactDate))
+        {
+            startDate = exactDate.Date;
+        }
+        else if (DateTime.TryParseExact(value, "M/d/yyyy", null, System.Globalization.DateTimeStyles.None, out var shortDate))
+        {
+            startDate = shortDate.Date;
+        }
+        else if (DateTime.TryParse(value, out var date))
+        {
+            startDate = date.Date;
+        }
+        else
+        {
+            return;
+        }
+        
+        selectedDateRange = "";
+        await LoadData();
+        StateHasChanged();
     }
 
     private async Task HandleToDateChange(ChangeEventArgs e)
     {
-        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        var value = e.Value?.ToString()?.Trim();
+        if (string.IsNullOrWhiteSpace(value))
         {
-            endDate = date;
-            await LoadData();
+            endDate = null;
         }
+        else if (DateTime.TryParseExact(value, "MM/dd/yyyy", null, System.Globalization.DateTimeStyles.None, out var exactDate))
+        {
+            endDate = exactDate.Date;
+        }
+        else if (DateTime.TryParseExact(value, "M/d/yyyy", null, System.Globalization.DateTimeStyles.None, out var shortDate))
+        {
+            endDate = shortDate.Date;
+        }
+        else if (DateTime.TryParse(value, out var date))
+        {
+            endDate = date.Date;
+        }
+        else
+        {
+            return;
+        }
+        
+        selectedDateRange = "";
+        await LoadData();
+        StateHasChanged();
     }
 
     private string GetDateRangeText()
@@ -531,6 +583,41 @@ else
         await LoadData();
     }
 
+    private async Task ClearAllFilters()
+    {
+        searchTerm = string.Empty;
+        startDate = null;
+        endDate = null;
+        selectedDateRange = string.Empty;
+        onlyApprovedDays = true;
+        await LoadData();
+        StateHasChanged();
+    }
+
+    private void HandleSearchInput()
+    {
+        var filtered = System.Text.RegularExpressions.Regex.Replace(searchTerm, @"[^a-zA-Z0-9\s\-_]", "");
+        if (filtered != searchTerm)
+        {
+            searchTerm = filtered;
+        }
+        StateHasChanged();
+    }
+
+    private async Task HandleClearSearch()
+    {
+        searchTerm = string.Empty;
+        StateHasChanged();
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            StateHasChanged();
+        }
+    }
+
     private async Task HandleApprovedDaysChanged()
     {
         await LoadData();
@@ -538,6 +625,10 @@ else
 
     private async Task PrintReport()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         try
         {
             isGeneratingPDF = true;
@@ -601,6 +692,11 @@ else
             isGeneratingPDF = false;
             StateHasChanged();
         }
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
     }
 }
 

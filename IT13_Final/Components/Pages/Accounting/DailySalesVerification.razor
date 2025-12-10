@@ -52,7 +52,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -74,12 +74,6 @@
                min="@(startDate?.ToString("yyyy-MM-dd"))" 
                max="@DateTime.Today.ToString("yyyy-MM-dd")" 
                @onchange="HandleToDateChange" />
-        <button class="filter-btn" @onclick="ApplyDateFilter">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
             <button class="clear-btn" @onclick="ClearDateFilter" title="Clear">
@@ -137,27 +131,23 @@
                 <thead>
                     <tr>
                         <th>Cashier</th>
-                        <th>Date</th>
                         <th>Total Sales</th>
-                        <th>Transactions</th>
-                        <th>Cash</th>
-                        <th>GCash</th>
                         <th>Returns</th>
                         <th>Status</th>
-                        <th>Actions</th>
+                        <th style="text-align: center;">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     @if (isLoading)
                     {
                         <tr>
-                            <td colspan="9" class="loading-cell">Loading daily sales reports...</td>
+                            <td colspan="5" class="loading-cell">Loading daily sales reports...</td>
                         </tr>
                     }
                     else if (pendingDailySales.Count == 0)
                     {
                         <tr>
-                            <td colspan="9" class="empty-cell">No daily sales reports found for this filter.</td>
+                            <td colspan="5" class="empty-cell">No daily sales reports found for this filter.</td>
                         </tr>
                     }
                     else
@@ -166,12 +156,8 @@
                         {
                             <tr class="clickable-row" @onclick="async () => await ShowDailySalesDetails(report.CashierUserId, report.SaleDate)">
                                 <td>@report.CashierName</td>
-                                <td>@report.SaleDate.ToString("MMM dd, yyyy")</td>
-                                <td>₱@report.TotalSales.ToString("N2")</td>
-                                <td>@report.TotalTransactions</td>
-                                <td>₱@report.CashAmount.ToString("N2")</td>
-                                <td>₱@report.GCashAmount.ToString("N2")</td>
-                                <td>
+                                <td style="text-align: right; font-weight: 600;">₱@report.TotalSales.ToString("N2")</td>
+                                <td style="text-align: right;">
                                     @if (report.ReturnCount > 0)
                                     {
                                         <span style="color: #dc3545;">@report.ReturnCount (₱@report.TotalReturns.ToString("N2"))</span>
@@ -182,7 +168,7 @@
                                     }
                                 </td>
                                 <td>
-                                    <span class="status-text @(report.Status == "Verified" ? "status-text-approved" : report.Status == "Rejected" ? "status-text-cancelled" : "status-text-pending")">@report.Status</span>
+                                    <span style="color: @(report.Status == "Verified" ? "#065F46" : report.Status == "Rejected" ? "#991B1B" : "#D97706"); font-weight: 600;">@report.Status</span>
                                 </td>
                                 <td class="actions-cell" @onclick:stopPropagation="true">
                                     @if (report.Status == "Pending")
@@ -277,7 +263,7 @@
                     <div class="info-row">
                         <span class="info-label">Status:</span>
                         <span class="info-value">
-                            <span class="status-text @(selectedDailySales.Status == "Verified" ? "status-text-approved" : selectedDailySales.Status == "Rejected" ? "status-text-cancelled" : "status-text-pending")">@selectedDailySales.Status</span>
+                            <span style="color: @(selectedDailySales.Status == "Verified" ? "#065F46" : selectedDailySales.Status == "Rejected" ? "#991B1B" : "#D97706"); font-weight: 600;">@selectedDailySales.Status</span>
                         </span>
                     </div>
                     <div class="info-row">
@@ -901,6 +887,10 @@
 
     private async Task PrintReport()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         try
         {
             isGeneratingPDF = true;

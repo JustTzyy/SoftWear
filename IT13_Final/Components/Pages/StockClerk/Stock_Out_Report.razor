@@ -40,7 +40,7 @@
         <input type="text" 
                id="stock-out-report-search-input"
                class="search-input" 
-               placeholder="Search by product, variant, or reason..." 
+               placeholder="Search by product or variant..." 
                @bind="searchTerm" 
                @bind:event="oninput" 
                @bind:after="HandleSearchInput"
@@ -56,7 +56,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -78,12 +78,6 @@
                min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
                max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleEndDateChange" />
-        <button class="filter-btn" @onclick="ApplyFilters">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
             <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
@@ -135,7 +129,6 @@
                     <th style="text-align: left;">Product</th>
                     <th style="text-align: left;">Variant</th>
                     <th style="text-align: right;">Quantity</th>
-                    <th style="text-align: left;">Reason</th>
                     <th style="text-align: left;">Date</th>
                     <th style="text-align: center;">Actions</th>
                 </tr>
@@ -144,13 +137,13 @@
                 @if (isLoading)
                 {
                     <tr>
-                        <td colspan="6" class="loading-cell">Loading stock out records...</td>
+                        <td colspan="5" class="loading-cell">Loading stock out records...</td>
                     </tr>
                 }
                 else if (stockOuts.Count == 0)
                 {
                     <tr>
-                        <td colspan="6" class="empty-cell">No stock out records found for this filter.</td>
+                        <td colspan="5" class="empty-cell">No stock out records found for this filter.</td>
                     </tr>
                 }
                 else
@@ -161,7 +154,6 @@
                             <td class="sale-number" style="text-align: left;">@stockOut.ProductName</td>
                             <td style="text-align: left;">@stockOut.VariantName</td>
                             <td style="text-align: right;">@stockOut.QuantityRemoved</td>
-                            <td style="text-align: left;">@(stockOut.Reason ?? "N/A")</td>
                             <td>
                                 <div class="timestamp-info">
                                     <div class="timestamp-date">@stockOut.Timestamps.ToString("MMM dd, yyyy")</div>
@@ -579,6 +571,10 @@
 
     private async Task PrintReport()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         try
         {
             isGeneratingPDF = true;

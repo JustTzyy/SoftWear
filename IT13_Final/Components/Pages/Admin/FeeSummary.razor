@@ -42,7 +42,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -61,15 +61,9 @@
         <input type="date" 
                class="date-input" 
                value="@(endDate?.ToString("yyyy-MM-dd"))" 
-               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               min="@(startDate?.ToString("yyyy-MM-dd") ?? DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd"))"
                max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleEndDateChange" />
-        <button class="filter-btn" @onclick="LoadReportData">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Filter
-        </button>
         @if (HasActiveDateFilters)
         {
             <button class="clear-btn" @onclick="ClearDateFilter" title="Clear">
@@ -329,14 +323,31 @@ else
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            startDate = date;
+            var today = DateTime.Today;
+            // Prevent future dates - cap at today
+            if (date.Date > today)
+            {
+                startDate = today;
+            }
+            else
+            {
+                startDate = date.Date;
+            }
             selectedDateRange = "";
+            
+            // If end date is before start date, adjust it
+            if (endDate.HasValue && endDate.Value < startDate.Value)
+            {
+                endDate = startDate.Value;
+            }
         }
         else if (string.IsNullOrWhiteSpace(value))
         {
             startDate = null;
             selectedDateRange = "";
         }
+        
+        _ = LoadReportData();
     }
 
     private void HandleEndDateChange(ChangeEventArgs e)
@@ -344,7 +355,34 @@ else
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            endDate = date;
+            var today = DateTime.Today;
+            var parsedDate = date.Date;
+            
+            // Prevent future dates - cap at today
+            if (parsedDate > today)
+            {
+                parsedDate = today;
+            }
+            
+            // Ensure end date is never before start date - if it is, set it to startDate or today (whichever is earlier)
+            if (startDate.HasValue)
+            {
+                // If end date is before start date, set it to start date
+                if (parsedDate < startDate.Value)
+                {
+                    endDate = startDate.Value;
+                }
+                else
+                {
+                    endDate = parsedDate;
+                }
+            }
+            else
+            {
+                // If no start date is set, allow any date up to today
+                endDate = parsedDate;
+            }
+            
             selectedDateRange = "";
         }
         else if (string.IsNullOrWhiteSpace(value))
@@ -352,6 +390,8 @@ else
             endDate = null;
             selectedDateRange = "";
         }
+        
+        _ = LoadReportData();
     }
 
     private void HandleDateRangeChange()
@@ -539,6 +579,10 @@ else
 
     private async Task PrintReport()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         var reportData = new
         {
             title = "Admin Fee Summary Report",

@@ -45,7 +45,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -67,12 +67,6 @@
                min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
                max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleEndDateChange" />
-        <button class="filter-btn" @onclick="ApplyDateFilter">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
             <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
@@ -343,12 +337,12 @@
                     
                     <div class="form-grid">
                         <div class="form-field">
-                            <label class="field-label">Variant Name</label>
-                            <InputText class="form-input" @bind-Value="_addVariantModel.Name" placeholder="e.g., Standard Variant" />
+                            <label class="field-label">Variant Name <span class="required-asterisk">*</span></label>
+                            <InputText id="add-variant-name-input" class="form-input" @bind-Value="_addVariantModel.Name" @oninput="FilterAddVariantNameInput" placeholder="e.g., Standard Variant" />
                             <ValidationMessage For="@(() => _addVariantModel.Name)" />
                         </div>
                         <div class="form-field product-select-field">
-                            <label class="field-label">Product</label>
+                            <label class="field-label">Product <span class="required-asterisk">*</span></label>
                             <InputSelect class="form-input" @bind-Value="_addVariantModel.ProductId" @bind-Value:after="OnProductSelected">
                                 <option value="0">Select a product</option>
                                 @foreach (var product in products)
@@ -379,7 +373,7 @@
                             }
                         </div>
                         <div class="form-field">
-                            <label class="field-label">Price</label>
+                            <label class="field-label">Price <span class="required-asterisk">*</span></label>
                             <InputNumber class="form-input" @bind-Value="_addVariantModel.Price" @bind-Value:after="OnAddPriceChanged" placeholder="0.00" step="0.01" />
                             <ValidationMessage For="@(() => _addVariantModel.Price)" />
                         </div>
@@ -458,12 +452,12 @@
                     
                     <div class="form-grid">
                         <div class="form-field">
-                            <label class="field-label">Variant Name</label>
-                            <InputText class="form-input" @bind-Value="_updateVariantModel.Name" placeholder="e.g., Standard Variant" />
+                            <label class="field-label">Variant Name <span class="required-asterisk">*</span></label>
+                            <InputText id="update-variant-name-input" class="form-input" @bind-Value="_updateVariantModel.Name" @oninput="FilterUpdateVariantNameInput" placeholder="e.g., Standard Variant" />
                             <ValidationMessage For="@(() => _updateVariantModel.Name)" />
                         </div>
                         <div class="form-field product-select-field">
-                            <label class="field-label">Product</label>
+                            <label class="field-label">Product <span class="required-asterisk">*</span></label>
                             <InputSelect class="form-input" @bind-Value="_updateVariantModel.ProductId" @bind-Value:after="OnUpdateProductSelected">
                                 <option value="0">Select a product</option>
                                 @foreach (var product in products)
@@ -494,7 +488,7 @@
                             }
                         </div>
                         <div class="form-field">
-                            <label class="field-label">Price</label>
+                            <label class="field-label">Price <span class="required-asterisk">*</span></label>
                             <InputNumber class="form-input" @bind-Value="_updateVariantModel.Price" @bind-Value:after="OnUpdatePriceChanged" placeholder="0.00" step="0.01" />
                             <ValidationMessage For="@(() => _updateVariantModel.Price)" />
                         </div>
@@ -747,13 +741,16 @@
         Nav.NavigateTo("/seller/Archive_Variant_Record");
     }
 
-    private void HandleAddVariant()
+    private async Task HandleAddVariant()
     {
         _addVariantModel = new AddVariantModel();
         _addVariantEditContext = new EditContext(_addVariantModel);
         _addSelectedSizeIds = new List<int>();
         _addSelectedColorIds = new List<int>();
         showAddVariantModal = true;
+        StateHasChanged();
+        await Task.Delay(100);
+        await JSRuntime.InvokeVoidAsync("setupCategoryInputFilter", "add-variant-name-input", false);
     }
 
     private void OnProductSelected()
@@ -874,6 +871,9 @@
                 _updateSelectedSizeIds = new List<int>(variantToUpdate.SizeIds);
                 _updateSelectedColorIds = new List<int>(variantToUpdate.ColorIds);
                 showUpdateVariantModal = true;
+                StateHasChanged();
+                await Task.Delay(100);
+                await JSRuntime.InvokeVoidAsync("setupCategoryInputFilter", "update-variant-name-input", false);
             }
         }
         catch (Exception ex)
@@ -1025,28 +1025,163 @@
         }, null, 3000, Timeout.Infinite);
     }
 
+    private void FilterAddVariantNameInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        // Only allow letters, spaces, and digits - no special characters
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || char.IsDigit(c)).ToArray());
+        
+        // Auto-capitalize: first letter uppercase, rest lowercase unless after space
+        if (!string.IsNullOrEmpty(filtered))
+        {
+            var chars = filtered.ToCharArray();
+            bool capitalizeNext = true;
+            
+            for (int i = 0; i < chars.Length; i++)
+            {
+                if (char.IsLetter(chars[i]))
+                {
+                    if (capitalizeNext)
+                    {
+                        chars[i] = char.ToUpper(chars[i]);
+                        capitalizeNext = false;
+                    }
+                    else
+                    {
+                        chars[i] = char.ToLower(chars[i]);
+                    }
+                }
+                else if (chars[i] == ' ')
+                {
+                    capitalizeNext = true;
+                }
+            }
+            
+            filtered = new string(chars);
+        }
+        
+        _addVariantModel.Name = filtered;
+        
+        // Notify EditContext of field change
+        if (_addVariantEditContext != null)
+        {
+            _addVariantEditContext.NotifyFieldChanged(_addVariantEditContext.Field(nameof(_addVariantModel.Name)));
+        }
+        
+        StateHasChanged();
+    }
+
+    private void FilterUpdateVariantNameInput(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? string.Empty;
+        // Only allow letters, spaces, and digits - no special characters
+        var filtered = new string(val.Where(c => char.IsLetter(c) || c == ' ' || char.IsDigit(c)).ToArray());
+        
+        // Auto-capitalize: first letter uppercase, rest lowercase unless after space
+        if (!string.IsNullOrEmpty(filtered))
+        {
+            var chars = filtered.ToCharArray();
+            bool capitalizeNext = true;
+            
+            for (int i = 0; i < chars.Length; i++)
+            {
+                if (char.IsLetter(chars[i]))
+                {
+                    if (capitalizeNext)
+                    {
+                        chars[i] = char.ToUpper(chars[i]);
+                        capitalizeNext = false;
+                    }
+                    else
+                    {
+                        chars[i] = char.ToLower(chars[i]);
+                    }
+                }
+                else if (chars[i] == ' ')
+                {
+                    capitalizeNext = true;
+                }
+            }
+            
+            filtered = new string(chars);
+        }
+        
+        _updateVariantModel.Name = filtered;
+        
+        // Notify EditContext of field change
+        if (_updateVariantEditContext != null)
+        {
+            _updateVariantEditContext.NotifyFieldChanged(_updateVariantEditContext.Field(nameof(_updateVariantModel.Name)));
+        }
+        
+        StateHasChanged();
+    }
+
     // Date filter methods
-    private void HandleStartDateChange(ChangeEventArgs e)
+    private async Task HandleStartDateChange(ChangeEventArgs e)
     {
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            filterStartDate = date;
+            var today = DateTime.Today;
+            // Prevent future dates - cap at today
+            if (date.Date > today)
+            {
+                filterStartDate = today;
+            }
+            else
+            {
+                filterStartDate = date.Date;
+            }
             selectedDateRange = "";
+            
+            // If end date is before start date, adjust it
+            if (filterEndDate.HasValue && filterEndDate.Value < filterStartDate.Value)
+            {
+                filterEndDate = filterStartDate.Value;
+            }
         }
         else if (string.IsNullOrWhiteSpace(value))
         {
             filterStartDate = null;
             selectedDateRange = "";
         }
+        await ApplyDateFilter();
     }
 
-    private void HandleEndDateChange(ChangeEventArgs e)
+    private async Task HandleEndDateChange(ChangeEventArgs e)
     {
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            filterEndDate = date;
+            var today = DateTime.Today;
+            var parsedDate = date.Date;
+            
+            // Prevent future dates - cap at today
+            if (parsedDate > today)
+            {
+                parsedDate = today;
+            }
+            
+            // Ensure end date is never before start date - if it is, set it to startDate or today (whichever is earlier)
+            if (filterStartDate.HasValue)
+            {
+                // If end date is before start date, set it to start date
+                if (parsedDate < filterStartDate.Value)
+                {
+                    filterEndDate = filterStartDate.Value;
+                }
+                else
+                {
+                    filterEndDate = parsedDate;
+                }
+            }
+            else
+            {
+                // If no start date is set, allow any date up to today
+                filterEndDate = parsedDate;
+            }
+            
             selectedDateRange = "";
         }
         else if (string.IsNullOrWhiteSpace(value))
@@ -1054,6 +1189,7 @@
             filterEndDate = null;
             selectedDateRange = "";
         }
+        await ApplyDateFilter();
     }
 
     private void HandleDateRangeChange()
@@ -1136,7 +1272,7 @@
                 id = v.Id,
                 name = v.Name,
                 product = v.ProductName,
-                price = $"₱{v.Price:N2}",
+                price = (double)v.Price,
                 dateCreated = v.DateCreated.ToString("MMM dd, yyyy")
             }).ToList()
         };

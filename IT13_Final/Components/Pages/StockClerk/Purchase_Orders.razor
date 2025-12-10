@@ -59,7 +59,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -86,12 +86,6 @@
             <option value="Pending">Pending</option>
             <option value="Approved">Approved</option>
         </select>
-        <button class="filter-btn" @onclick="ApplyFilters">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
             <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
@@ -165,9 +159,16 @@
                                 {
                                     <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
                                         <span>@po.ExpectedDeliveryDate.Value.ToString("MMM dd, yyyy")</span>
-                                        @if (IsOverdue(po.ExpectedDeliveryDate.Value, po.Status))
+                                        @{
+                                            var deliveryStatus = GetDeliveryStatus(po.ExpectedDeliveryDate.Value, po.Status);
+                                        }
+                                        @if (deliveryStatus == "overdue")
                                         {
                                             <span class="overdue-badge" title="Overdue - Expected delivery date has passed">⚠️ Overdue</span>
+                                        }
+                                        else if (deliveryStatus == "due-today")
+                                        {
+                                            <span class="due-today-badge" title="Due Today - Expected delivery is today">⚠️ Due Today</span>
                                         }
                                     </div>
                                 }
@@ -310,9 +311,16 @@
                             <span class="info-value">
                                 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                                     <span>@poDetails.ExpectedDeliveryDate.Value.ToString("MMM dd, yyyy")</span>
-                                    @if (IsOverdue(poDetails.ExpectedDeliveryDate.Value, poDetails.Status))
+                                    @{
+                                        var deliveryStatus = GetDeliveryStatus(poDetails.ExpectedDeliveryDate.Value, poDetails.Status);
+                                    }
+                                    @if (deliveryStatus == "overdue")
                                     {
                                         <span class="overdue-badge" title="Overdue - Expected delivery date has passed">⚠️ Overdue</span>
+                                    }
+                                    else if (deliveryStatus == "due-today")
+                                    {
+                                        <span class="due-today-badge" title="Due Today - Expected delivery is today">⚠️ Due Today</span>
                                     }
                                     @if (poDetails.Status != "Completed" && poDetails.Status != "Cancelled")
                                     {
@@ -981,6 +989,10 @@
 
     private async Task PrintReport()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         try
         {
             isGeneratingPDF = true;
@@ -1143,6 +1155,27 @@
             return false;
         
         return expectedDate.Date < DateTime.Today;
+    }
+
+    private string GetDeliveryStatus(DateTime expectedDate, string status)
+    {
+        // Don't show warnings for completed or cancelled orders
+        if (string.IsNullOrWhiteSpace(status))
+            return "normal";
+            
+        var statusUpper = status.Trim().ToUpperInvariant();
+        if (statusUpper == "COMPLETED" || statusUpper == "CANCELLED")
+            return "normal";
+        
+        var today = DateTime.Today;
+        var expectedDateOnly = expectedDate.Date;
+        
+        if (expectedDateOnly < today)
+            return "overdue";
+        else if (expectedDateOnly == today)
+            return "due-today";
+        else
+            return "normal";
     }
 
     private void ShowUpdateDateModal(int poId)

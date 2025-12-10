@@ -64,7 +64,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -82,18 +82,12 @@
         <input type="date" 
                class="date-input" 
                value="@(toDate?.ToString("yyyy-MM-dd"))" 
-               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               min="@(fromDate?.ToString("yyyy-MM-dd") ?? DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd"))"
                max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleToDateChange" />
-        <button class="filter-btn" @onclick="ApplyFilters">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
-        @if (HasActiveDateFilters)
+        @if (HasActiveDateFilters || !string.IsNullOrWhiteSpace(searchTerm))
         {
-            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear">
+            <button class="clear-btn" @onclick="ClearAllFilters" title="Clear Filters">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
                     <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -111,7 +105,7 @@
             <thead>
                 <tr>
                     <th>Status</th>
-                    <th>Module</th>
+                    <th>Activity</th>
                     <th>Description</th>
                     <th>Date</th>
                 </tr>
@@ -315,9 +309,24 @@
 
     private async Task HandleFromDateChange(ChangeEventArgs e)
     {
-        selectedDateRange = string.Empty;
-        var val = e.Value?.ToString() ?? string.Empty;
-        if (DateTime.TryParse(val, out var date))
+        var value = e.Value?.ToString()?.Trim();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            fromDate = null;
+        }
+        else if (DateTime.TryParseExact(value, "MM/dd/yyyy", null, System.Globalization.DateTimeStyles.None, out var exactDate))
+        {
+            fromDate = exactDate.Date;
+            if (toDate.HasValue && toDate.Value < fromDate.Value)
+                toDate = null;
+        }
+        else if (DateTime.TryParseExact(value, "M/d/yyyy", null, System.Globalization.DateTimeStyles.None, out var shortDate))
+        {
+            fromDate = shortDate.Date;
+            if (toDate.HasValue && toDate.Value < fromDate.Value)
+                toDate = null;
+        }
+        else if (DateTime.TryParse(value, out var date))
         {
             fromDate = date.Date;
             if (toDate.HasValue && toDate.Value < fromDate.Value)
@@ -325,16 +334,36 @@
         }
         else
         {
-            fromDate = null;
+            return;
         }
+        
+        selectedDateRange = "";
         await ApplyFilters();
+        StateHasChanged();
     }
 
     private async Task HandleToDateChange(ChangeEventArgs e)
     {
-        selectedDateRange = string.Empty;
-        var val = e.Value?.ToString() ?? string.Empty;
-        if (DateTime.TryParse(val, out var date))
+        var value = e.Value?.ToString()?.Trim();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            toDate = null;
+        }
+        else if (DateTime.TryParseExact(value, "MM/dd/yyyy", null, System.Globalization.DateTimeStyles.None, out var exactDate))
+        {
+            var dateValue = exactDate.Date;
+            if (fromDate.HasValue && dateValue < fromDate.Value)
+                return;
+            toDate = dateValue;
+        }
+        else if (DateTime.TryParseExact(value, "M/d/yyyy", null, System.Globalization.DateTimeStyles.None, out var shortDate))
+        {
+            var dateValue = shortDate.Date;
+            if (fromDate.HasValue && dateValue < fromDate.Value)
+                return;
+            toDate = dateValue;
+        }
+        else if (DateTime.TryParse(value, out var date))
         {
             var dateValue = date.Date;
             if (fromDate.HasValue && dateValue < fromDate.Value)
@@ -343,9 +372,12 @@
         }
         else
         {
-            toDate = null;
+            return;
         }
+        
+        selectedDateRange = "";
         await ApplyFilters();
+        StateHasChanged();
     }
 
     private async Task HandleDateRangeChange()
@@ -354,6 +386,10 @@
         
         switch (selectedDateRange)
         {
+            case "":
+                fromDate = null;
+                toDate = null;
+                break;
             case "today":
                 fromDate = today;
                 toDate = today;
@@ -363,7 +399,7 @@
                 toDate = today.AddDays(-1);
                 break;
             case "lastweek":
-                fromDate = today.AddDays(-7);
+                fromDate = today.AddDays(-6);
                 toDate = today;
                 break;
             case "thismonth":
@@ -374,13 +410,10 @@
                 fromDate = new DateTime(today.Year, 1, 1);
                 toDate = today;
                 break;
-            default:
-                fromDate = null;
-                toDate = null;
-                break;
         }
         
         await ApplyFilters();
+        StateHasChanged();
     }
 
     private async Task ClearDateFilter()
@@ -390,6 +423,17 @@
         toDate = null;
         currentPage = 1;
         await LoadLogsAsync();
+    }
+
+    private async Task ClearAllFilters()
+    {
+        searchTerm = string.Empty;
+        selectedDateRange = string.Empty;
+        fromDate = null;
+        toDate = null;
+        currentPage = 1;
+        await LoadLogsAsync();
+        StateHasChanged();
     }
 
     private async Task GoToPage(int page)
@@ -423,6 +467,10 @@
 
     private async Task PrintReport()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         try
         {
             isGeneratingPDF = true;

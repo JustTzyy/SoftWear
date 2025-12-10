@@ -5,7 +5,7 @@
 @inherits LayoutComponentBase
 @implements IDisposable
 
-<div class="accounting-layout-root grid min-h-screen transition-all duration-300 ease-in-out" style="grid-template-columns: @(sidebarCollapsed ? "80px" : "260px") 1fr; background: #F5F5F5;">
+<div class="accounting-layout-root grid min-h-screen transition-all duration-300 ease-in-out" style="grid-template-columns: @(sidebarCollapsed ? "80px" : "260px") 1fr; background: #e5e7eb;">
     <aside class="accounting-sidebar bg-white transition-all duration-300 ease-in-out overflow-hidden" style="border-right: 1px solid #E0E0E0;">
         <div class="flex items-start gap-3 py-4 px-4 cursor-pointer hover:bg-gray-50 transition-colors duration-200" style="min-height: 64px;" @onclick="ToggleSidebar" title="Toggle sidebar">
             <a href="/accounting/dashboard" class="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style="border: 2px solid #5C7CFA; padding: 6px; background-color: #1a2332;" @onclick:stopPropagation>
@@ -29,7 +29,7 @@
                 }
             </a>
 
-            <button class="@GetApprovalsButtonClass()" @onclick="() => approvalsOpen = !approvalsOpen" aria-expanded="@approvalsOpen" title="Approvals">
+            <button class="@GetApprovalsButtonClass()" @onclick="ToggleApprovals" aria-expanded="@approvalsOpen" title="Approvals">
                 <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/accounting/approvals/refund-return", "/accounting/approvals/purchase-orders")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -54,7 +54,7 @@
                 </div>
             }
 
-            <button class="@GetFinancialTrackingButtonClass()" @onclick="() => financialTrackingOpen = !financialTrackingOpen" aria-expanded="@financialTrackingOpen" title="Financial Tracking">
+            <button class="@GetFinancialTrackingButtonClass()" @onclick="ToggleFinancialTracking" aria-expanded="@financialTrackingOpen" title="Financial Tracking">
                 <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/accounting/financial/daily-sales", "/accounting/financial/expenses", "/accounting/financial/supplier-payments", "/accounting/financial/income")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
@@ -87,7 +87,7 @@
                 </div>
             }
 
-            <button class="@GetCashflowButtonClass()" @onclick="() => cashflowOpen = !cashflowOpen" aria-expanded="@cashflowOpen" title="Cashflow Management">
+            <button class="@GetCashflowButtonClass()" @onclick="ToggleCashflow" aria-expanded="@cashflowOpen" title="Cashflow Management">
                 <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/accounting/cashflow/audit", "/accounting/cashflow/petty-cash")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -112,7 +112,7 @@
                 </div>
             }
 
-            <button class="@GetReportsButtonClass()" @onclick="() => reportsOpen = !reportsOpen" aria-expanded="@reportsOpen" title="Reports">
+            <button class="@GetReportsButtonClass()" @onclick="ToggleReports" aria-expanded="@reportsOpen" title="Reports">
                 <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/accounting/reports/daily-sales-verification", "/accounting/reports/sales", "/accounting/reports/expenses", "/accounting/reports/profit-loss", "/accounting/reports/tax")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
@@ -195,6 +195,43 @@
     private bool profileOpen;
     private bool sidebarCollapsed = false;
     private string currentUri = string.Empty;
+
+    // Accordion behavior: close other dropdowns when one is opened
+    private void CloseAllDropdowns()
+    {
+        approvalsOpen = false;
+        financialTrackingOpen = false;
+        cashflowOpen = false;
+        reportsOpen = false;
+    }
+
+    private void ToggleApprovals()
+    {
+        bool wasOpen = approvalsOpen;
+        CloseAllDropdowns();
+        approvalsOpen = !wasOpen;
+    }
+
+    private void ToggleFinancialTracking()
+    {
+        bool wasOpen = financialTrackingOpen;
+        CloseAllDropdowns();
+        financialTrackingOpen = !wasOpen;
+    }
+
+    private void ToggleCashflow()
+    {
+        bool wasOpen = cashflowOpen;
+        CloseAllDropdowns();
+        cashflowOpen = !wasOpen;
+    }
+
+    private void ToggleReports()
+    {
+        bool wasOpen = reportsOpen;
+        CloseAllDropdowns();
+        reportsOpen = !wasOpen;
+    }
 
     protected override void OnInitialized()
     {
@@ -463,6 +500,10 @@
 
     private async void OnSignOut()
     {
+        // Confirm before logging out
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmLogout");
+        if (!confirmed) return;
+
         if (AuthState.CurrentUser is not null)
         {
             try { await HistoryService.LogAsync(AuthState.CurrentUser.Id, "logout", "Authentication", "User signed out"); } catch {}

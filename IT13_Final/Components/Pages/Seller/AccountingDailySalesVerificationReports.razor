@@ -15,6 +15,22 @@
         <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
     </div>
     <div class="header-actions">
+        <button class="action-btn visibility-btn @(hideConfidential ? "hidden-mode" : "")" @onclick="ToggleConfidentialVisibility" title="@(hideConfidential ? "Show Confidential Info" : "Hide Confidential Info")">
+            @if (hideConfidential)
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                </svg>
+            }
+            else
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+            }
+        </button>
         <button class="action-btn print-btn" @onclick="PrintReport" disabled="@isGeneratingPDF" title="Print Report">
             @if (isGeneratingPDF)
             {
@@ -39,7 +55,7 @@
             <circle cx="11" cy="11" r="8"></circle>
             <path d="m21 21-4.35-4.35"></path>
         </svg>
-        <input type="text" id="verification-report-search-input" class="search-input" placeholder="Search by cashier name..." @bind="searchTerm" @bind:event="oninput" @bind:after="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
+        <input type="text" id="verification-report-search-input" class="search-input" placeholder="Search sellers, metrics..." @bind="searchTerm" @bind:event="oninput" @bind:after="HandleSearchInput" @onkeypress="HandleSearchKeyPress" />
         @if (!string.IsNullOrWhiteSpace(searchTerm))
         {
             <button class="clear-search-btn" @onclick="HandleClearSearch" title="Clear">
@@ -51,7 +67,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -64,30 +80,18 @@
                class="date-input" 
                value="@(startDate?.ToString("yyyy-MM-dd"))" 
                min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
-               max="@(endDate?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd"))" 
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleFromDateChange" />
         <span class="date-separator">to</span>
         <input type="date" 
                class="date-input" 
                value="@(endDate?.ToString("yyyy-MM-dd"))" 
-               min="@(startDate?.ToString("yyyy-MM-dd"))" 
-               max="@DateTime.Today.ToString("yyyy-MM-dd")" 
+               min="@(startDate?.ToString("yyyy-MM-dd") ?? DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd"))"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleToDateChange" />
-        <select class="date-select" @bind="selectedStatus" @bind:after="HandleStatusChange" style="min-width: 150px;">
-            <option value="">All Status</option>
-            <option value="Pending">Pending</option>
-            <option value="Approved">Approved</option>
-            <option value="Rejected">Rejected</option>
-        </select>
-        <button class="filter-btn" @onclick="LoadVerifications">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
-            <button class="clear-btn" @onclick="ClearFilters" title="Clear">
+            <button class="clear-btn" @onclick="ClearAllFilters" title="Clear Filters">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
                     <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -110,43 +114,43 @@
         <div class="summary-grid">
             <div class="summary-box">
                 <div class="summary-label">Total Reports</div>
-                <div class="summary-value">@totalCount</div>
+                <div class="summary-value @(hideConfidential ? "masked" : "")">@MaskValue(totalCount)</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Total Sales</div>
-                <div class="summary-value">₱@totalSalesSummary.ToString("N2")</div>
+                <div class="summary-value @(hideConfidential ? "masked" : "")">₱@MaskValue(totalSalesSummary)</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Total Cash</div>
-                <div class="summary-value">₱@totalCashSummary.ToString("N2")</div>
+                <div class="summary-value @(hideConfidential ? "masked" : "")">₱@MaskValue(totalCashSummary)</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Total GCash</div>
-                <div class="summary-value">₱@totalGCashSummary.ToString("N2")</div>
+                <div class="summary-value @(hideConfidential ? "masked" : "")">₱@MaskValue(totalGCashSummary)</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Total Returns</div>
-                <div class="summary-value" style="color: #dc3545;">₱@totalReturnsSummary.ToString("N2")</div>
+                <div class="summary-value @(hideConfidential ? "masked" : "")" style="color: #dc3545;">₱@MaskValue(totalReturnsSummary)</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Approved</div>
-                <div class="summary-value" style="color: #10B981;">@approvedCountSummary</div>
+                <div class="summary-value @(hideConfidential ? "masked" : "")" style="color: #10B981;">@MaskValue(approvedCountSummary)</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Rejected</div>
-                <div class="summary-value" style="color: #6B7280;">@rejectedCountSummary</div>
+                <div class="summary-value @(hideConfidential ? "masked" : "")" style="color: #6B7280;">@MaskValue(rejectedCountSummary)</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Pending</div>
-                <div class="summary-value" style="color: #F59E0B;">@pendingCountSummary</div>
+                <div class="summary-value @(hideConfidential ? "masked" : "")" style="color: #F59E0B;">@MaskValue(pendingCountSummary)</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">VAT (12%)</div>
-                <div class="summary-value">₱@vatAmount.ToString("N2")</div>
+                <div class="summary-value @(hideConfidential ? "masked" : "")">₱@MaskValue(vatAmount)</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Admin Fee (2%)</div>
-                <div class="summary-value">₱@adminFeeAmount.ToString("N2")</div>
+                <div class="summary-value @(hideConfidential ? "masked" : "")">₱@MaskValue(adminFeeAmount)</div>
             </div>
         </div>
     </div>
@@ -166,11 +170,7 @@
             <thead>
                 <tr>
                     <th>Cashier</th>
-                    <th>Date</th>
                     <th>Total Sales</th>
-                    <th>Transactions</th>
-                    <th>Cash</th>
-                    <th>GCash</th>
                     <th>Returns</th>
                     <th>Status</th>
                     <th>Verified By</th>
@@ -181,30 +181,22 @@
                 @if (isLoading)
                 {
                     <tr>
-                        <td colspan="10" class="loading-cell">Loading daily sales verifications...</td>
+                        <td colspan="6" class="loading-cell">Loading daily sales verifications...</td>
                     </tr>
                 }
                 else if (verifications.Count == 0)
                 {
                     <tr>
-                        <td colspan="10" class="empty-cell">No daily sales verifications found for this filter.</td>
+                        <td colspan="6" class="empty-cell">No daily sales verifications found for this filter.</td>
                     </tr>
                 }
                 else
                 {
                     @foreach (var verification in verifications)
                     {
-                        <tr>
+                        <tr class="clickable-row" @onclick="async () => await ShowDailySalesDetails(verification.CashierUserId, verification.SaleDate)">
                             <td>@verification.CashierName</td>
-                            <td>
-                                <div class="timestamp-info">
-                                    <div class="timestamp-date">@verification.SaleDate.ToString("MMM dd, yyyy")</div>
-                                </div>
-                            </td>
-                            <td style="text-align: right; font-weight: 600;">₱@verification.TotalSales.ToString("N2")</td>
-                            <td style="text-align: right;">@verification.TotalTransactions</td>
-                            <td style="text-align: right;">₱@verification.CashAmount.ToString("N2")</td>
-                            <td style="text-align: right;">₱@verification.GCashAmount.ToString("N2")</td>
+                            <td style="text-align: right; font-weight: 600;" class="@(hideConfidential ? "masked" : "")">₱@MaskValue(verification.TotalSales)</td>
                             <td style="text-align: right;">
                                 @if (verification.ReturnCount > 0)
                                 {
@@ -216,7 +208,7 @@
                                 }
                             </td>
                             <td>
-                                <span class="status-text @(verification.Status == "Approved" ? "status-text-approved" : verification.Status == "Rejected" ? "status-text-cancelled" : "status-text-pending")">@verification.Status</span>
+                                <span style="color: @(verification.Status == "Approved" ? "#065F46" : verification.Status == "Rejected" ? "#991B1B" : "#D97706"); font-weight: 600;">@verification.Status</span>
                             </td>
                             <td>@(verification.VerifiedByName ?? "-")</td>
                             <td>
@@ -262,8 +254,8 @@
                     else
                     {
                         <button style="min-width:36px; height:36px; padding:0 12px; border:1px solid #e5e7eb; border-radius:8px; background:white; color:#374151; font-weight:600; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center;" @onclick="() => GoToPage(pageNum)">
-                            @i
-                        </button>
+                        @i
+                    </button>
                     }
                 }
                 else if (i == currentPage - 2 || i == currentPage + 2)
@@ -281,8 +273,160 @@
     }
 </div>
 
+@* Daily Sales Details Modal *@
+@if (showDetailsModal && selectedDailySales != null)
+{
+    <div class="modal-overlay" @onclick="CloseDetailsModal">
+        <div class="add-admin-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Daily Sales Report Details - @selectedDailySales.CashierName</h2>
+                <button class="modal-close-btn" @onclick="CloseDetailsModal" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="po-info">
+                    <div class="info-row">
+                        <span class="info-label">Cashier:</span>
+                        <span class="info-value">@selectedDailySales.CashierName</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Date:</span>
+                        <span class="info-value">@selectedDailySales.SaleDate.ToString("MMM dd, yyyy")</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Status:</span>
+                        <span class="info-value">
+                            <span style="color: @(selectedDailySales.Status == "Approved" ? "#065F46" : selectedDailySales.Status == "Rejected" ? "#991B1B" : "#D97706"); font-weight: 600;">@selectedDailySales.Status</span>
+                        </span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Total Sales:</span>
+                        <span class="info-value @(hideConfidential ? "masked" : "")">₱@MaskValue(selectedDailySales.TotalSales)</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Total Transactions:</span>
+                        <span class="info-value @(hideConfidential ? "masked" : "")">@MaskValue(selectedDailySales.TotalTransactions)</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Cash:</span>
+                        <span class="info-value @(hideConfidential ? "masked" : "")">₱@MaskValue(selectedDailySales.CashAmount)</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">GCash:</span>
+                        <span class="info-value @(hideConfidential ? "masked" : "")">₱@MaskValue(selectedDailySales.GCashAmount)</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Returns:</span>
+                        <span class="info-value">
+                            @if (selectedDailySales.ReturnCount > 0)
+                            {
+                                <span style="color: #dc3545;">@selectedDailySales.ReturnCount (₱@selectedDailySales.TotalReturns.ToString("N2"))</span>
+                            }
+                            else
+                            {
+                                <span>0</span>
+                            }
+                        </span>
+                    </div>
+
+                    @if (selectedDailySales.PaymentBreakdown != null && selectedDailySales.PaymentBreakdown.Count > 0)
+                    {
+                        <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid #e5e7eb;">
+                            <h4 style="margin-bottom: 16px; font-size: 16px; font-weight: 700; color: #1f2937;">Payment Method Breakdown</h4>
+                            <table class="po-items-table">
+                                <thead>
+                                    <tr>
+                                        <th>Payment Method</th>
+                                        <th>Count</th>
+                                        <th>Total Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var payment in selectedDailySales.PaymentBreakdown)
+                                    {
+                                        <tr>
+                                            <td>@payment.PaymentMethod</td>
+                                            <td style="text-align: right;">@payment.Count</td>
+                                            <td style="text-align: right;">₱@payment.TotalAmount.ToString("N2")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+
+                    @if (selectedDailySales.Sales != null && selectedDailySales.Sales.Count > 0)
+                    {
+                        <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid #e5e7eb;">
+                            <h4 style="margin-bottom: 16px; font-size: 16px; font-weight: 700; color: #1f2937;">Sales Transactions</h4>
+                            <table class="po-items-table">
+                                <thead>
+                                    <tr>
+                                        <th>Sale Number</th>
+                                        <th>Amount</th>
+                                        <th>Payment Method</th>
+                                        <th>Time</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var sale in selectedDailySales.Sales)
+                                    {
+                                        <tr>
+                                            <td>@sale.SaleNumber</td>
+                                            <td style="text-align: right;">₱@sale.Amount.ToString("N2")</td>
+                                            <td>@sale.PaymentMethod</td>
+                                            <td>@sale.Timestamps.ToString("HH:mm:ss")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+
+                    @if (selectedDailySales.Returns != null && selectedDailySales.Returns.Count > 0)
+                    {
+                        <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid #e5e7eb;">
+                            <h4 style="margin-bottom: 16px; font-size: 16px; font-weight: 700; color: #1f2937;">Returns</h4>
+                            <table class="po-items-table">
+                                <thead>
+                                    <tr>
+                                        <th>Return Number</th>
+                                        <th>Sale Number</th>
+                                        <th>Reason</th>
+                                        <th>Time</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var returnItem in selectedDailySales.Returns)
+                                    {
+                                        <tr>
+                                            <td>@returnItem.ReturnNumber</td>
+                                            <td>@returnItem.SaleNumber</td>
+                                            <td>@(string.IsNullOrEmpty(returnItem.Reason) ? "N/A" : returnItem.Reason)</td>
+                                            <td>@returnItem.Timestamps.ToString("HH:mm:ss")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="cancel-btn" @onclick="CloseDetailsModal">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private List<IT13_Final.Services.Data.DailySalesVerificationModel> verifications = new();
+    private IT13_Final.Services.Data.DailySalesVerificationDetailsModel? selectedDailySales;
+    private bool showDetailsModal = false;
     private string searchTerm = string.Empty;
     private DateTime? startDate;
     private DateTime? endDate;
@@ -292,6 +436,7 @@
     private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue || !string.IsNullOrEmpty(selectedStatus);
     private bool isLoading = false;
     private bool isGeneratingPDF = false;
+    private bool hideConfidential = false;
     private int sellerUserId = 0;
     private System.Threading.Timer? _searchTimer;
     private decimal vatAmount = 0m;
@@ -309,6 +454,67 @@
     private int approvedCountSummary = 0;
     private int rejectedCountSummary = 0;
     private int pendingCountSummary = 0;
+
+    private void ToggleConfidentialVisibility()
+    {
+        hideConfidential = !hideConfidential;
+        StateHasChanged();
+    }
+
+    private string MaskValue(decimal value, string format = "N2")
+    {
+        return hideConfidential ? "•••••" : value.ToString(format);
+    }
+
+    private string MaskValue(int value)
+    {
+        return hideConfidential ? "•••" : value.ToString();
+    }
+
+    private async Task ShowDailySalesDetails(int cashierUserId, DateTime saleDate)
+    {
+        try
+        {
+            if (sellerUserId <= 0)
+            {
+                sellerUserId = AuthState.CurrentUser?.Id ?? 0;
+            }
+
+            if (sellerUserId <= 0)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Seller ID not found. Cannot load daily sales details.");
+                return;
+            }
+
+            selectedDailySales = await DailySalesVerificationService.GetDailySalesDetailsForAccountingAsync(
+                cashierUserId,
+                saleDate,
+                sellerUserId
+            );
+
+            if (selectedDailySales != null)
+            {
+                showDetailsModal = true;
+                StateHasChanged();
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Daily sales details not found or you do not have permission to view it.");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading daily sales details: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading daily sales details: {ex.Message}");
+        }
+    }
+
+    private void CloseDetailsModal()
+    {
+        showDetailsModal = false;
+        selectedDailySales = null;
+        StateHasChanged();
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -588,30 +794,149 @@
         await LoadVerifications();
     }
 
-    private async Task HandleFromDateChange(ChangeEventArgs e)
+    private async void HandleFromDateChange(ChangeEventArgs e)
     {
-        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        var value = e.Value?.ToString();
+        if (string.IsNullOrWhiteSpace(value))
         {
-            startDate = date;
-            currentPage = 1;
-            await LoadVerifications();
+            startDate = null;
         }
+        else if (DateTime.TryParseExact(value, "MM/dd/yyyy", null, System.Globalization.DateTimeStyles.None, out var exactDate))
+        {
+            var today = DateTime.Today;
+            // Prevent future dates - cap at today
+            if (exactDate.Date > today)
+            {
+                startDate = today;
+            }
+            else
+            {
+                startDate = exactDate.Date;
+            }
+            
+            // If end date is before start date, adjust it
+            if (endDate.HasValue && endDate.Value < startDate.Value)
+            {
+                endDate = startDate.Value;
+            }
+        }
+        else if (DateTime.TryParse(value, out var date))
+        {
+            var today = DateTime.Today;
+            // Prevent future dates - cap at today
+            if (date.Date > today)
+            {
+                startDate = today;
+            }
+            else
+            {
+                startDate = date.Date;
+            }
+            
+            // If end date is before start date, adjust it
+            if (endDate.HasValue && endDate.Value < startDate.Value)
+            {
+                endDate = startDate.Value;
+            }
+        }
+        selectedDateRange = string.Empty;
+        await ApplyFilters();
+        StateHasChanged();
     }
 
-    private async Task HandleToDateChange(ChangeEventArgs e)
+    private async void HandleToDateChange(ChangeEventArgs e)
     {
-        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        var value = e.Value?.ToString();
+        if (string.IsNullOrWhiteSpace(value))
         {
-            endDate = date;
-            currentPage = 1;
-            await LoadVerifications();
+            endDate = null;
         }
+        else if (DateTime.TryParseExact(value, "MM/dd/yyyy", null, System.Globalization.DateTimeStyles.None, out var exactDate))
+        {
+            var today = DateTime.Today;
+            var parsedDate = exactDate.Date;
+            
+            // Prevent future dates - cap at today
+            if (parsedDate > today)
+            {
+                parsedDate = today;
+            }
+            
+            // Ensure end date is never before start date - if it is, set it to startDate or today (whichever is earlier)
+            if (startDate.HasValue)
+            {
+                // If end date is before start date, set it to start date
+                if (parsedDate < startDate.Value)
+                {
+                    endDate = startDate.Value;
+                }
+                else
+                {
+                    endDate = parsedDate;
+                }
+            }
+            else
+            {
+                // If no start date is set, allow any date up to today
+                endDate = parsedDate;
+            }
+        }
+        else if (DateTime.TryParse(value, out var date))
+        {
+            var today = DateTime.Today;
+            var parsedDate = date.Date;
+            
+            // Prevent future dates - cap at today
+            if (parsedDate > today)
+            {
+                parsedDate = today;
+            }
+            
+            // Ensure end date is never before start date - if it is, set it to startDate or today (whichever is earlier)
+            if (startDate.HasValue)
+            {
+                // If end date is before start date, set it to start date
+                if (parsedDate < startDate.Value)
+                {
+                    endDate = startDate.Value;
+                }
+                else
+                {
+                    endDate = parsedDate;
+                }
+            }
+            else
+            {
+                // If no start date is set, allow any date up to today
+                endDate = parsedDate;
+            }
+        }
+        selectedDateRange = string.Empty;
+        await ApplyFilters();
+        StateHasChanged();
     }
 
-    private async Task HandleStatusChange()
+    private void HandleStatusChange()
+    {
+        StateHasChanged();
+    }
+
+    private async Task ApplyFilters()
     {
         currentPage = 1;
         await LoadVerifications();
+    }
+
+    private async Task ClearAllFilters()
+    {
+        searchTerm = string.Empty;
+        selectedDateRange = "";
+        startDate = null;
+        endDate = null;
+        selectedStatus = "";
+        currentPage = 1;
+        await LoadVerifications();
+        StateHasChanged();
     }
 
     private string GetDateRangeText()
@@ -645,6 +970,10 @@
 
     private async Task PrintReport()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         try
         {
             isGeneratingPDF = true;
@@ -653,7 +982,7 @@
             var reportData = new
             {
                 title = "Daily Sales Verification Report",
-                printedBy = AuthState.CurrentUser?.FullName ?? "Seller",
+                printedBy = AuthState.CurrentUser?.FullName ?? "Admin",
                 printedAt = DateTime.Now.ToString("MMMM dd, yyyy hh:mm tt"),
                 dateRange = GetDateRangeText(),
                 

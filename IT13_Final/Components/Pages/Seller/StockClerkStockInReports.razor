@@ -58,7 +58,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -80,12 +80,6 @@
                min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
                max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleEndDateChange" />
-        <button class="filter-btn" @onclick="ApplyFilters">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
             <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
@@ -139,67 +133,59 @@
     </div>
     
     <div class="card-body">
-        <div class="table-container">
-            <table class="admin-table">
-                <thead>
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Product</th>
+                    <th>Variant</th>
+                    <th>Quantity</th>
+                    <th>Stock Clerk</th>
+                    <th>Date</th>
+                    <th style="text-align: center;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
                     <tr>
-                        <th>Product</th>
-                        <th>Variant</th>
-                        <th>Quantity</th>
-                        <th>Cost Price</th>
-                        <th>Total Cost</th>
-                        <th>Supplier</th>
-                        <th>Stock Clerk</th>
-                        <th>Date</th>
-                        <th>Actions</th>
+                        <td colspan="6" class="loading-cell">Loading stock in records...</td>
                     </tr>
-                </thead>
-                <tbody>
-                    @if (isLoading)
+                }
+                else if (stockIns.Count == 0)
+                {
+                    <tr>
+                        <td colspan="6" class="empty-cell">No stock in records found for this filter.</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var stockIn in stockIns)
                     {
-                        <tr>
-                            <td colspan="9" class="loading-cell">Loading stock in records...</td>
+                        <tr class="clickable-row" @onclick="() => HandleStockInClick(stockIn.Id)">
+                            <td class="sale-number">@stockIn.ProductName</td>
+                            <td>@stockIn.VariantName</td>
+                            <td>@stockIn.QuantityAdded</td>
+                            <td>@(stockIn.UserName ?? "N/A")</td>
+                            <td>
+                                <div class="timestamp-info">
+                                    <div class="timestamp-date">@stockIn.Timestamps.ToString("MMM dd, yyyy")</div>
+                                    <div class="timestamp-time">@stockIn.Timestamps.ToString("HH:mm:ss")</div>
+                                </div>
+                            </td>
+                            <td class="actions-cell" @onclick:stopPropagation="true">
+                                <button class="action-btn print-row-btn" @onclick="() => HandlePrintStockIn(stockIn.Id)" title="Print Details">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M6 9V2h12v7"></path>
+                                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                                        <rect x="6" y="14" width="12" height="8"></rect>
+                                    </svg>
+                                </button>
+                            </td>
                         </tr>
                     }
-                    else if (stockIns.Count == 0)
-                    {
-                        <tr>
-                            <td colspan="9" class="empty-cell">No stock in records found for this filter.</td>
-                        </tr>
-                    }
-                    else
-                    {
-                        @foreach (var stockIn in stockIns)
-                        {
-                            <tr class="clickable-row" @onclick="() => HandleStockInClick(stockIn.Id)">
-                                <td class="sale-number">@stockIn.ProductName</td>
-                                <td>@stockIn.VariantName</td>
-                                <td>@stockIn.QuantityAdded</td>
-                                <td>₱@stockIn.CostPrice.ToString("N2")</td>
-                                <td>₱@((stockIn.QuantityAdded * stockIn.CostPrice).ToString("N2"))</td>
-                                <td>@(stockIn.SupplierName ?? "N/A")</td>
-                                <td>@(stockIn.UserName ?? "N/A")</td>
-                                <td>
-                                    <div class="timestamp-info">
-                                        <div class="timestamp-date">@stockIn.Timestamps.ToString("MMM dd, yyyy")</div>
-                                        <div class="timestamp-time">@stockIn.Timestamps.ToString("HH:mm:ss")</div>
-                                    </div>
-                                </td>
-                                <td class="actions-cell" @onclick:stopPropagation="true">
-                                    <button class="action-btn print-row-btn" @onclick="() => HandlePrintStockIn(stockIn.Id)" title="Print Details">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                            <path d="M6 9V2h12v7"></path>
-                                            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-                                            <rect x="6" y="14" width="12" height="8"></rect>
-                                        </svg>
-                                    </button>
-                                </td>
-                            </tr>
-                        }
-                    }
-                </tbody>
-            </table>
-        </div>
+                }
+            </tbody>
+        </table>
     </div>
 
     @if (totalPages > 1)
@@ -688,8 +674,23 @@
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            startDate = date;
+            var today = DateTime.Today;
+            // Prevent future dates - cap at today
+            if (date.Date > today)
+            {
+                startDate = today;
+            }
+            else
+            {
+                startDate = date.Date;
+            }
             selectedDateRange = "";
+            
+            // If end date is before start date, adjust it
+            if (endDate.HasValue && endDate.Value < startDate.Value)
+            {
+                endDate = startDate.Value;
+            }
         }
         else if (string.IsNullOrWhiteSpace(value))
         {
@@ -704,7 +705,34 @@
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            endDate = date;
+            var today = DateTime.Today;
+            var parsedDate = date.Date;
+            
+            // Prevent future dates - cap at today
+            if (parsedDate > today)
+            {
+                parsedDate = today;
+            }
+            
+            // Ensure end date is never before start date - if it is, set it to startDate or today (whichever is earlier)
+            if (startDate.HasValue)
+            {
+                // If end date is before start date, set it to start date
+                if (parsedDate < startDate.Value)
+                {
+                    endDate = startDate.Value;
+                }
+                else
+                {
+                    endDate = parsedDate;
+                }
+            }
+            else
+            {
+                // If no start date is set, allow any date up to today
+                endDate = parsedDate;
+            }
+            
             selectedDateRange = "";
         }
         else if (string.IsNullOrWhiteSpace(value))
@@ -892,6 +920,10 @@
 
     private async Task PrintReport()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         try
         {
             isGeneratingPDF = true;

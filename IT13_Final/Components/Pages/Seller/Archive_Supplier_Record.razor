@@ -42,7 +42,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -64,12 +64,6 @@
                min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
                max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleEndDateChange" />
-        <button class="filter-btn" @onclick="ApplyDateFilter" title="Apply filter">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
             <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
@@ -490,8 +484,23 @@
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            filterStartDate = date;
+            var today = DateTime.Today;
+            // Prevent future dates - cap at today
+            if (date.Date > today)
+            {
+                filterStartDate = today;
+            }
+            else
+            {
+                filterStartDate = date.Date;
+            }
             selectedDateRange = "";
+            
+            // If end date is before start date, adjust it
+            if (filterEndDate.HasValue && filterEndDate.Value < filterStartDate.Value)
+            {
+                filterEndDate = filterStartDate.Value;
+            }
         }
         else if (string.IsNullOrWhiteSpace(value))
         {
@@ -505,7 +514,34 @@
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            filterEndDate = date;
+            var today = DateTime.Today;
+            var parsedDate = date.Date;
+            
+            // Prevent future dates - cap at today
+            if (parsedDate > today)
+            {
+                parsedDate = today;
+            }
+            
+            // Ensure end date is never before start date - if it is, set it to startDate or today (whichever is earlier)
+            if (filterStartDate.HasValue)
+            {
+                // If end date is before start date, set it to start date
+                if (parsedDate < filterStartDate.Value)
+                {
+                    filterEndDate = filterStartDate.Value;
+                }
+                else
+                {
+                    filterEndDate = parsedDate;
+                }
+            }
+            else
+            {
+                // If no start date is set, allow any date up to today
+                filterEndDate = parsedDate;
+            }
+            
             selectedDateRange = "";
         }
         else if (string.IsNullOrWhiteSpace(value))
@@ -568,13 +604,39 @@
         await LoadArchivedSuppliersAsync();
     }
 
+    private string GetDateRangeText()
+    {
+        if (filterStartDate.HasValue && filterEndDate.HasValue)
+            return $"{filterStartDate.Value:MMM dd, yyyy} - {filterEndDate.Value:MMM dd, yyyy}";
+        if (filterStartDate.HasValue)
+            return $"From {filterStartDate.Value:MMM dd, yyyy}";
+        if (filterEndDate.HasValue)
+            return $"Until {filterEndDate.Value:MMM dd, yyyy}";
+        return "All Time";
+    }
+
     private async Task PrintArchivedSupplierRecords()
     {
         // Use all filtered suppliers for the PDF, not just the current page
         var recordsForPrint = allFilteredSuppliers.Any() ? allFilteredSuppliers : archivedSuppliers;
+        
+        var reportData = new
+        {
+            title = "Archived Supplier Records Report",
+            printedBy = AuthState.CurrentUser?.FullName ?? "Admin",
+            printedAt = DateTime.Now.ToString("MMMM dd, yyyy hh:mm tt"),
+            dateRange = GetDateRangeText(),
+            totalCount = recordsForPrint.Count,
+            records = recordsForPrint.Select(s => new
+            {
+                id = s.Id,
+                name = s.CompanyName,
+                email = s.Email ?? "N/A",
+                archivedDate = s.ArchivedDate.ToString("MMM dd, yyyy")
+            }).ToList()
+        };
 
-        // Implementation for printing would go here
-        await Task.CompletedTask;
+        await JSRuntime.InvokeVoidAsync("printArchivedSupplierRecords", reportData);
     }
 
     public void Dispose()

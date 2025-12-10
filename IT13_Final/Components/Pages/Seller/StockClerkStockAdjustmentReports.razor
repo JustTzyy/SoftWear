@@ -40,7 +40,7 @@
         <input type="text" 
                id="seller-stock-adjustment-report-search-input"
                class="search-input" 
-               placeholder="Search by product, variant, or reason..." 
+               placeholder="Search by product or variant..." 
                @bind="searchTerm" 
                @bind:event="oninput" 
                @bind:after="HandleSearchInput"
@@ -56,7 +56,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -83,12 +83,6 @@
             <option value="Increase">Increase</option>
             <option value="Decrease">Decrease</option>
         </select>
-        <button class="filter-btn" @onclick="ApplyFilters">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
             <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
@@ -147,25 +141,23 @@
                 <tr>
                     <th>Product</th>
                     <th>Variant</th>
-                    <th>Adjustment Type</th>
                     <th>Quantity</th>
-                    <th>Reason</th>
                     <th>Recorded By</th>
                     <th>Date</th>
-                    <th>Actions</th>
+                    <th style="text-align: center;">Actions</th>
                 </tr>
             </thead>
             <tbody>
                 @if (isLoading)
                 {
                     <tr>
-                        <td colspan="8" class="loading-cell">Loading stock adjustment records...</td>
+                        <td colspan="6" class="loading-cell">Loading stock adjustment records...</td>
                     </tr>
                 }
                 else if (stockAdjustments.Count == 0)
                 {
                     <tr>
-                        <td colspan="8" class="empty-cell">No stock adjustment records found for this filter.</td>
+                        <td colspan="6" class="empty-cell">No stock adjustment records found for this filter.</td>
                     </tr>
                 }
                 else
@@ -175,11 +167,7 @@
                         <tr class="clickable-row" @onclick="() => HandleStockAdjustmentClick(adjustment.Id)">
                             <td class="sale-number">@adjustment.ProductName</td>
                             <td>@adjustment.VariantName</td>
-                            <td>
-                                <span class="status-badge @(adjustment.AdjustmentType == "Increase" ? "status-approved" : "status-cancelled")">@adjustment.AdjustmentType</span>
-                            </td>
                             <td>@adjustment.QuantityAdjusted</td>
-                            <td>@(adjustment.Reason ?? "N/A")</td>
                             <td>@adjustment.UserName</td>
                             <td>
                                 <div class="timestamp-info">
@@ -464,7 +452,7 @@
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
-                countSql += " AND (v.name LIKE @SearchTerm OR p.name LIKE @SearchTerm OR sa.reason LIKE @SearchTerm OR sa.adjustment_type LIKE @SearchTerm)";
+                countSql += " AND (v.name LIKE @SearchTerm OR p.name LIKE @SearchTerm)";
             }
 
             if (!string.IsNullOrWhiteSpace(selectedAdjustmentType))
@@ -528,7 +516,7 @@
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
-                dataSql += " AND (v.name LIKE @SearchTerm OR p.name LIKE @SearchTerm OR sa.reason LIKE @SearchTerm OR sa.adjustment_type LIKE @SearchTerm)";
+                dataSql += " AND (v.name LIKE @SearchTerm OR p.name LIKE @SearchTerm)";
             }
 
             if (!string.IsNullOrWhiteSpace(selectedAdjustmentType))
@@ -632,8 +620,23 @@
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            startDate = date;
+            var today = DateTime.Today;
+            // Prevent future dates - cap at today
+            if (date.Date > today)
+            {
+                startDate = today;
+            }
+            else
+            {
+                startDate = date.Date;
+            }
             selectedDateRange = "";
+            
+            // If end date is before start date, adjust it
+            if (endDate.HasValue && endDate.Value < startDate.Value)
+            {
+                endDate = startDate.Value;
+            }
         }
         else if (string.IsNullOrWhiteSpace(value))
         {
@@ -648,7 +651,34 @@
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            endDate = date;
+            var today = DateTime.Today;
+            var parsedDate = date.Date;
+            
+            // Prevent future dates - cap at today
+            if (parsedDate > today)
+            {
+                parsedDate = today;
+            }
+            
+            // Ensure end date is never before start date - if it is, set it to startDate or today (whichever is earlier)
+            if (startDate.HasValue)
+            {
+                // If end date is before start date, set it to start date
+                if (parsedDate < startDate.Value)
+                {
+                    endDate = startDate.Value;
+                }
+                else
+                {
+                    endDate = parsedDate;
+                }
+            }
+            else
+            {
+                // If no start date is set, allow any date up to today
+                endDate = parsedDate;
+            }
+            
             selectedDateRange = "";
         }
         else if (string.IsNullOrWhiteSpace(value))
@@ -830,6 +860,10 @@
 
     private async Task PrintReport()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         try
         {
             isGeneratingPDF = true;
@@ -878,7 +912,7 @@
 
                 if (!string.IsNullOrWhiteSpace(searchTerm))
                 {
-                    stockAdjustmentsSql += " AND (v.name LIKE @SearchTerm OR p.name LIKE @SearchTerm OR sa.reason LIKE @SearchTerm OR sa.adjustment_type LIKE @SearchTerm)";
+                    stockAdjustmentsSql += " AND (v.name LIKE @SearchTerm OR p.name LIKE @SearchTerm)";
                 }
 
                 if (!string.IsNullOrWhiteSpace(selectedAdjustmentType))

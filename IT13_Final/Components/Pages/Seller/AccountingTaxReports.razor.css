@@ -93,7 +93,7 @@
     align-items: center;
     gap: 12px;
     flex-wrap: wrap;
-    width: 100%;
+    margin-left: auto;
 }
 
 .date-select,
@@ -419,6 +419,65 @@
 }
 
 /* ========================================
+   Pagination - Match Dashboard
+======================================== */
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    padding: 20px;
+    border-top: 1px solid #e5e7eb;
+    background: #f9fafb;
+}
+
+.page-btn {
+    min-width: 36px;
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: white;
+    color: #374151;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.page-btn:hover:not(:disabled) {
+    background: #eef2ff;
+    border-color: #c7d2fe;
+    color: #5C7CFA;
+}
+
+.page-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.page-btn.active {
+    background: linear-gradient(135deg, #5C7CFA 0%, #4c6ef5 100%);
+    border-color: #5C7CFA;
+    color: white;
+    box-shadow: 0 2px 8px rgba(92, 124, 250, 0.3);
+}
+
+.page-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.page-ellipsis {
+    padding: 0 8px;
+    color: #9ca3af;
+    font-weight: 600;
+}
+
+/* ========================================
    Responsive Design
 ======================================== */
 @media (max-width: 1024px) {
@@ -481,6 +540,10 @@
     .admin-table td {
         padding: 12px 14px;
     }
+
+    .pagination {
+        flex-wrap: wrap;
+    }
 }
 
 @media (max-width: 480px) {
@@ -505,7 +568,7 @@
         print-color-adjust: exact;
     }
     
-    .header-actions, .dashboard-filters { 
+    .header-actions, .dashboard-filters, .pagination { 
         display: none !important; 
     }
     

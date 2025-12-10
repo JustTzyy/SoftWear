@@ -730,7 +730,7 @@
     justify-content: space-between;
     align-items: flex-start;
     gap: 16px;
-    padding: 12px 0;
+    padding: 8px 0;
     border-bottom: 1px solid #e5e7eb;
 }
 
@@ -742,6 +742,8 @@
     font-size: 14px;
     font-weight: 500;
     color: #6b7280;
+    min-width: 180px;
+    text-align: left;
     flex-shrink: 0;
 }
 
@@ -751,6 +753,7 @@
     color: #1a1a1a;
     text-align: right;
     flex: 1;
+    min-width: 0;
 }
 
 /* Color Swatches Container */

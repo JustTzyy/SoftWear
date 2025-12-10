@@ -45,8 +45,17 @@
             </button>
         }
     </div>
+    <div class="type-filter" style="flex: 1; display: flex; justify-content: center;">
+        <select class="date-select" @bind="selectedExpenseType" @bind:after="HandleExpenseTypeChange" style="min-width: 200px;">
+            <option value="">All Types</option>
+            @foreach (var type in expenseTypes)
+            {
+                <option value="@type">@type</option>
+            }
+        </select>
+    </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -59,24 +68,18 @@
                class="date-input" 
                value="@(startDate?.ToString("yyyy-MM-dd"))" 
                min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
-               max="@(endDate?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd"))" 
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleFromDateChange" />
         <span class="date-separator">to</span>
         <input type="date" 
                class="date-input" 
                value="@(endDate?.ToString("yyyy-MM-dd"))" 
-               min="@(startDate?.ToString("yyyy-MM-dd"))" 
-               max="@DateTime.Today.ToString("yyyy-MM-dd")" 
+               min="@(startDate?.ToString("yyyy-MM-dd") ?? DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd"))"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleToDateChange" />
-        <button class="filter-btn" @onclick="ApplyDateFilter">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
-        @if (HasActiveDateFilters)
+        @if (HasActiveDateFilters || !string.IsNullOrWhiteSpace(searchTerm))
         {
-            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear">
+            <button class="clear-btn" @onclick="ClearAllFilters" title="Clear Filters">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
                     <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -645,6 +648,10 @@
         var today = DateTime.Today;
         switch (selectedDateRange)
         {
+            case "":
+                startDate = null;
+                endDate = null;
+                break;
             case "today":
                 startDate = today;
                 endDate = today;
@@ -654,11 +661,11 @@
                 endDate = today.AddDays(-1);
                 break;
             case "last7days":
-                startDate = today.AddDays(-7);
+                startDate = today.AddDays(-6);
                 endDate = today;
                 break;
             case "last30days":
-                startDate = today.AddDays(-30);
+                startDate = today.AddDays(-29);
                 endDate = today;
                 break;
             case "thismonth":
@@ -669,39 +676,67 @@
                 startDate = new DateTime(today.Year, 1, 1);
                 endDate = today;
                 break;
-            default:
-                break;
         }
-        currentPage = 1;
-        await LoadExpenses();
+        await ApplyDateFilter();
+        StateHasChanged();
     }
 
-    private void HandleFromDateChange(ChangeEventArgs e)
+    private async Task HandleFromDateChange(ChangeEventArgs e)
     {
-        if (DateTime.TryParse(e.Value?.ToString(), out var date))
-        {
-            startDate = date;
-            selectedDateRange = "";
-        }
-        else if (string.IsNullOrWhiteSpace(e.Value?.ToString()))
+        var value = e.Value?.ToString()?.Trim();
+        if (string.IsNullOrWhiteSpace(value))
         {
             startDate = null;
-            selectedDateRange = "";
         }
+        else if (DateTime.TryParseExact(value, "MM/dd/yyyy", null, System.Globalization.DateTimeStyles.None, out var exactDate))
+        {
+            startDate = exactDate.Date;
+        }
+        else if (DateTime.TryParseExact(value, "M/d/yyyy", null, System.Globalization.DateTimeStyles.None, out var shortDate))
+        {
+            startDate = shortDate.Date;
+        }
+        else if (DateTime.TryParse(value, out var date))
+        {
+            startDate = date.Date;
+        }
+        else
+        {
+            return;
+        }
+        
+        selectedDateRange = "";
+        await ApplyDateFilter();
+        StateHasChanged();
     }
 
-    private void HandleToDateChange(ChangeEventArgs e)
+    private async Task HandleToDateChange(ChangeEventArgs e)
     {
-        if (DateTime.TryParse(e.Value?.ToString(), out var date))
-        {
-            endDate = date;
-            selectedDateRange = "";
-        }
-        else if (string.IsNullOrWhiteSpace(e.Value?.ToString()))
+        var value = e.Value?.ToString()?.Trim();
+        if (string.IsNullOrWhiteSpace(value))
         {
             endDate = null;
-            selectedDateRange = "";
         }
+        else if (DateTime.TryParseExact(value, "MM/dd/yyyy", null, System.Globalization.DateTimeStyles.None, out var exactDate))
+        {
+            endDate = exactDate.Date;
+        }
+        else if (DateTime.TryParseExact(value, "M/d/yyyy", null, System.Globalization.DateTimeStyles.None, out var shortDate))
+        {
+            endDate = shortDate.Date;
+        }
+        else if (DateTime.TryParse(value, out var date))
+        {
+            endDate = date.Date;
+        }
+        else
+        {
+            return;
+        }
+        
+        selectedDateRange = "";
+        await ApplyDateFilter();
+        StateHasChanged();
     }
 
     private async Task ApplyDateFilter()
@@ -716,7 +751,7 @@
         await LoadExpenses();
     }
 
-    private async Task ClearDateFilter()
+    private async Task ClearAllFilters()
     {
         searchTerm = string.Empty;
         startDate = null;
@@ -725,6 +760,7 @@
         selectedExpenseType = string.Empty;
         currentPage = 1;
         await LoadExpenses();
+        StateHasChanged();
     }
 
     private void OpenAddExpenseModal()
@@ -1113,6 +1149,10 @@
 
     private async Task PrintReport()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         try
         {
             isGeneratingPDF = true;

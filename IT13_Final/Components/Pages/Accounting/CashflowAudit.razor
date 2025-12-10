@@ -31,11 +31,27 @@
 
 @* Search and Date Filters *@
 <div class="dashboard-filters">
-    <div class="search-wrapper" style="flex: 1;">
+    <div class="search-wrapper">
         <!-- Reserved for future search -->
     </div>
+    <div class="type-filter" style="flex: 1; display: flex; justify-content: center; gap: 12px;">
+        <select class="date-select" @bind="selectedCashierId" @bind:after="HandleCashierChange" style="min-width: 150px;">
+            <option value="">All Cashiers</option>
+            @foreach (var cashier in cashiers)
+            {
+                <option value="@cashier.Id">@cashier.Name</option>
+            }
+        </select>
+        <select class="date-select" @bind="selectedAccountingUserId" @bind:after="HandleAccountingChange" style="min-width: 150px;">
+            <option value="">All Accounting</option>
+            @foreach (var acc in accountingUsers)
+            {
+                <option value="@acc.Id">@acc.Name</option>
+            }
+        </select>
+    </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -57,26 +73,6 @@
                min="@(startDate?.ToString("yyyy-MM-dd"))" 
                max="@DateTime.Today.ToString("yyyy-MM-dd")" 
                @onchange="HandleToDateChange" />
-        <select class="date-select" @bind="selectedCashierId" @bind:after="HandleCashierChange" style="min-width: 150px;">
-            <option value="">All Cashiers</option>
-            @foreach (var cashier in cashiers)
-            {
-                <option value="@cashier.Id">@cashier.Name</option>
-            }
-        </select>
-        <select class="date-select" @bind="selectedAccountingUserId" @bind:after="HandleAccountingChange" style="min-width: 150px;">
-            <option value="">All Accounting</option>
-            @foreach (var acc in accountingUsers)
-            {
-                <option value="@acc.Id">@acc.Name</option>
-            }
-        </select>
-        <button class="filter-btn" @onclick="ApplyFilters">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
             <button class="clear-btn" @onclick="ClearFilters" title="Clear">
@@ -102,25 +98,25 @@
         <div class="summary-grid">
             <div class="summary-box">
                 <div class="summary-label">Cash-in</div>
-                <div class="summary-value" style="color: #10B981;">₱@totalCashIn.ToString("N2")</div>
+                <div class="summary-value @GetFontSizeClass(totalCashIn)" style="color: #10B981;">₱@totalCashIn.ToString("N2")</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Cash-out</div>
-                <div class="summary-value" style="color: #dc3545;">₱@totalCashOut.ToString("N2")</div>
+                <div class="summary-value @GetFontSizeClass(totalCashOut)" style="color: #dc3545;">₱@totalCashOut.ToString("N2")</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Net Cash Movement</div>
-                <div class="summary-value" style="color: @(netCashMovement >= 0 ? "#10B981" : "#dc3545");">
+                <div class="summary-value @GetFontSizeClass(netCashMovement)" style="color: @(netCashMovement >= 0 ? "#10B981" : "#dc3545");">
                     ₱@netCashMovement.ToString("N2")
                 </div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">VAT (12%)</div>
-                <div class="summary-value">₱@vatAmount.ToString("N2")</div>
+                <div class="summary-value @GetFontSizeClass(vatAmount)">₱@vatAmount.ToString("N2")</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Admin Fee (2%)</div>
-                <div class="summary-value">₱@adminFeeAmount.ToString("N2")</div>
+                <div class="summary-value @GetFontSizeClass(adminFeeAmount)">₱@adminFeeAmount.ToString("N2")</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Total Records</div>
@@ -699,9 +695,29 @@ else
         return "Custom Range";
     }
 
+    private string GetFontSizeClass(decimal amount)
+    {
+        var amountStr = amount.ToString("N2");
+        var length = amountStr.Length;
+        
+        // Adjust font size based on string length
+        if (length > 20)
+            return "summary-value-xs"; // Extra small for very long numbers
+        else if (length > 15)
+            return "summary-value-sm"; // Small for long numbers
+        else if (length > 12)
+            return "summary-value-md"; // Medium for medium numbers
+        else
+            return ""; // Default size for normal numbers
+    }
+
     private async Task PrintCashflow()
     {
         if (allMovements.Count == 0) return;
+
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
 
         try
         {

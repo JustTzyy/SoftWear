@@ -58,7 +58,7 @@
         }
     </div>
     <div class="date-filters">
-        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
             <option value="">All Time</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -80,12 +80,6 @@
                min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
                max="@DateTime.Now.ToString("yyyy-MM-dd")"
                @onchange="HandleEndDateChange" />
-        <button class="filter-btn" @onclick="ApplyFilters">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            Apply
-        </button>
         @if (HasActiveDateFilters)
         {
             <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
@@ -488,7 +482,7 @@
             var countResult = await countCmd.ExecuteScalarAsync();
             totalCount = countResult != null ? Convert.ToInt32(countResult) : 0;
 
-            // Get sales
+            // Get sales (paged)
             var offset = (currentPage - 1) * pageSize;
             var salesSql = $@"
                 SELECT s.id, s.sale_number, s.amount, s.payment_type, s.timestamps,
@@ -572,8 +566,70 @@
                 return;
             }
 
-            totalSalesAmount = sales.Sum(s => s.Amount);
-            
+            // Compute total sales amount across ALL matching records (no pagination)
+            var totalSql = $@"
+                SELECT SUM(s.amount)
+                FROM dbo.tbl_sales s
+                INNER JOIN dbo.tbl_users u ON s.user_id = u.id
+                WHERE s.archives IS NULL 
+                AND s.status = 'Completed'
+                AND s.user_id IN ({cashierIdsInClause})
+                AND EXISTS (
+                    SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
+                    WHERE dsv.cashier_user_id = s.user_id
+                    AND dsv.sale_date = CAST(s.timestamps AS DATE)
+                    AND dsv.status = 'Approved'
+                    AND dsv.archived_at IS NULL
+                    AND dsv.seller_user_id = @SellerUserId
+                )";
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                totalSql += " AND (s.sale_number LIKE @SearchTerm)";
+            }
+
+            if (startDate.HasValue)
+            {
+                totalSql += " AND CAST(s.timestamps AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                totalSql += " AND CAST(s.timestamps AS DATE) <= @EndDate";
+            }
+
+            // Use a separate connection for the total SUM query to avoid conflicts
+            using (var totalConn = new SqlConnection(connectionString))
+            {
+                await totalConn.OpenAsync();
+
+                using (var totalCmd = new SqlCommand(totalSql, totalConn))
+                {
+                    for (int i = 0; i < cashierUserIds.Count; i++)
+                    {
+                        totalCmd.Parameters.AddWithValue($"@cashierId{i}", cashierUserIds[i]);
+                    }
+                    totalCmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+                    if (!string.IsNullOrWhiteSpace(searchTerm))
+                    {
+                        totalCmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
+                    }
+                    if (startDate.HasValue)
+                    {
+                        totalCmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+                    }
+                    if (endDate.HasValue)
+                    {
+                        totalCmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+                    }
+
+                    var totalResult = await totalCmd.ExecuteScalarAsync();
+                    totalSalesAmount = totalResult != null && totalResult != DBNull.Value
+                        ? Convert.ToDecimal(totalResult)
+                        : 0m;
+                }
+            }
+
             // Calculate VAT (12% on total sales)
             vatAmount = totalSalesAmount * 0.12m;
             
@@ -646,8 +702,23 @@
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            startDate = date;
+            var today = DateTime.Today;
+            // Prevent future dates - cap at today
+            if (date.Date > today)
+            {
+                startDate = today;
+            }
+            else
+            {
+                startDate = date.Date;
+            }
             selectedDateRange = "";
+            
+            // If end date is before start date, adjust it
+            if (endDate.HasValue && endDate.Value < startDate.Value)
+            {
+                endDate = startDate.Value;
+            }
         }
         else if (string.IsNullOrWhiteSpace(value))
         {
@@ -662,7 +733,34 @@
         var value = e.Value?.ToString();
         if (DateTime.TryParse(value, out var date))
         {
-            endDate = date;
+            var today = DateTime.Today;
+            var parsedDate = date.Date;
+            
+            // Prevent future dates - cap at today
+            if (parsedDate > today)
+            {
+                parsedDate = today;
+            }
+            
+            // Ensure end date is never before start date - if it is, set it to startDate or today (whichever is earlier)
+            if (startDate.HasValue)
+            {
+                // If end date is before start date, set it to start date
+                if (parsedDate < startDate.Value)
+                {
+                    endDate = startDate.Value;
+                }
+                else
+                {
+                    endDate = parsedDate;
+                }
+            }
+            else
+            {
+                // If no start date is set, allow any date up to today
+                endDate = parsedDate;
+            }
+            
             selectedDateRange = "";
         }
         else if (string.IsNullOrWhiteSpace(value))
@@ -916,6 +1014,10 @@
 
     private async Task PrintReport()
     {
+        // Confirm before exporting PDF
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
         try
         {
             isGeneratingPDF = true;
