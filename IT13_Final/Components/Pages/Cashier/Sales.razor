@@ -5,6 +5,7 @@
 @inject IT13_Final.Services.Data.IVariantService VariantService
 @inject IT13_Final.Services.Data.ISalesService SalesService
 @inject IT13_Final.Services.Data.ICategoryService CategoryService
+@inject IT13_Final.Services.Data.ISubscriptionService SubscriptionService
 @inject IT13_Final.Services.Audit.IHistoryService HistoryService
 @inject IJSRuntime JSRuntime
 @inject NavigationManager Nav
@@ -1037,6 +1038,16 @@
                     }
                 }
                 catch { }
+
+                // Record admin fee transaction for the seller's subscription
+                try
+                {
+                    if (sellerUserId > 0)
+                    {
+                        await SubscriptionService.RecordAdminFeeTransactionAsync(sellerUserId, saleResult.SaleId.Value, cartSubtotal);
+                    }
+                }
+                catch { /* Admin fee recording is non-blocking */ }
 
                 var receiptData = new
                 {

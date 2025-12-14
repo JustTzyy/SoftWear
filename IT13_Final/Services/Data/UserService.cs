@@ -138,6 +138,7 @@ namespace IT13_Final.Services.Data
         Task<PermissionRequestDetailsModel?> GetPermissionRequestDetailsAsync(int userId, CancellationToken ct = default);
         Task<bool> ApprovePermissionRequestAsync(int userId, CancellationToken ct = default);
         Task<bool> RejectPermissionRequestAsync(int userId, CancellationToken ct = default);
+        Task<int?> GetSellerIdForStaffAsync(int staffUserId, CancellationToken ct = default);
     }
 
     public class ArchivedAdminUserModel
@@ -2734,6 +2735,20 @@ namespace IT13_Final.Services.Data
 
             var rowsAffected = await cmd.ExecuteNonQueryAsync(ct);
             return rowsAffected > 0;
+        }
+
+        public async Task<int?> GetSellerIdForStaffAsync(int staffUserId, CancellationToken ct = default)
+        {
+            await using var conn = new SqlConnection(_connectionString);
+            await conn.OpenAsync(ct);
+
+            const string sql = @"SELECT user_id FROM dbo.tbl_users WHERE id = @StaffUserId AND archived_at IS NULL";
+
+            await using var cmd = new SqlCommand(sql, conn) { CommandType = CommandType.Text };
+            cmd.Parameters.AddWithValue("@StaffUserId", staffUserId);
+
+            var result = await cmd.ExecuteScalarAsync(ct);
+            return result != null && result != DBNull.Value ? Convert.ToInt32(result) : null;
         }
     }
 

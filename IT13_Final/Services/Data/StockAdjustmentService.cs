@@ -265,15 +265,29 @@ namespace IT13_Final.Services.Data
 
             try
             {
-                // Verify variant belongs to seller
-                var verifySql = "SELECT COUNT(*) FROM dbo.tbl_variants WHERE id = @VariantId AND user_id = @SellerUserId AND archived_at IS NULL";
+                // Verify variant belongs to seller and get variant details for expense calculation
+                var verifySql = @"
+                    SELECT v.id, v.name, v.price, p.name as product_name 
+                    FROM dbo.tbl_variants v
+                    INNER JOIN dbo.tbl_products p ON v.product_id = p.id
+                    WHERE v.id = @VariantId AND v.user_id = @SellerUserId AND v.archived_at IS NULL";
                 using var verifyCmd = new SqlCommand(verifySql, conn);
                 verifyCmd.Parameters.AddWithValue("@VariantId", variantId);
                 verifyCmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
-                var count = await verifyCmd.ExecuteScalarAsync(ct);
-                if (count == null || Convert.ToInt32(count) == 0)
+                
+                string variantName = "";
+                string productName = "";
+                decimal variantPrice = 0;
+                
+                using (var reader = await verifyCmd.ExecuteReaderAsync(ct))
                 {
-                    return null;
+                    if (!await reader.ReadAsync(ct))
+                    {
+                        return null; // Variant not found or doesn't belong to seller
+                    }
+                    variantName = reader.GetString(1);
+                    variantPrice = reader.IsDBNull(2) ? 0 : reader.GetDecimal(2);
+                    productName = reader.GetString(3);
                 }
 
                 // Validate adjustment type
@@ -303,7 +317,36 @@ namespace IT13_Final.Services.Data
                 cmd.Parameters.AddWithValue("@CreatedByUserId", createdByUserId);
 
                 var result = await cmd.ExecuteScalarAsync(ct);
-                return result != null ? Convert.ToInt32(result) : null;
+                var adjustmentId = result != null ? Convert.ToInt32(result) : (int?)null;
+
+                // If it's a decrease adjustment, automatically create an expense
+                if (adjustmentId.HasValue && adjustmentType == "Decrease" && variantPrice > 0)
+                {
+                    var expenseAmount = variantPrice * quantityAdjusted;
+                    var expenseDescription = $"Stock Adjustment (Decrease): {productName} - {variantName}, Qty: {quantityAdjusted}";
+                    if (!string.IsNullOrEmpty(reason))
+                    {
+                        expenseDescription += $", Reason: {reason}";
+                    }
+
+                    var expenseSql = @"
+                        INSERT INTO dbo.tbl_expenses 
+                            (expense_type, amount, description, expense_date, created_by, seller_user_id, created_at)
+                        VALUES 
+                            (@ExpenseType, @Amount, @Description, @ExpenseDate, @CreatedBy, @SellerUserId, SYSUTCDATETIME());";
+
+                    using var expenseCmd = new SqlCommand(expenseSql, conn);
+                    expenseCmd.Parameters.AddWithValue("@ExpenseType", "Operating Expenses - Stock Loss");
+                    expenseCmd.Parameters.AddWithValue("@Amount", expenseAmount);
+                    expenseCmd.Parameters.AddWithValue("@Description", expenseDescription);
+                    expenseCmd.Parameters.AddWithValue("@ExpenseDate", DateTime.Today);
+                    expenseCmd.Parameters.AddWithValue("@CreatedBy", createdByUserId);
+                    expenseCmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+
+                    await expenseCmd.ExecuteNonQueryAsync(ct);
+                }
+
+                return adjustmentId;
             }
             catch (Exception ex)
             {

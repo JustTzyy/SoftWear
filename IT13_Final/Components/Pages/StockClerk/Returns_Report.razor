@@ -1,0 +1,925 @@
+@page "/stockclerk/Returns_Report"
+@layout IT13_Final.Components.Layout.StockClerk.StockClerk
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IT13_Final.Services.Data.IReturnsService ReturnsService
+@inject IT13_Final.Services.Data.IUserService UserService
+@inject IT13_Final.Services.Audit.IHistoryService HistoryService
+@inject IJSRuntime JSRuntime
+@implements IDisposable
+@using System.Linq
+@using Microsoft.Data.SqlClient
+
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Returns Reports</h1>
+        <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintReport" disabled="@isGeneratingPDF" title="Print Report">
+            @if (isGeneratingPDF)
+            {
+                <span>Generating...</span>
+            }
+            else
+            {
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 9V2h12v7"></path>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+            }
+        </button>
+    </div>
+</div>
+
+@* Search and Date Filters *@
+<div class="dashboard-filters">
+    <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.3-4.3"></path>
+        </svg>
+        <input type="text" 
+               id="stockclerk-returns-report-search-input"
+               class="search-input" 
+               placeholder="Search by return number or sale number..." 
+               @bind="searchTerm" 
+               @bind:event="oninput" 
+               @bind:after="HandleSearchInput"
+               @onkeypress="HandleSearchKeyPress" />
+        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            <button class="clear-search-btn" @onclick="HandleClearSearch" title="Clear search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="selectedDateRange" @bind:after="HandleDateRangeChange" @bind:event="onchange">
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="thisyear">This Year</option>
+        </select>
+        <input type="date"
+               class="date-input"
+               value="@(startDate?.ToString("yyyy-MM-dd"))"
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleStartDateChange" />
+        <span class="date-separator">to</span>
+        <input type="date"
+               class="date-input"
+               value="@(endDate?.ToString("yyyy-MM-dd"))"
+               min="@DateTime.Now.AddYears(-10).ToString("yyyy-MM-dd")"
+               max="@DateTime.Now.ToString("yyyy-MM-dd")"
+               @onchange="HandleEndDateChange" />
+        @if (HasActiveDateFilters)
+        {
+            <button class="clear-btn" @onclick="ClearDateFilter" title="Clear filters">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+</div>
+
+@* Summary Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Returns Summary</h3>
+            <span class="card-subtitle">@totalCount total returns</span>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <div class="summary-grid">
+            <div class="summary-box">
+                <div class="summary-label">Total Returns</div>
+                <div class="summary-value">@totalCount</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Pending Returns</div>
+                <div class="summary-value">@pendingReturnsCount</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Completed Returns</div>
+                <div class="summary-value">@completedReturnsCount</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Items Returned</div>
+                <div class="summary-value">@totalItemsReturned</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Returns List Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">Returns List</h3>
+            <span class="card-subtitle">@totalCount returns found</span>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th style="text-align: left;">Return Number</th>
+                    <th style="text-align: left;">Sale Number</th>
+                    <th style="text-align: left;">Status</th>
+                    <th style="text-align: left;">Cashier</th>
+                    <th style="text-align: left;">Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="5" class="loading-cell">Loading returns...</td>
+                    </tr>
+                }
+                else if (returns.Count == 0)
+                {
+                    <tr>
+                        <td colspan="5" class="empty-cell">No returns found for this filter.</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var returnItem in returns)
+                    {
+                        <tr class="clickable-row" @onclick="() => HandleReturnClick(returnItem.Id)">
+                            <td class="return-number" style="text-align: left;">@returnItem.ReturnNumber</td>
+                            <td class="sale-number" style="text-align: left;">@returnItem.SaleNumber</td>
+                            <td style="text-align: left;">
+                                <span class="status-text status-text-@returnItem.Status.ToLower()">@returnItem.Status</span>
+                            </td>
+                            <td style="text-align: left;">@returnItem.CashierName</td>
+                            <td style="text-align: left;">
+                                <div class="timestamp-info">
+                                    <div class="timestamp-date">@returnItem.Timestamps.ToString("MMM dd, yyyy")</div>
+                                    <div class="timestamp-time">@returnItem.Timestamps.ToString("HH:mm:ss")</div>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="pagination">
+            <button class="page-btn" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)" title="Previous page">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m15 18-6-6 6-6"></path>
+                </svg>
+            </button>
+
+            @for (int i = 1; i <= totalPages; i++)
+            {
+                var pageNum = i;
+                @if (i == 1 || i == totalPages || (i >= currentPage - 1 && i <= currentPage + 1))
+                {
+                    <button class="page-btn @(i == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">
+                        @i
+                    </button>
+                }
+                else if (i == currentPage - 2 || i == currentPage + 2)
+                {
+                    <span class="page-ellipsis">...</span>
+                }
+            }
+
+            <button class="page-btn" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)" title="Next page">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m9 18 6-6-6-6"></path>
+                </svg>
+            </button>
+        </div>
+    }
+</div>
+
+@* Return Details Modal *@
+@if (showReturnDetailsModal && selectedReturn != null)
+{
+    <div class="modal-overlay" @onclick="CloseReturnDetailsModal">
+        <div class="add-admin-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">Return Details - @selectedReturn.ReturnNumber</h2>
+                <button class="modal-close-btn" @onclick="CloseReturnDetailsModal" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="sale-info">
+                    <div class="info-row">
+                        <span class="info-label">Return Number:</span>
+                        <span class="info-value">@selectedReturn.ReturnNumber</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Sale Number:</span>
+                        <span class="info-value">@selectedReturn.SaleNumber</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Date:</span>
+                        <span class="info-value">@selectedReturn.Timestamps.ToString("MMM dd, yyyy HH:mm:ss")</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Cashier:</span>
+                        <span class="info-value">@selectedReturn.CashierName</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Status:</span>
+                        <span class="info-value">
+                            <span class="status-text status-text-@selectedReturn.Status.ToLower()">@selectedReturn.Status</span>
+                        </span>
+                    </div>
+                    @if (!string.IsNullOrEmpty(selectedReturn.Reason))
+                    {
+                        <div class="info-row">
+                            <span class="info-label">Reason:</span>
+                            <span class="info-value">@selectedReturn.Reason</span>
+                        </div>
+                    }
+                </div>
+
+                <div class="items-section">
+                    <h4>Returned Items</h4>
+                    <table class="items-table">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Size</th>
+                                <th>Color</th>
+                                <th>Quantity</th>
+                                <th>Condition</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in returnItems)
+                            {
+                                <tr>
+                                    <td>@item.ProductName - @item.VariantName</td>
+                                    <td>@(item.SizeName ?? "N/A")</td>
+                                    <td>@(item.ColorName ?? "N/A")</td>
+                                    <td>@item.Quantity</td>
+                                    <td>
+                                        <span class="condition-badge condition-@item.Condition.ToLower()">@item.Condition</span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="cancel-btn" @onclick="CloseReturnDetailsModal">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<IT13_Final.Services.Data.ReturnReportModel> returns = new();
+    private List<IT13_Final.Services.Data.ReturnReportModel> allReturnsForPrint = new();
+    private string searchTerm = string.Empty;
+    private DateTime? startDate;
+    private DateTime? endDate;
+    private string selectedDateRange = string.Empty;
+
+    private bool HasActiveDateFilters => !string.IsNullOrEmpty(selectedDateRange) || startDate.HasValue || endDate.HasValue;
+    private bool isLoading = false;
+    private bool isGeneratingPDF = false;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling(totalCount / (double)pageSize);
+    private System.Threading.Timer? _searchTimer;
+    private bool showReturnDetailsModal = false;
+    private IT13_Final.Services.Data.ReturnReportModel? selectedReturn = null;
+    private List<IT13_Final.Services.Data.ReturnReportItemModel> returnItems = new();
+
+    private int sellerUserId = 0;
+
+    private int pendingReturnsCount = 0;
+    private int completedReturnsCount = 0;
+    private int totalItemsReturned = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var stockClerkUserId = AuthState.CurrentUser?.Id ?? 0;
+        if (stockClerkUserId > 0)
+        {
+            sellerUserId = await UserService.GetSellerIdForStaffAsync(stockClerkUserId) ?? 0;
+        }
+        await LoadReturns();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JSRuntime.InvokeVoidAsync("setupSearchInputFilter", "stockclerk-returns-report-search-input");
+        }
+    }
+
+    private async Task<List<int>> GetCashierUserIdsAsync()
+    {
+        var cashierIds = new List<int>();
+
+        if (sellerUserId <= 0) return cashierIds;
+
+        try
+        {
+            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+            using var conn = new SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            var sql = @"
+                SELECT u.id
+                FROM dbo.tbl_users u
+                JOIN dbo.tbl_roles r ON r.id = u.role_id
+                WHERE u.user_id = @SellerId
+                AND LOWER(r.name) = 'cashier'
+                AND u.archived_at IS NULL";
+
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@SellerId", sellerUserId);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                cashierIds.Add(reader.GetInt32(0));
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading cashier IDs: {ex.Message}");
+        }
+
+        return cashierIds;
+    }
+
+    private async Task LoadReturns()
+    {
+        if (sellerUserId <= 0)
+        {
+            returns = new List<IT13_Final.Services.Data.ReturnReportModel>();
+            totalCount = 0;
+            pendingReturnsCount = 0;
+            completedReturnsCount = 0;
+            totalItemsReturned = 0;
+            return;
+        }
+
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var cashierUserIds = await GetCashierUserIdsAsync();
+            if (cashierUserIds.Count == 0)
+            {
+                returns = new List<IT13_Final.Services.Data.ReturnReportModel>();
+                totalCount = 0;
+                pendingReturnsCount = 0;
+                completedReturnsCount = 0;
+                totalItemsReturned = 0;
+                return;
+            }
+
+            var userIdParams = new List<string>();
+            for (int i = 0; i < cashierUserIds.Count; i++)
+            {
+                userIdParams.Add($"@cashierId{i}");
+            }
+            var cashierIdsInClause = userIdParams.Count > 0 ? string.Join(",", userIdParams) : "0";
+
+            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+            using var conn = new SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            var countSql = $@"
+                SELECT COUNT(*)
+                FROM dbo.tbl_returns r
+                INNER JOIN dbo.tbl_sales s ON r.sale_id = s.id
+                WHERE r.archives IS NULL
+                AND r.user_id IN ({cashierIdsInClause})";
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                countSql += " AND (r.return_number LIKE @SearchTerm OR s.sale_number LIKE @SearchTerm)";
+            }
+
+            if (startDate.HasValue)
+            {
+                countSql += " AND CAST(r.timestamps AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                countSql += " AND CAST(r.timestamps AS DATE) <= @EndDate";
+            }
+
+            using var countCmd = new SqlCommand(countSql, conn);
+            for (int i = 0; i < cashierUserIds.Count; i++)
+            {
+                countCmd.Parameters.AddWithValue($"@cashierId{i}", cashierUserIds[i]);
+            }
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                countCmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
+            }
+            if (startDate.HasValue)
+            {
+                countCmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                countCmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+            }
+
+            var countResult = await countCmd.ExecuteScalarAsync();
+            totalCount = countResult != null ? Convert.ToInt32(countResult) : 0;
+
+            var offset = (currentPage - 1) * pageSize;
+            var returnsSql = $@"
+                SELECT r.id, r.return_number, s.sale_number, r.status, r.timestamps, r.reason,
+                       COALESCE(u.name, (LTRIM(RTRIM(ISNULL(u.fname,''))) + ' ' + LTRIM(RTRIM(ISNULL(u.lname,''))))) as cashier_name
+                FROM dbo.tbl_returns r
+                INNER JOIN dbo.tbl_sales s ON r.sale_id = s.id
+                INNER JOIN dbo.tbl_users u ON r.user_id = u.id
+                WHERE r.archives IS NULL
+                AND r.user_id IN ({cashierIdsInClause})";
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                returnsSql += " AND (r.return_number LIKE @SearchTerm OR s.sale_number LIKE @SearchTerm)";
+            }
+
+            if (startDate.HasValue)
+            {
+                returnsSql += " AND CAST(r.timestamps AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                returnsSql += " AND CAST(r.timestamps AS DATE) <= @EndDate";
+            }
+
+            returnsSql += " ORDER BY r.timestamps DESC OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
+
+            using var returnsCmd = new SqlCommand(returnsSql, conn);
+            for (int i = 0; i < cashierUserIds.Count; i++)
+            {
+                returnsCmd.Parameters.AddWithValue($"@cashierId{i}", cashierUserIds[i]);
+            }
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                returnsCmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
+            }
+            if (startDate.HasValue)
+            {
+                returnsCmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                returnsCmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+            }
+            returnsCmd.Parameters.AddWithValue("@Offset", offset);
+            returnsCmd.Parameters.AddWithValue("@PageSize", pageSize);
+
+            returns = new List<IT13_Final.Services.Data.ReturnReportModel>();
+            using var reader = await returnsCmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                returns.Add(new IT13_Final.Services.Data.ReturnReportModel
+                {
+                    Id = reader.GetInt32(0),
+                    ReturnNumber = reader.GetString(1),
+                    SaleNumber = reader.GetString(2),
+                    Status = reader.IsDBNull(3) ? "Pending" : reader.GetString(3),
+                    Timestamps = reader.GetDateTime(4),
+                    Reason = reader.IsDBNull(5) ? null : reader.GetString(5),
+                    CashierName = reader.IsDBNull(6) ? string.Empty : reader.GetString(6)
+                });
+            }
+
+            if (currentPage > totalPages && totalPages > 0)
+            {
+                currentPage = totalPages;
+                await LoadReturns();
+                return;
+            }
+
+            // Get summary statistics
+            var statsSql = $@"
+                SELECT 
+                    SUM(CASE WHEN r.status = 'Pending' OR r.status IS NULL THEN 1 ELSE 0 END) as pending_count,
+                    SUM(CASE WHEN r.status = 'Completed' THEN 1 ELSE 0 END) as completed_count,
+                    (SELECT COALESCE(SUM(ri.quantity), 0) FROM dbo.tbl_return_items ri 
+                     INNER JOIN dbo.tbl_returns r2 ON ri.return_id = r2.id 
+                     WHERE r2.archives IS NULL AND r2.user_id IN ({cashierIdsInClause})) as total_items
+                FROM dbo.tbl_returns r
+                WHERE r.archives IS NULL
+                AND r.user_id IN ({cashierIdsInClause})";
+
+            if (startDate.HasValue)
+            {
+                statsSql += " AND CAST(r.timestamps AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                statsSql += " AND CAST(r.timestamps AS DATE) <= @EndDate";
+            }
+
+            using (var statsConn = new SqlConnection(connectionString))
+            {
+                await statsConn.OpenAsync();
+                using var statsCmd = new SqlCommand(statsSql, statsConn);
+                for (int i = 0; i < cashierUserIds.Count; i++)
+                {
+                    statsCmd.Parameters.AddWithValue($"@cashierId{i}", cashierUserIds[i]);
+                }
+                if (startDate.HasValue)
+                {
+                    statsCmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+                }
+                if (endDate.HasValue)
+                {
+                    statsCmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+                }
+
+                using var statsReader = await statsCmd.ExecuteReaderAsync();
+                if (await statsReader.ReadAsync())
+                {
+                    pendingReturnsCount = statsReader.IsDBNull(0) ? 0 : statsReader.GetInt32(0);
+                    completedReturnsCount = statsReader.IsDBNull(1) ? 0 : statsReader.GetInt32(1);
+                    totalItemsReturned = statsReader.IsDBNull(2) ? 0 : statsReader.GetInt32(2);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading returns: {ex.Message}");
+            returns = new List<IT13_Final.Services.Data.ReturnReportModel>();
+            totalCount = 0;
+            pendingReturnsCount = 0;
+            completedReturnsCount = 0;
+            totalItemsReturned = 0;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async void HandleStartDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            var today = DateTime.Today;
+            if (date.Date > today)
+            {
+                startDate = today;
+            }
+            else
+            {
+                startDate = date.Date;
+            }
+            selectedDateRange = "";
+            
+            if (endDate.HasValue && endDate.Value < startDate.Value)
+            {
+                endDate = startDate.Value;
+            }
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            startDate = null;
+            selectedDateRange = "";
+        }
+        await ApplyFilters();
+    }
+
+    private async void HandleEndDateChange(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var date))
+        {
+            var today = DateTime.Today;
+            var parsedDate = date.Date;
+            
+            if (parsedDate > today)
+            {
+                parsedDate = today;
+            }
+            
+            if (startDate.HasValue)
+            {
+                if (parsedDate < startDate.Value)
+                {
+                    endDate = startDate.Value;
+                }
+                else
+                {
+                    endDate = parsedDate;
+                }
+            }
+            else
+            {
+                endDate = parsedDate;
+            }
+            
+            selectedDateRange = "";
+        }
+        else if (string.IsNullOrWhiteSpace(value))
+        {
+            endDate = null;
+            selectedDateRange = "";
+        }
+        await ApplyFilters();
+    }
+
+    private async Task HandleDateRangeChange()
+    {
+        var now = DateTime.Now;
+        switch (selectedDateRange)
+        {
+            case "":
+                startDate = null;
+                endDate = null;
+                break;
+            case "today":
+                startDate = now.Date;
+                endDate = now.Date;
+                break;
+            case "yesterday":
+                startDate = now.Date.AddDays(-1);
+                endDate = now.Date.AddDays(-1);
+                break;
+            case "last7days":
+                startDate = now.Date.AddDays(-6);
+                endDate = now.Date;
+                break;
+            case "last30days":
+                startDate = now.Date.AddDays(-29);
+                endDate = now.Date;
+                break;
+            case "thismonth":
+                startDate = new DateTime(now.Year, now.Month, 1);
+                endDate = now.Date;
+                break;
+            case "thisyear":
+                startDate = new DateTime(now.Year, 1, 1);
+                endDate = now.Date;
+                break;
+        }
+        await ApplyFilters();
+    }
+
+    private async Task ClearDateFilter()
+    {
+        selectedDateRange = "";
+        startDate = null;
+        endDate = null;
+        currentPage = 1;
+        await LoadReturns();
+    }
+
+    private async Task ApplyFilters()
+    {
+        currentPage = 1;
+        await LoadReturns();
+    }
+
+    private void HandleSearchInput()
+    {
+        var filtered = System.Text.RegularExpressions.Regex.Replace(searchTerm, @"[^a-zA-Z0-9\s\-_]", "");
+        if (filtered != searchTerm)
+        {
+            searchTerm = filtered;
+        }
+
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            currentPage = 1;
+            await InvokeAsync(LoadReturns);
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task HandleClearSearch()
+    {
+        searchTerm = string.Empty;
+        currentPage = 1;
+        await LoadReturns();
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            currentPage = 1;
+            await LoadReturns();
+        }
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages && page != currentPage)
+        {
+            currentPage = page;
+            await LoadReturns();
+        }
+    }
+
+    private async Task HandleReturnClick(int returnId)
+    {
+        try
+        {
+            var returnData = await ReturnsService.GetReturnForReportAsync(returnId, 0);
+            if (returnData == null)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Return not found.");
+                return;
+            }
+
+            selectedReturn = returnData;
+            returnItems = await ReturnsService.GetReturnItemsForReportAsync(returnId);
+            showReturnDetailsModal = true;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading return details: {ex.Message}");
+        }
+    }
+
+    private void CloseReturnDetailsModal()
+    {
+        showReturnDetailsModal = false;
+        selectedReturn = null;
+        returnItems = new();
+    }
+
+    private async Task PrintReport()
+    {
+        if (sellerUserId <= 0) return;
+
+        try
+        {
+            var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+            if (!confirmed) return;
+
+            isGeneratingPDF = true;
+            StateHasChanged();
+
+            var cashierUserIds = await GetCashierUserIdsAsync();
+            if (cashierUserIds.Count == 0)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "No returns data to print.");
+                return;
+            }
+
+            var userIdParams = new List<string>();
+            for (int i = 0; i < cashierUserIds.Count; i++)
+            {
+                userIdParams.Add($"@cashierId{i}");
+            }
+            var cashierIdsInClause = string.Join(",", userIdParams);
+
+            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+            using var conn = new SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            var returnsSql = $@"
+                SELECT r.id, r.return_number, s.sale_number, r.status, r.timestamps, r.reason,
+                       COALESCE(u.name, (LTRIM(RTRIM(ISNULL(u.fname,''))) + ' ' + LTRIM(RTRIM(ISNULL(u.lname,''))))) as cashier_name
+                FROM dbo.tbl_returns r
+                INNER JOIN dbo.tbl_sales s ON r.sale_id = s.id
+                INNER JOIN dbo.tbl_users u ON r.user_id = u.id
+                WHERE r.archives IS NULL
+                AND r.user_id IN ({cashierIdsInClause})";
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                returnsSql += " AND (r.return_number LIKE @SearchTerm OR s.sale_number LIKE @SearchTerm)";
+            }
+
+            if (startDate.HasValue)
+            {
+                returnsSql += " AND CAST(r.timestamps AS DATE) >= @StartDate";
+            }
+
+            if (endDate.HasValue)
+            {
+                returnsSql += " AND CAST(r.timestamps AS DATE) <= @EndDate";
+            }
+
+            returnsSql += " ORDER BY r.timestamps DESC";
+
+            using var cmd = new SqlCommand(returnsSql, conn);
+            for (int i = 0; i < cashierUserIds.Count; i++)
+            {
+                cmd.Parameters.AddWithValue($"@cashierId{i}", cashierUserIds[i]);
+            }
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
+            }
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+            }
+
+            allReturnsForPrint = new List<IT13_Final.Services.Data.ReturnReportModel>();
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                allReturnsForPrint.Add(new IT13_Final.Services.Data.ReturnReportModel
+                {
+                    Id = reader.GetInt32(0),
+                    ReturnNumber = reader.GetString(1),
+                    SaleNumber = reader.GetString(2),
+                    Status = reader.IsDBNull(3) ? "Pending" : reader.GetString(3),
+                    Timestamps = reader.GetDateTime(4),
+                    Reason = reader.IsDBNull(5) ? null : reader.GetString(5),
+                    CashierName = reader.IsDBNull(6) ? string.Empty : reader.GetString(6)
+                });
+            }
+
+            await JSRuntime.InvokeVoidAsync("generateReturnsReportPDF",
+                allReturnsForPrint.Select(r => new
+                {
+                    returnNumber = r.ReturnNumber,
+                    saleNumber = r.SaleNumber,
+                    status = r.Status,
+                    cashierName = r.CashierName,
+                    date = r.Timestamps.ToString("MMM dd, yyyy"),
+                    time = r.Timestamps.ToString("HH:mm:ss")
+                }).ToArray(),
+                totalCount.ToString(),
+                pendingReturnsCount.ToString(),
+                completedReturnsCount.ToString(),
+                AuthState.CurrentUser?.FullName ?? "Stock Clerk",
+                startDate?.ToString("MMM dd, yyyy") ?? "All Time",
+                endDate?.ToString("MMM dd, yyyy") ?? "Today"
+            );
+
+            if (AuthState.CurrentUser != null)
+            {
+                try
+                {
+                    await HistoryService.LogAsync(
+                        AuthState.CurrentUser.Id,
+                        "print",
+                        "Reports",
+                        "Printed returns report"
+                    );
+                }
+                catch { }
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error generating PDF: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to generate PDF. Please try again.");
+        }
+        finally
+        {
+            isGeneratingPDF = false;
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+    }
+}

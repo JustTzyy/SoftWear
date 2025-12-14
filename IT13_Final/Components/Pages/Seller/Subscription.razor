@@ -1,0 +1,388 @@
+@page "/seller/subscription"
+@layout IT13_Final.Components.Layout.Seller.Seller
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IT13_Final.Services.Data.ISubscriptionService SubscriptionService
+@inject IT13_Final.Services.Audit.IHistoryService HistoryService
+@inject NavigationManager Nav
+@implements IDisposable
+
+<div class="subscription-container">
+    <div class="subscription-header">
+        <h1 class="page-title">Choose Your Subscription Plan</h1>
+        <p class="page-subtitle">Select the plan that best fits your business needs. You can upgrade or downgrade at any time.</p>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="loading-container">
+            <div class="loading-spinner"></div>
+            <p>Loading subscription plans...</p>
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="error-message">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <span>@errorMessage</span>
+        </div>
+    }
+    else
+    {
+        @if (currentSubscription != null)
+        {
+            <div class="current-plan-banner">
+                <div class="banner-content">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                    </svg>
+                    <div>
+                        <strong>Current Plan:</strong> @currentSubscription.PlanName
+                        <span class="plan-badge @currentSubscription.PlanCode.ToLower()">@currentSubscription.PlanCode</span>
+                    </div>
+                </div>
+                <div class="banner-details">
+                    <span>Admin Fee: @currentSubscription.AdminFeePercentage.ToString("0.0")%</span>
+                    <span>Since: @currentSubscription.StartDate.ToString("MMM dd, yyyy")</span>
+                </div>
+            </div>
+        }
+
+        <div class="plans-grid">
+            @foreach (var plan in plans)
+            {
+                var isCurrentPlan = currentSubscription?.PlanId == plan.Id;
+                var isUpgrade = currentSubscription != null && plan.DisplayOrder > (plans.FirstOrDefault(p => p.Id == currentSubscription.PlanId)?.DisplayOrder ?? 0);
+                var isDowngrade = currentSubscription != null && plan.DisplayOrder < (plans.FirstOrDefault(p => p.Id == currentSubscription.PlanId)?.DisplayOrder ?? 0);
+                
+                <div class="plan-card @(isCurrentPlan ? "current" : "") @(plan.Code.ToLower()) @(selectedPlanId == plan.Id ? "selected" : "")">
+                    @if (plan.Code == "PREMIUM")
+                    {
+                        <div class="popular-badge">Most Popular</div>
+                    }
+                    
+                    <div class="plan-header">
+                        <h2 class="plan-name">@plan.Name</h2>
+                        <div class="plan-price">
+                            @if (plan.Price > 0)
+                            {
+                                <span class="price-amount">$@plan.Price.ToString("0.00")</span>
+                                <span class="price-period">/month</span>
+                            }
+                            else
+                            {
+                                <span class="price-amount">Free</span>
+                            }
+                        </div>
+                        <div class="admin-fee">
+                            <span class="fee-percentage">@plan.AdminFeePercentage.ToString("0.0")%</span>
+                            <span class="fee-label">admin fee per transaction</span>
+                        </div>
+                    </div>
+
+                    <div class="plan-features">
+                        <h3>Features Included:</h3>
+                        <ul>
+                            @if (plan.HasStockClerkAccess)
+                            {
+                                <li class="included">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                    <span>Stock Clerk Module</span>
+                                </li>
+                                <li class="included">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                    <span>Stock Clerk Transaction Records</span>
+                                </li>
+                            }
+                            else
+                            {
+                                <li class="excluded">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                    <span>Stock Clerk Module</span>
+                                </li>
+                            }
+                            
+                            @if (plan.HasCashierAccess)
+                            {
+                                <li class="included">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                    <span>Cashier Module</span>
+                                </li>
+                                <li class="included">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                    <span>Cashier Transaction Records</span>
+                                </li>
+                            }
+                            else
+                            {
+                                <li class="excluded">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                    <span>Cashier Module</span>
+                                </li>
+                            }
+                            
+                            @if (plan.HasAccountingAccess)
+                            {
+                                <li class="included">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                    <span>Accounting Module</span>
+                                </li>
+                            }
+                            else
+                            {
+                                <li class="excluded">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                    <span>Accounting Module</span>
+                                </li>
+                            }
+                            
+                            @if (plan.HasFullReportsAccess)
+                            {
+                                <li class="included">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                    <span>Full System Reports & Analytics</span>
+                                </li>
+                            }
+                            else
+                            {
+                                <li class="excluded">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                    <span>Full System Reports</span>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+
+                    <div class="plan-description">
+                        <p>@plan.Description</p>
+                    </div>
+
+                    <div class="plan-action">
+                        @if (isCurrentPlan)
+                        {
+                            <button class="btn-current" disabled>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                </svg>
+                                Current Plan
+                            </button>
+                        }
+                        else if (isProcessing && selectedPlanId == plan.Id)
+                        {
+                            <button class="btn-processing" disabled>
+                                <div class="btn-spinner"></div>
+                                Processing...
+                            </button>
+                        }
+                        else
+                        {
+                            <button class="btn-select @(isUpgrade ? "upgrade" : "") @(isDowngrade ? "downgrade" : "")" 
+                                    @onclick="() => SelectPlan(plan.Id)">
+                                @if (currentSubscription == null)
+                                {
+                                    <span>Get Started</span>
+                                }
+                                else if (isUpgrade)
+                                {
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="18 15 12 9 6 15"></polyline>
+                                    </svg>
+                                    <span>Upgrade</span>
+                                }
+                                else
+                                {
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="6 9 12 15 18 9"></polyline>
+                                    </svg>
+                                    <span>Downgrade</span>
+                                }
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @if (!string.IsNullOrEmpty(successMessage))
+        {
+            <div class="success-message">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+                <span>@successMessage</span>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private List<IT13_Final.Services.Data.SubscriptionPlanModel> plans = new();
+    private IT13_Final.Services.Data.SellerSubscriptionModel? currentSubscription;
+    private int? selectedPlanId;
+    private bool isLoading = true;
+    private bool isProcessing = false;
+    private string? errorMessage;
+    private string? successMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthState.CurrentUser == null)
+        {
+            Nav.NavigateTo("/auth/login");
+            return;
+        }
+
+        AuthState.Changed += StateHasChanged;
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var userId = AuthState.CurrentUser?.Id ?? 0;
+            
+            // Load available plans
+            plans = await SubscriptionService.GetAllPlansAsync(activeOnly: true);
+            
+            // Load current subscription
+            currentSubscription = await SubscriptionService.GetSellerSubscriptionAsync(userId);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load subscription data: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SelectPlan(int planId)
+    {
+        if (isProcessing) return;
+        
+        var userId = AuthState.CurrentUser?.Id ?? 0;
+        if (userId == 0) return;
+
+        selectedPlanId = planId;
+        isProcessing = true;
+        errorMessage = null;
+        successMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            bool success;
+            string action;
+
+            if (currentSubscription == null)
+            {
+                // Create new subscription
+                var subscriptionId = await SubscriptionService.CreateSubscriptionAsync(userId, planId);
+                success = subscriptionId.HasValue;
+                action = "created";
+            }
+            else
+            {
+                // Update existing subscription
+                success = await SubscriptionService.UpdateSubscriptionPlanAsync(userId, planId);
+                action = currentSubscription.PlanId < planId ? "upgraded" : "downgraded";
+            }
+
+            if (success)
+            {
+                // Reload subscription data
+                currentSubscription = await SubscriptionService.GetSellerSubscriptionAsync(userId);
+                
+                // Update AuthState with new subscription info
+                if (currentSubscription != null)
+                {
+                    var subscriptionInfo = new IT13_Final.Services.Auth.SubscriptionInfo
+                    {
+                        SubscriptionId = currentSubscription.Id,
+                        PlanId = currentSubscription.PlanId,
+                        PlanName = currentSubscription.PlanName,
+                        PlanCode = currentSubscription.PlanCode,
+                        AdminFeePercentage = currentSubscription.AdminFeePercentage,
+                        HasStockClerkAccess = currentSubscription.HasStockClerkAccess,
+                        HasCashierAccess = currentSubscription.HasCashierAccess,
+                        HasAccountingAccess = currentSubscription.HasAccountingAccess,
+                        HasFullReportsAccess = currentSubscription.HasFullReportsAccess,
+                        StartDate = currentSubscription.StartDate,
+                        Status = currentSubscription.Status
+                    };
+                    AuthState.SetSubscription(subscriptionInfo);
+                }
+
+                var plan = plans.FirstOrDefault(p => p.Id == planId);
+                successMessage = $"Successfully {action} to {plan?.Name ?? "new plan"}!";
+                
+                try 
+                { 
+                    await HistoryService.LogAsync(userId, "subscription_change", "Subscription", 
+                        $"Subscription {action} to {plan?.Name ?? "unknown"} plan"); 
+                } 
+                catch { }
+
+                // Redirect to dashboard after a short delay
+                await Task.Delay(1500);
+                Nav.NavigateTo("/seller/dashboard");
+            }
+            else
+            {
+                errorMessage = "Failed to update subscription. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error updating subscription: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+            selectedPlanId = null;
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        AuthState.Changed -= StateHasChanged;
+    }
+}

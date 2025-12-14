@@ -148,18 +148,17 @@ else
             </div>
         </div>
 
-        <div class="kpi-card kpi-success" @onclick='() => Nav.NavigateTo("/admin/fee-summary")'>
+        <div class="kpi-card kpi-success" @onclick='() => Nav.NavigateTo("/admin/subscriptions")'>
             <div class="kpi-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
-                    <line x1="1" y1="10" x2="23" y2="10"></line>
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
                     </svg>
             </div>
             <div class="kpi-content">
-                <span class="kpi-label">Seller Revenue</span>
-                <span class="kpi-value @(hideConfidential ? "masked" : "")">₱@MaskValue(totalSellerRevenue)</span>
+                <span class="kpi-label">Total Transactions</span>
+                <span class="kpi-value">@totalTransactions.ToString("N0")</span>
                 <span class="kpi-trend">
-                    <span>Total seller sales</span>
+                    <span>Fee transactions</span>
                 </span>
             </div>
             </div>
@@ -329,37 +328,37 @@ else
         @* Revenue vs Fees Chart *@
         @if (showRevenueChart)
         {
-        <div class="chart-card" @onclick='() => Nav.NavigateTo("/admin/monthly-collection")'>
+        <div class="chart-card" @onclick='() => Nav.NavigateTo("/admin/subscriptions")'>
             <div class="chart-header">
-                <h3>Revenue vs Admin Fees</h3>
-                <span class="chart-subtitle">Financial overview</span>
+                <h3>Admin Fee Summary</h3>
+                <span class="chart-subtitle">Platform earnings breakdown</span>
             </div>
             <div class="chart-body">
                 @{
-                    var finMax = Math.Max((double)totalSellerRevenue, Math.Max((double)totalAdminFees, (double)avgFeePerSeller * 100));
+                    var finMax = Math.Max((double)totalAdminFees, (double)avgFeePerSeller * 100);
                     if (finMax <= 0) finMax = 1;
                 }
                 <div class="horizontal-bars">
                     <div class="bar-row">
-                        <span class="bar-label">Revenue</span>
+                        <span class="bar-label">Total Fees</span>
                         <div class="bar-track">
-                            <div class="bar-fill bar-revenue" style="width: @(hideConfidential ? "0" : (totalSellerRevenue > 0 ? (double)totalSellerRevenue / finMax * 100 : 0).ToString("F1"))%"></div>
-                        </div>
-                        <span class="bar-value @(hideConfidential ? "masked" : "")">₱@MaskValue(totalSellerRevenue)</span>
-                    </div>
-                    <div class="bar-row">
-                        <span class="bar-label">Admin Fee</span>
-                        <div class="bar-track">
-                            <div class="bar-fill bar-fee" style="width: @(hideConfidential ? "0" : (totalAdminFees > 0 ? (double)totalAdminFees / finMax * 100 : 0).ToString("F1"))%"></div>
+                            <div class="bar-fill bar-revenue" style="width: @(hideConfidential ? "0" : (totalAdminFees > 0 ? (double)totalAdminFees / finMax * 100 : 0).ToString("F1"))%"></div>
                         </div>
                         <span class="bar-value @(hideConfidential ? "masked" : "")">₱@MaskValue(totalAdminFees)</span>
                     </div>
                     <div class="bar-row">
-                        <span class="bar-label">Net to Sellers</span>
+                        <span class="bar-label">Transactions</span>
                         <div class="bar-track">
-                            <div class="bar-fill bar-net" style="width: @(hideConfidential ? "0" : ((double)(totalSellerRevenue - totalAdminFees) / finMax * 100).ToString("F1"))%"></div>
+                            <div class="bar-fill bar-fee" style="width: 100%"></div>
                         </div>
-                        <span class="bar-value @(hideConfidential ? "masked" : "")">₱@MaskValue(totalSellerRevenue - totalAdminFees)</span>
+                        <span class="bar-value">@totalTransactions.ToString("N0")</span>
+                    </div>
+                    <div class="bar-row">
+                        <span class="bar-label">Active Sellers</span>
+                        <div class="bar-track">
+                            <div class="bar-fill bar-net" style="width: 100%"></div>
+                        </div>
+                        <span class="bar-value">@activeSellers</span>
                     </div>
                     <div class="bar-row">
                         <span class="bar-label">Avg/Seller</span>
@@ -614,7 +613,8 @@ else
 
     // Fee stats
     private decimal totalAdminFees = 0;
-    private decimal totalSellerRevenue = 0;
+    private decimal pendingAdminFees = 0;
+    private decimal collectedAdminFees = 0;
     private int activeSellers = 0;
     private int totalTransactions = 0;
     private decimal avgFeePerSeller = 0;
@@ -910,7 +910,8 @@ else
             fees = new
             {
                 totalAdminFees = totalAdminFees.ToString("N2"),
-                sellerRevenue = totalSellerRevenue.ToString("N2"),
+                pendingFees = pendingAdminFees.ToString("N2"),
+                collectedFees = collectedAdminFees.ToString("N2"),
                 activeSellers = activeSellers.ToString(),
                 totalTransactions = totalTransactions.ToString("N0")
             },
@@ -976,38 +977,24 @@ else
             using var conn = new SqlConnection(connectionString);
             await conn.OpenAsync();
 
-            // Build date filter
-            var dateFilter = "";
+            // Build date filter for subscription transactions
+            var txnDateFilter = "";
             if (startDate.HasValue)
-                dateFilter += " AND CAST(s.timestamps AS DATE) >= @StartDate";
+                txnDateFilter += " AND CAST(st.created_at AS DATE) >= @StartDate";
             if (endDate.HasValue)
-                dateFilter += " AND CAST(s.timestamps AS DATE) <= @EndDate";
+                txnDateFilter += " AND CAST(st.created_at AS DATE) <= @EndDate";
 
-            // Load fee stats for period
-            // Count distinct sellers (product owners), not cashiers
-            // Only show sales that have been approved in Daily Sales Verification
+            // Load admin fee stats from subscription transactions table
             var statsSql = $@"
                 SELECT 
-                    SUM(si.subtotal) as total_revenue,
-                    COUNT(DISTINCT s.id) as total_sales,
-                    COUNT(DISTINCT p.user_id) as active_sellers
-                FROM dbo.tbl_sales_items si
-                INNER JOIN dbo.tbl_sales s ON si.sale_id = s.id
-                INNER JOIN dbo.tbl_variants v ON si.variant_id = v.id
-                INNER JOIN dbo.tbl_products p ON v.product_id = p.id
-                WHERE s.archives IS NULL
-                AND si.archives IS NULL
-                AND s.status = 'Completed'
-                AND p.user_id IS NOT NULL
-                AND EXISTS (
-                    SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
-                    WHERE dsv.cashier_user_id = s.user_id
-                    AND dsv.sale_date = CAST(s.timestamps AS DATE)
-                    AND dsv.seller_user_id = p.user_id
-                    AND dsv.status = 'Approved'
-                    AND dsv.archived_at IS NULL
-                )
-                {dateFilter}";
+                    COALESCE(SUM(st.admin_fee_amount), 0) as total_admin_fees,
+                    COALESCE(SUM(CASE WHEN st.status = 'Pending' THEN st.admin_fee_amount ELSE 0 END), 0) as pending_fees,
+                    COALESCE(SUM(CASE WHEN st.status = 'Collected' THEN st.admin_fee_amount ELSE 0 END), 0) as collected_fees,
+                    COUNT(*) as total_transactions,
+                    COUNT(DISTINCT st.seller_user_id) as active_sellers
+                FROM dbo.tbl_subscription_transactions st
+                WHERE st.transaction_type = 'AdminFee'
+                {txnDateFilter}";
 
             using (var cmd = new SqlCommand(statsSql, conn))
             {
@@ -1019,13 +1006,21 @@ else
                 using var reader = await cmd.ExecuteReaderAsync();
                 if (await reader.ReadAsync())
                 {
-                    totalSellerRevenue = reader.IsDBNull(0) ? 0 : reader.GetDecimal(0);
-                    totalTransactions = reader.IsDBNull(1) ? 0 : reader.GetInt32(1);
-                    activeSellers = reader.IsDBNull(2) ? 0 : reader.GetInt32(2);
-                    totalAdminFees = totalSellerRevenue * 0.02m;
+                    totalAdminFees = reader.IsDBNull(0) ? 0 : reader.GetDecimal(0);
+                    pendingAdminFees = reader.IsDBNull(1) ? 0 : reader.GetDecimal(1);
+                    collectedAdminFees = reader.IsDBNull(2) ? 0 : reader.GetDecimal(2);
+                    totalTransactions = reader.IsDBNull(3) ? 0 : reader.GetInt32(3);
+                    activeSellers = reader.IsDBNull(4) ? 0 : reader.GetInt32(4);
                     avgFeePerSeller = activeSellers > 0 ? totalAdminFees / activeSellers : 0;
                 }
             }
+            
+            // Build date filter for sales data (for charts)
+            var dateFilter = "";
+            if (startDate.HasValue)
+                dateFilter += " AND CAST(s.timestamps AS DATE) >= @StartDate";
+            if (endDate.HasValue)
+                dateFilter += " AND CAST(s.timestamps AS DATE) <= @EndDate";
 
             // Load daily fee data for chart
             // Only show sales that have been approved in Daily Sales Verification

@@ -698,21 +698,22 @@ namespace IT13_Final.Services.Data
 
                 await updateCmd.ExecuteNonQueryAsync(ct);
 
-                // If status is being changed to "Approved", add stock back to inventory
+                // If status is being changed to "Approved", add stock back to inventory and reverse fees
                 if (status == "Approved" && currentStatus != "Approved")
                 {
-                    // Get all return items for this return
+                    // Get all return items for this return with price info for fee calculation
                     var itemsSql = @"
-                        SELECT ri.variant_id, ri.size_id, ri.color_id, ri.quantity, v.user_id, v.cost_price
+                        SELECT ri.variant_id, ri.size_id, ri.color_id, ri.quantity, v.user_id, v.cost_price, si.price, si.subtotal
                         FROM dbo.tbl_return_items ri
                         INNER JOIN dbo.tbl_variants v ON ri.variant_id = v.id
+                        INNER JOIN dbo.tbl_sales_items si ON ri.sale_item_id = si.id
                         WHERE ri.return_id = @ReturnId AND ri.archives IS NULL";
 
                     using var itemsCmd = new SqlCommand(itemsSql, conn, transaction);
                     itemsCmd.Parameters.AddWithValue("@ReturnId", returnId);
 
                     // Read all items into a list first to avoid DataReader conflict
-                    var returnItems = new List<(int VariantId, int? SizeId, int? ColorId, int Quantity, int VariantOwnerUserId, decimal CostPrice)>();
+                    var returnItems = new List<(int VariantId, int? SizeId, int? ColorId, int Quantity, int VariantOwnerUserId, decimal CostPrice, decimal Price, decimal OriginalSubtotal)>();
                     
                     using (var reader = await itemsCmd.ExecuteReaderAsync(ct))
                     {
@@ -724,14 +725,26 @@ namespace IT13_Final.Services.Data
                                 reader.IsDBNull(2) ? (int?)null : reader.GetInt32(2),
                                 reader.GetInt32(3),
                                 reader.GetInt32(4),
-                                reader.GetDecimal(5)
+                                reader.GetDecimal(5),
+                                reader.GetDecimal(6),
+                                reader.GetDecimal(7)
                             ));
                         }
                     }
 
+                    // Calculate total return amount for fee reversal
+                    decimal totalReturnAmount = 0;
+                    int sellerUserId = 0;
+
                     // Now process all items after reader is closed
                     foreach (var item in returnItems)
                     {
+                        sellerUserId = item.VariantOwnerUserId;
+                        
+                        // Calculate the return subtotal based on returned quantity
+                        decimal returnSubtotal = item.Price * item.Quantity;
+                        totalReturnAmount += returnSubtotal;
+
                         // Create stock_in record to add inventory back
                         var stockInSql = @"
                             INSERT INTO dbo.tbl_stock_in (user_id, variant_id, size_id, color_id, quantity_added, cost_price, supplier_id, timestamps)
@@ -746,6 +759,62 @@ namespace IT13_Final.Services.Data
                         stockInCmd.Parameters.AddWithValue("@CostPrice", item.CostPrice);
 
                         await stockInCmd.ExecuteNonQueryAsync(ct);
+                    }
+
+                    // Reverse admin fee for the returned items (create negative admin fee transaction)
+                    if (sellerUserId > 0 && totalReturnAmount > 0)
+                    {
+                        // Get seller's subscription fee percentage
+                        var getFeeSql = @"
+                            SELECT COALESCE(sp.admin_fee_percentage, 0)
+                            FROM dbo.tbl_seller_subscriptions ss
+                            INNER JOIN dbo.tbl_subscription_plans sp ON ss.plan_id = sp.id
+                            WHERE ss.seller_user_id = @SellerUserId AND ss.status = 'Active'";
+
+                        using var getFeeCmd = new SqlCommand(getFeeSql, conn, transaction);
+                        getFeeCmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+
+                        var feePercentageObj = await getFeeCmd.ExecuteScalarAsync(ct);
+                        decimal feePercentage = feePercentageObj != null && feePercentageObj != DBNull.Value 
+                            ? Convert.ToDecimal(feePercentageObj) 
+                            : 0m;
+
+                        if (feePercentage > 0)
+                        {
+                            // Calculate the admin fee to reverse (negative amount)
+                            decimal adminFeeToReverse = totalReturnAmount * (feePercentage / 100m);
+
+                            // Get the return number for reference
+                            var getReturnNumSql = "SELECT return_number FROM dbo.tbl_returns WHERE id = @ReturnId";
+                            using var getReturnNumCmd = new SqlCommand(getReturnNumSql, conn, transaction);
+                            getReturnNumCmd.Parameters.AddWithValue("@ReturnId", returnId);
+                            var returnNumberObj = await getReturnNumCmd.ExecuteScalarAsync(ct);
+                            string returnNumber = returnNumberObj?.ToString() ?? $"RET-{returnId}";
+
+                            // Get seller's active subscription ID
+                            var getSubSql = "SELECT id FROM dbo.tbl_seller_subscriptions WHERE seller_user_id = @SellerUserId AND status = 'Active'";
+                            using var getSubCmd = new SqlCommand(getSubSql, conn, transaction);
+                            getSubCmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+                            var subscriptionIdObj = await getSubCmd.ExecuteScalarAsync(ct);
+                            int? subscriptionId = subscriptionIdObj != null && subscriptionIdObj != DBNull.Value ? Convert.ToInt32(subscriptionIdObj) : (int?)null;
+
+                            // Insert negative admin fee transaction to reverse the fee
+                            var insertFeeSql = @"
+                                INSERT INTO dbo.tbl_subscription_transactions 
+                                    (seller_user_id, subscription_id, sale_id, return_id, transaction_type, sale_amount, admin_fee_percentage, admin_fee_amount, status, created_at)
+                                VALUES 
+                                    (@SellerUserId, @SubscriptionId, NULL, @ReturnId, 'AdminFeeReversal', @SaleAmount, @FeePercentage, @FeeAmount, 'Collected', SYSUTCDATETIME())";
+
+                            using var insertFeeCmd = new SqlCommand(insertFeeSql, conn, transaction);
+                            insertFeeCmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+                            insertFeeCmd.Parameters.AddWithValue("@SubscriptionId", (object?)subscriptionId ?? DBNull.Value);
+                            insertFeeCmd.Parameters.AddWithValue("@ReturnId", returnId);
+                            insertFeeCmd.Parameters.AddWithValue("@SaleAmount", -totalReturnAmount); // Negative amount for return
+                            insertFeeCmd.Parameters.AddWithValue("@FeePercentage", feePercentage);
+                            insertFeeCmd.Parameters.AddWithValue("@FeeAmount", -adminFeeToReverse); // Negative fee for reversal
+
+                            await insertFeeCmd.ExecuteNonQueryAsync(ct);
+                        }
                     }
                 }
 
