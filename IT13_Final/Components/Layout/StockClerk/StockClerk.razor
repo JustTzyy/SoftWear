@@ -55,11 +55,11 @@
             }
 
             <button class="@GetReportsButtonClass()" @onclick="ToggleReports" aria-expanded="@reportsOpen" title="Reports">
-                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/stockclerk/Stock_In_Report", "/stockclerk/Stock_Out_Report", "/stockclerk/Stock_Adjustment_Report", "/stockclerk/Supplier_Report", "/stockclerk/Purchase_Order_Completed_Report", "/stockclerk/Purchase_Order_Cancelled_Report")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/stockclerk/Stock_In_Report", "/stockclerk/Stock_Out_Report", "/stockclerk/Stock_Adjustment_Report", "/stockclerk/Supplier_Report", "/stockclerk/Purchase_Order_Completed_Report", "/stockclerk/Sales_Report", "/stockclerk/Returns_Report")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 <span class="flex-1 transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">Reports</span>
-                <span class="@GetIconClass("/stockclerk/Stock_In_Report", "/stockclerk/Stock_Out_Report", "/stockclerk/Stock_Adjustment_Report", "/stockclerk/Supplier_Report", "/stockclerk/Purchase_Order_Completed_Report", "/stockclerk/Purchase_Order_Cancelled_Report") transition-all duration-300 ease-in-out" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">@(reportsOpen ? "▾" : "▸")</span>
+                <span class="@GetIconClass("/stockclerk/Stock_In_Report", "/stockclerk/Stock_Out_Report", "/stockclerk/Stock_Adjustment_Report", "/stockclerk/Supplier_Report", "/stockclerk/Purchase_Order_Completed_Report", "/stockclerk/Sales_Report", "/stockclerk/Returns_Report") transition-all duration-300 ease-in-out" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">@(reportsOpen ? "▾" : "▸")</span>
                 @if (IsReportsActive())
                 {
                     <div class="absolute left-0 top-0 bottom-0 w-1 bg-yinmn-blue rounded-r"></div>
@@ -87,6 +87,14 @@
                     <a class="@GetSubNavItemClass("/stockclerk/Purchase_Order_Completed_Report")" href="/stockclerk/Purchase_Order_Completed_Report">
                         <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/stockclerk/Purchase_Order_Completed_Report")"></span>
                         <span>Purchase Orders</span>
+                    </a>
+                    <a class="@GetSubNavItemClass("/stockclerk/Sales_Report")" href="/stockclerk/Sales_Report">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/stockclerk/Sales_Report")"></span>
+                        <span>Sales</span>
+                    </a>
+                    <a class="@GetSubNavItemClass("/stockclerk/Returns_Report")" href="/stockclerk/Returns_Report">
+                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/stockclerk/Returns_Report")"></span>
+                        <span>Returns</span>
                     </a>
                 </div>
             }
@@ -222,7 +230,7 @@
 
     private bool IsReportsActive()
     {
-        return IsActive("/stockclerk/Stock_In_Report") || IsActive("/stockclerk/Stock_Out_Report") || IsActive("/stockclerk/Stock_Adjustment_Report") || IsActive("/stockclerk/Supplier_Report") || IsActive("/stockclerk/Purchase_Order_Completed_Report") || IsActive("/stockclerk/Purchase_Order_Cancelled_Report");
+        return IsActive("/stockclerk/Stock_In_Report") || IsActive("/stockclerk/Stock_Out_Report") || IsActive("/stockclerk/Stock_Adjustment_Report") || IsActive("/stockclerk/Supplier_Report") || IsActive("/stockclerk/Purchase_Order_Completed_Report") || IsActive("/stockclerk/Purchase_Order_Cancelled_Report") || IsActive("/stockclerk/Sales_Report") || IsActive("/stockclerk/Returns_Report");
     }
 
     private string GetInventoryMgmtButtonClass()

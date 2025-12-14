@@ -1177,10 +1177,10 @@
             return;
         }
 
-        // Validate letter count (5-8 letters)
-        if (letterCount < 5 || letterCount > 8)
+        // Validate letter count (at least 5 letters)
+        if (letterCount < 5)
         {
-            _passwordMessage = "New password must contain 5-8 letters.";
+            _passwordMessage = "New password must contain at least 5 letters.";
             _passwordSuccess = false;
             StateHasChanged();
             ClearMessageAfterDelay("password");

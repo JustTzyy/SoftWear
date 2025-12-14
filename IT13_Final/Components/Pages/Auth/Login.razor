@@ -5,6 +5,7 @@
 @inject IT13_Final.Services.Auth.IAuthService AuthService
 @inject IT13_Final.Services.Auth.AuthState AuthState
 @inject IT13_Final.Services.Audit.IHistoryService HistoryService
+@inject IT13_Final.Services.Data.ISubscriptionService SubscriptionService
 @inject NavigationManager Nav
 
 <div class="flex items-center justify-center p-4 sm:p-6" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-image: url('/images/bg-image-login.jpg'); background-size: cover; background-position: center; background-repeat: no-repeat; overflow-y: auto; z-index: 0;">
@@ -86,8 +87,102 @@
                 StateHasChanged();
                 return;
             }
-            AuthState.SetUser(user);
+            
+            // Load subscription info for sellers and their staff (Cashier, Accounting, StockClerk)
+            IT13_Final.Services.Auth.SubscriptionInfo? subscriptionInfo = null;
+            int? sellerUserId = null;
+            
+            if (user.Role.Equals("seller", StringComparison.OrdinalIgnoreCase))
+            {
+                // Seller - load their own subscription
+                sellerUserId = user.Id;
+            }
+            else if (user.Role.Equals("cashier", StringComparison.OrdinalIgnoreCase) ||
+                     user.Role.Equals("accounting", StringComparison.OrdinalIgnoreCase) ||
+                     user.Role.Equals("stockclerk", StringComparison.OrdinalIgnoreCase) ||
+                     user.Role.Equals("stock clerk", StringComparison.OrdinalIgnoreCase))
+            {
+                // Staff - get their seller's user_id from tbl_users
+                sellerUserId = await GetSellerUserIdAsync(user.Id);
+            }
+            
+            // Load subscription for the seller (either direct or via staff relationship)
+            if (sellerUserId.HasValue)
+            {
+                var subscription = await SubscriptionService.GetSellerSubscriptionAsync(sellerUserId.Value);
+                if (subscription != null)
+                {
+                    subscriptionInfo = new IT13_Final.Services.Auth.SubscriptionInfo
+                    {
+                        SubscriptionId = subscription.Id,
+                        PlanId = subscription.PlanId,
+                        PlanName = subscription.PlanName,
+                        PlanCode = subscription.PlanCode,
+                        AdminFeePercentage = subscription.AdminFeePercentage,
+                        HasStockClerkAccess = subscription.HasStockClerkAccess,
+                        HasCashierAccess = subscription.HasCashierAccess,
+                        HasAccountingAccess = subscription.HasAccountingAccess,
+                        HasFullReportsAccess = subscription.HasFullReportsAccess,
+                        StartDate = subscription.StartDate,
+                        Status = subscription.Status
+                    };
+                }
+            }
+            
+            AuthState.SetUserWithSubscription(user, subscriptionInfo);
             try { await HistoryService.LogAsync(user.Id, "login", "Authentication", "User signed in"); } catch {}
+            
+            // For sellers without subscription, redirect to subscription selection page
+            if (user.Role.Equals("seller", StringComparison.OrdinalIgnoreCase) && subscriptionInfo == null)
+            {
+                Nav.NavigateTo("/seller/subscription");
+                return;
+            }
+            
+            // Block staff login if their seller doesn't have access to their module
+            if (subscriptionInfo != null)
+            {
+                bool accessDenied = false;
+                string deniedModule = "";
+                
+                if (user.Role.Equals("cashier", StringComparison.OrdinalIgnoreCase) && !subscriptionInfo.HasCashierAccess)
+                {
+                    accessDenied = true;
+                    deniedModule = "Cashier";
+                }
+                else if (user.Role.Equals("accounting", StringComparison.OrdinalIgnoreCase) && !subscriptionInfo.HasAccountingAccess)
+                {
+                    accessDenied = true;
+                    deniedModule = "Accounting";
+                }
+                else if ((user.Role.Equals("stockclerk", StringComparison.OrdinalIgnoreCase) || 
+                          user.Role.Equals("stock clerk", StringComparison.OrdinalIgnoreCase)) && 
+                         !subscriptionInfo.HasStockClerkAccess)
+                {
+                    accessDenied = true;
+                    deniedModule = "Stock Clerk";
+                }
+                
+                if (accessDenied)
+                {
+                    _loginError = $"Access denied. Your seller's subscription plan does not include {deniedModule} module access.";
+                    AuthState.Logout();
+                    StateHasChanged();
+                    return;
+                }
+            }
+            else if (user.Role.Equals("cashier", StringComparison.OrdinalIgnoreCase) ||
+                     user.Role.Equals("accounting", StringComparison.OrdinalIgnoreCase) ||
+                     user.Role.Equals("stockclerk", StringComparison.OrdinalIgnoreCase) ||
+                     user.Role.Equals("stock clerk", StringComparison.OrdinalIgnoreCase))
+            {
+                // Staff without seller subscription - block access
+                _loginError = "Access denied. Your seller does not have an active subscription.";
+                AuthState.Logout();
+                StateHasChanged();
+                return;
+            }
+            
             // Navigate to /{role}/dashboard (e.g., /admin/dashboard, /seller/dashboard)
             Nav.NavigateTo($"/{user.Role}/dashboard");
         }
@@ -116,6 +211,29 @@
             _loginError = $"An error occurred during login: {ex.Message}";
             StateHasChanged();
         }
+    }
+
+    private async Task<int?> GetSellerUserIdAsync(int staffUserId)
+    {
+        try
+        {
+            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+            using var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString);
+            await conn.OpenAsync();
+            
+            var sql = "SELECT user_id FROM dbo.tbl_users WHERE id = @UserId AND archived_at IS NULL";
+            using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", staffUserId);
+            
+            var result = await cmd.ExecuteScalarAsync();
+            if (result != null && result != DBNull.Value)
+            {
+                return Convert.ToInt32(result);
+            }
+        }
+        catch { }
+        
+        return null;
     }
 
     private sealed class LoginModel

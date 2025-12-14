@@ -43,6 +43,7 @@ namespace IT13_Final
             builder.Services.AddScoped<IIncomeBreakdownService, IncomeBreakdownService>();
             builder.Services.AddScoped<ICashflowAuditService, CashflowAuditService>();
             builder.Services.AddScoped<IDatabaseSyncService, DatabaseSyncService>();
+            builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
 
             // Auto-sync background service (syncs local to Azure every hour)
             builder.Services.AddSingleton<AutoSyncBackgroundService>(sp =>

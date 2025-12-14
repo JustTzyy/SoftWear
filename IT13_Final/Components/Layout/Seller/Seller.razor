@@ -29,32 +29,44 @@
                 }
             </a>
 
-            <button class="@GetStaffMgmtButtonClass()" @onclick="ToggleStaffMgmt" aria-expanded="@staffMgmtOpen" title="Staff Management">
-                <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/seller/Accounting_Record", "/seller/Cashier_Record", "/seller/Stock_Clerk_Record", "/seller/Permission_Requests")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
-                <span class="flex-1 transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">Staff Management</span>
-                <span class="@GetIconClass("/seller/Accounting_Record", "/seller/Cashier_Record", "/seller/Stock_Clerk_Record", "/seller/Permission_Requests") transition-all duration-300 ease-in-out" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">@(staffMgmtOpen ? "▾" : "▸")</span>
-                @if (IsStaffMgmtActive())
-                {
-                    <div class="absolute left-0 top-0 bottom-0 w-1 bg-yinmn-blue rounded-r"></div>
-                }
-            </button>
-            @if (staffMgmtOpen && !sidebarCollapsed)
+            @if (HasAnyStaffAccess)
+            {
+                <button class="@GetStaffMgmtButtonClass()" @onclick="ToggleStaffMgmt" aria-expanded="@staffMgmtOpen" title="Staff Management">
+                    <svg class="w-5 h-5 flex-shrink-0 @GetIconClass("/seller/Accounting_Record", "/seller/Cashier_Record", "/seller/Stock_Clerk_Record", "/seller/Permission_Requests")" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                    <span class="flex-1 transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">Staff Management</span>
+                    <span class="@GetIconClass("/seller/Accounting_Record", "/seller/Cashier_Record", "/seller/Stock_Clerk_Record", "/seller/Permission_Requests") transition-all duration-300 ease-in-out" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">@(staffMgmtOpen ? "▾" : "▸")</span>
+                    @if (IsStaffMgmtActive())
+                    {
+                        <div class="absolute left-0 top-0 bottom-0 w-1 bg-yinmn-blue rounded-r"></div>
+                    }
+                </button>
+            }
+            @if (HasAnyStaffAccess && staffMgmtOpen && !sidebarCollapsed)
             {
                 <div class="grid gap-1 py-1 pl-4">
-                    <a class="@GetSubNavItemClass("/seller/Accounting_Record")" href="/seller/Accounting_Record">
-                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/seller/Accounting_Record")"></span>
-                        <span>Accounting</span>
-                    </a>
-                    <a class="@GetSubNavItemClass("/seller/Cashier_Record")" href="/seller/Cashier_Record">
-                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/seller/Cashier_Record")"></span>
-                        <span>Cashier</span>
-                    </a>
-                    <a class="@GetSubNavItemClass("/seller/Stock_Clerk_Record")" href="/seller/Stock_Clerk_Record">
-                        <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/seller/Stock_Clerk_Record")"></span>
-                        <span>Stock Clerk</span>
-                    </a>
+                    @if (HasAccountingAccess)
+                    {
+                        <a class="@GetSubNavItemClass("/seller/Accounting_Record")" href="/seller/Accounting_Record">
+                            <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/seller/Accounting_Record")"></span>
+                            <span>Accounting</span>
+                        </a>
+                    }
+                    @if (HasCashierAccess)
+                    {
+                        <a class="@GetSubNavItemClass("/seller/Cashier_Record")" href="/seller/Cashier_Record">
+                            <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/seller/Cashier_Record")"></span>
+                            <span>Cashier</span>
+                        </a>
+                    }
+                    @if (HasStockClerkAccess)
+                    {
+                        <a class="@GetSubNavItemClass("/seller/Stock_Clerk_Record")" href="/seller/Stock_Clerk_Record">
+                            <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/seller/Stock_Clerk_Record")"></span>
+                            <span>Stock Clerk</span>
+                        </a>
+                    }
                     <a class="@GetSubNavItemClass("/seller/Permission_Requests")" href="/seller/Permission_Requests">
                         <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/seller/Permission_Requests")"></span>
                         <span>Permission Requests</span>
@@ -138,83 +150,92 @@
                         <span class="w-2 h-2 rounded-full @GetSubNavDotClass("/seller/AuditLogs")"></span>
                         <span>Audit Logs</span>
                     </a>
-                    <button class="@GetSubSubNavButtonClass("/seller/CashierSalesReports", "/seller/CashierReturnsReports")" @onclick="ToggleCashierReports" aria-expanded="@cashierReportsOpen">
-                        <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/CashierSalesReports", "/seller/CashierReturnsReports") flex-shrink-0"></span>
-                        <span class="flex-1 break-words">Cashier Reports</span>
-                        <span class="flex-shrink-0">@(cashierReportsOpen ? "▾" : "▸")</span>
-                    </button>
-                    @if (cashierReportsOpen && !sidebarCollapsed)
+                    @if (HasCashierAccess)
                     {
-                        <div class="grid gap-1 py-1 pl-6">
-                            <a class="@GetSubSubNavItemClass("/seller/CashierSalesReports")" href="/seller/CashierSalesReports">
-                                <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/CashierSalesReports") flex-shrink-0"></span>
-                                <span class="break-words">Sales Reports</span>
-                            </a>
-                            <a class="@GetSubSubNavItemClass("/seller/CashierReturnsReports")" href="/seller/CashierReturnsReports">
-                                <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/CashierReturnsReports") flex-shrink-0"></span>
-                                <span class="break-words">Returns Reports</span>
-                            </a>
-                        </div>
+                        <button class="@GetSubSubNavButtonClass("/seller/CashierSalesReports", "/seller/CashierReturnsReports")" @onclick="ToggleCashierReports" aria-expanded="@cashierReportsOpen">
+                            <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/CashierSalesReports", "/seller/CashierReturnsReports") flex-shrink-0"></span>
+                            <span class="flex-1 break-words">Cashier Reports</span>
+                            <span class="flex-shrink-0">@(cashierReportsOpen ? "▾" : "▸")</span>
+                        </button>
+                        @if (cashierReportsOpen && !sidebarCollapsed)
+                        {
+                            <div class="grid gap-1 py-1 pl-6">
+                                <a class="@GetSubSubNavItemClass("/seller/CashierSalesReports")" href="/seller/CashierSalesReports">
+                                    <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/CashierSalesReports") flex-shrink-0"></span>
+                                    <span class="break-words">Sales Reports</span>
+                                </a>
+                                <a class="@GetSubSubNavItemClass("/seller/CashierReturnsReports")" href="/seller/CashierReturnsReports">
+                                    <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/CashierReturnsReports") flex-shrink-0"></span>
+                                    <span class="break-words">Returns Reports</span>
+                                </a>
+                            </div>
+                        }
                     }
-                    <button class="@GetSubSubNavButtonClass("/seller/StockClerkStockInReports", "/seller/StockClerkStockOutReports", "/seller/StockClerkStockAdjustmentReports", "/seller/StockClerkPurchaseOrderReports")" @onclick="ToggleStockClerkReports" aria-expanded="@stockClerkReportsOpen">
-                        <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/StockClerkStockInReports", "/seller/StockClerkStockOutReports", "/seller/StockClerkStockAdjustmentReports", "/seller/StockClerkPurchaseOrderReports") flex-shrink-0"></span>
-                        <span class="flex-1 break-words">Stock Clerk Reports</span>
-                        <span class="flex-shrink-0">@(stockClerkReportsOpen ? "▾" : "▸")</span>
-                    </button>
-                    @if (stockClerkReportsOpen && !sidebarCollapsed)
+                    @if (HasStockClerkAccess)
                     {
-                        <div class="grid gap-1 py-1 pl-6">
-                            <a class="@GetSubSubNavItemClass("/seller/StockClerkStockInReports")" href="/seller/StockClerkStockInReports">
-                                <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/StockClerkStockInReports") flex-shrink-0"></span>
-                                <span class="break-words">Stock In Reports</span>
-                            </a>
-                            <a class="@GetSubSubNavItemClass("/seller/StockClerkStockOutReports")" href="/seller/StockClerkStockOutReports">
-                                <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/StockClerkStockOutReports") flex-shrink-0"></span>
-                                <span class="break-words">Stock Out Reports</span>
-                            </a>
-                            <a class="@GetSubSubNavItemClass("/seller/StockClerkStockAdjustmentReports")" href="/seller/StockClerkStockAdjustmentReports">
-                                <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/StockClerkStockAdjustmentReports") flex-shrink-0"></span>
-                                <span class="break-words">Stock Adjustment Reports</span>
-                            </a>
-                            <a class="@GetSubSubNavItemClass("/seller/StockClerkPurchaseOrderReports")" href="/seller/StockClerkPurchaseOrderReports">
-                                <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/StockClerkPurchaseOrderReports") flex-shrink-0"></span>
-                                <span class="break-words">Purchase Order Reports</span>
-                            </a>
-                        </div>
+                        <button class="@GetSubSubNavButtonClass("/seller/StockClerkStockInReports", "/seller/StockClerkStockOutReports", "/seller/StockClerkStockAdjustmentReports", "/seller/StockClerkPurchaseOrderReports")" @onclick="ToggleStockClerkReports" aria-expanded="@stockClerkReportsOpen">
+                            <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/StockClerkStockInReports", "/seller/StockClerkStockOutReports", "/seller/StockClerkStockAdjustmentReports", "/seller/StockClerkPurchaseOrderReports") flex-shrink-0"></span>
+                            <span class="flex-1 break-words">Stock Clerk Reports</span>
+                            <span class="flex-shrink-0">@(stockClerkReportsOpen ? "▾" : "▸")</span>
+                        </button>
+                        @if (stockClerkReportsOpen && !sidebarCollapsed)
+                        {
+                            <div class="grid gap-1 py-1 pl-6">
+                                <a class="@GetSubSubNavItemClass("/seller/StockClerkStockInReports")" href="/seller/StockClerkStockInReports">
+                                    <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/StockClerkStockInReports") flex-shrink-0"></span>
+                                    <span class="break-words">Stock In Reports</span>
+                                </a>
+                                <a class="@GetSubSubNavItemClass("/seller/StockClerkStockOutReports")" href="/seller/StockClerkStockOutReports">
+                                    <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/StockClerkStockOutReports") flex-shrink-0"></span>
+                                    <span class="break-words">Stock Out Reports</span>
+                                </a>
+                                <a class="@GetSubSubNavItemClass("/seller/StockClerkStockAdjustmentReports")" href="/seller/StockClerkStockAdjustmentReports">
+                                    <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/StockClerkStockAdjustmentReports") flex-shrink-0"></span>
+                                    <span class="break-words">Stock Adjustment Reports</span>
+                                </a>
+                                <a class="@GetSubSubNavItemClass("/seller/StockClerkPurchaseOrderReports")" href="/seller/StockClerkPurchaseOrderReports">
+                                    <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/StockClerkPurchaseOrderReports") flex-shrink-0"></span>
+                                    <span class="break-words">Purchase Order Reports</span>
+                                </a>
+                            </div>
+                        }
                     }
-                    <button class="@GetSubSubNavButtonClass("/seller/AccountingExpenseReports", "/seller/AccountingTaxReports", "/seller/AccountingDailySalesVerificationReports", "/seller/AccountingProfitLossReports", "/seller/AccountingCashInOutAudit", "/seller/AccountingIncomeBreakdown")" @onclick="ToggleAccountingReports" aria-expanded="@accountingReportsOpen">
-                        <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/AccountingExpenseReports", "/seller/AccountingTaxReports", "/seller/AccountingDailySalesVerificationReports", "/seller/AccountingProfitLossReports", "/seller/AccountingCashInOutAudit", "/seller/AccountingIncomeBreakdown") flex-shrink-0"></span>
-                        <span class="flex-1 break-words">Accounting Reports</span>
-                        <span class="flex-shrink-0">@(accountingReportsOpen ? "▾" : "▸")</span>
-                    </button>
-                    @if (accountingReportsOpen && !sidebarCollapsed)
+                    @if (HasAccountingAccess)
                     {
-                        <div class="grid gap-1 py-1 pl-6">
-                            <a class="@GetSubSubNavItemClass("/seller/AccountingExpenseReports")" href="/seller/AccountingExpenseReports">
-                                <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/AccountingExpenseReports") flex-shrink-0"></span>
-                                <span class="break-words">Expense Reports</span>
-                            </a>
-                            <a class="@GetSubSubNavItemClass("/seller/AccountingTaxReports")" href="/seller/AccountingTaxReports">
-                                <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/AccountingTaxReports") flex-shrink-0"></span>
-                                <span class="break-words">Tax Reports</span>
-                            </a>
-                            <a class="@GetSubSubNavItemClass("/seller/AccountingDailySalesVerificationReports")" href="/seller/AccountingDailySalesVerificationReports">
-                                <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/AccountingDailySalesVerificationReports") flex-shrink-0"></span>
-                                <span class="break-words">Daily Sales Verification Reports</span>
-                            </a>
-                            <a class="@GetSubSubNavItemClass("/seller/AccountingProfitLossReports")" href="/seller/AccountingProfitLossReports">
-                                <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/AccountingProfitLossReports") flex-shrink-0"></span>
-                                <span class="break-words">Profit & Loss Statements</span>
-                            </a>
-                            <a class="@GetSubSubNavItemClass("/seller/AccountingCashInOutAudit")" href="/seller/AccountingCashInOutAudit">
-                                <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/AccountingCashInOutAudit") flex-shrink-0"></span>
-                                <span class="break-words">Cash In/Cash Out Audit</span>
-                            </a>
-                            <a class="@GetSubSubNavItemClass("/seller/AccountingIncomeBreakdown")" href="/seller/AccountingIncomeBreakdown">
-                                <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/AccountingIncomeBreakdown") flex-shrink-0"></span>
-                                <span class="break-words">Income Breakdown</span>
-                            </a>
-                        </div>
+                        <button class="@GetSubSubNavButtonClass("/seller/AccountingExpenseReports", "/seller/AccountingTaxReports", "/seller/AccountingDailySalesVerificationReports", "/seller/AccountingProfitLossReports", "/seller/AccountingCashInOutAudit", "/seller/AccountingIncomeBreakdown")" @onclick="ToggleAccountingReports" aria-expanded="@accountingReportsOpen">
+                            <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/AccountingExpenseReports", "/seller/AccountingTaxReports", "/seller/AccountingDailySalesVerificationReports", "/seller/AccountingProfitLossReports", "/seller/AccountingCashInOutAudit", "/seller/AccountingIncomeBreakdown") flex-shrink-0"></span>
+                            <span class="flex-1 break-words">Accounting Reports</span>
+                            <span class="flex-shrink-0">@(accountingReportsOpen ? "▾" : "▸")</span>
+                        </button>
+                        @if (accountingReportsOpen && !sidebarCollapsed)
+                        {
+                            <div class="grid gap-1 py-1 pl-6">
+                                <a class="@GetSubSubNavItemClass("/seller/AccountingExpenseReports")" href="/seller/AccountingExpenseReports">
+                                    <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/AccountingExpenseReports") flex-shrink-0"></span>
+                                    <span class="break-words">Expense Reports</span>
+                                </a>
+                                <a class="@GetSubSubNavItemClass("/seller/AccountingTaxReports")" href="/seller/AccountingTaxReports">
+                                    <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/AccountingTaxReports") flex-shrink-0"></span>
+                                    <span class="break-words">Tax Reports</span>
+                                </a>
+                                <a class="@GetSubSubNavItemClass("/seller/AccountingDailySalesVerificationReports")" href="/seller/AccountingDailySalesVerificationReports">
+                                    <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/AccountingDailySalesVerificationReports") flex-shrink-0"></span>
+                                    <span class="break-words">Daily Sales Verification Reports</span>
+                                </a>
+                                <a class="@GetSubSubNavItemClass("/seller/AccountingProfitLossReports")" href="/seller/AccountingProfitLossReports">
+                                    <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/AccountingProfitLossReports") flex-shrink-0"></span>
+                                    <span class="break-words">Profit & Loss Statements</span>
+                                </a>
+                                <a class="@GetSubSubNavItemClass("/seller/AccountingCashInOutAudit")" href="/seller/AccountingCashInOutAudit">
+                                    <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/AccountingCashInOutAudit") flex-shrink-0"></span>
+                                    <span class="break-words">Cash In/Cash Out Audit</span>
+                                </a>
+                                <a class="@GetSubSubNavItemClass("/seller/AccountingIncomeBreakdown")" href="/seller/AccountingIncomeBreakdown">
+                                    <span class="w-2 h-2 rounded-full @GetSubSubNavDotClass("/seller/AccountingIncomeBreakdown") flex-shrink-0"></span>
+                                    <span class="break-words">Income Breakdown</span>
+                                </a>
+                            </div>
+                        }
                     }
                 </div>
             }
@@ -233,6 +254,14 @@
                 @if (profileOpen)
                 {
                     <div class="absolute top-14 right-0 bg-white rounded-xl shadow-[0_12px_28px_rgba(0,0,0,0.12)] p-2 w-60 z-10" style="border: 1px solid #E0E0E0;" @onclick:stopPropagation>
+                        <a class="grid grid-cols-[22px_1fr] items-center gap-2.5 py-2.5 px-3 no-underline text-gray-800 rounded-[10px] border-none bg-transparent w-full text-left transition-all duration-200 ease-in-out hover:bg-platinum" href="/seller/subscription" @onclick="CloseProfileMenu">
+                            <svg class="w-[18px] h-[18px] stroke-yinmn-blue stroke-2 fill-none" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" fill="none"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                            <span>Subscription</span>
+                            @if (AuthState.CurrentSubscription != null)
+                            {
+                                <span class="ml-auto text-xs px-2 py-0.5 rounded-full bg-uranian-blue text-yinmn-blue font-medium">@AuthState.CurrentSubscription.PlanCode</span>
+                            }
+                        </a>
                         <a class="grid grid-cols-[22px_1fr] items-center gap-2.5 py-2.5 px-3 no-underline text-gray-800 rounded-[10px] border-none bg-transparent w-full text-left transition-all duration-200 ease-in-out hover:bg-platinum" href="/seller/settings" @onclick="CloseProfileMenu">
                             <svg class="w-[18px] h-[18px] stroke-yinmn-blue stroke-2 fill-none" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none"/><path d="M12 8v8M8 12h8"/></svg>
                             <span>Settings</span>
@@ -268,6 +297,13 @@
     private bool profileOpen;
     private bool sidebarCollapsed = false;
     private string currentUri = string.Empty;
+
+    // Subscription-based access control properties
+    private bool HasStockClerkAccess => AuthState.CurrentSubscription?.HasStockClerkAccess ?? false;
+    private bool HasCashierAccess => AuthState.CurrentSubscription?.HasCashierAccess ?? false;
+    private bool HasAccountingAccess => AuthState.CurrentSubscription?.HasAccountingAccess ?? false;
+    private bool HasFullReportsAccess => AuthState.CurrentSubscription?.HasFullReportsAccess ?? false;
+    private bool HasAnyStaffAccess => HasStockClerkAccess || HasCashierAccess || HasAccountingAccess;
 
     // Accordion behavior: close other dropdowns when one is opened
     private void CloseAllDropdowns()

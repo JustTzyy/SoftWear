@@ -68,22 +68,6 @@ else
         <div class="kpi-card kpi-success">
             <div class="kpi-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
-                    <line x1="1" y1="10" x2="23" y2="10"></line>
-                </svg>
-            </div>
-            <div class="kpi-content">
-                <span class="kpi-label">Annual Revenue</span>
-                <span class="kpi-value">₱@annualRevenue.ToString("N2")</span>
-                <span class="kpi-trend">
-                    <span>Gross sales</span>
-                </span>
-            </div>
-        </div>
-
-        <div class="kpi-card kpi-info">
-            <div class="kpi-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
                 </svg>
             </div>
@@ -153,12 +137,8 @@ else
                     </div>
                     <div class="month-metrics-row">
                         <div class="month-metric">
-                            <span class="metric-value-sm">₱@month.Revenue.ToString("N0")</span>
-                            <span class="metric-label-sm">Revenue</span>
-                        </div>
-                        <div class="month-metric">
                             <span class="metric-value-sm">@month.Transactions</span>
-                            <span class="metric-label-sm">Sales</span>
+                            <span class="metric-label-sm">Transactions</span>
                         </div>
                     </div>
                 </div>
@@ -177,8 +157,7 @@ else
                 <thead>
                     <tr>
                         <th class="th-month">Month</th>
-                        <th class="th-revenue">Gross Revenue</th>
-                        <th class="th-fee">Admin Fee (2%)</th>
+                        <th class="th-fee">Admin Fee</th>
                         <th class="th-transactions">Transactions</th>
                         <th class="th-avg">Avg/Transaction</th>
                         <th class="th-growth">vs Prev Month</th>
@@ -198,7 +177,6 @@ else
                                     <span>@month.MonthName</span>
                                 </div>
                             </td>
-                            <td class="td-revenue">₱@month.Revenue.ToString("N2")</td>
                             <td class="td-fee">₱@month.AdminFee.ToString("N2")</td>
                             <td class="td-transactions">@month.Transactions</td>
                             <td class="td-avg">₱@avgPerTx.ToString("N2")</td>
@@ -228,7 +206,6 @@ else
                 <tfoot>
                     <tr class="total-row">
                         <td class="td-month"><strong>TOTAL</strong></td>
-                        <td class="td-revenue"><strong>₱@annualRevenue.ToString("N2")</strong></td>
                         <td class="td-fee"><strong>₱@annualFees.ToString("N2")</strong></td>
                         <td class="td-transactions"><strong>@monthlyData.Sum(m => m.Transactions)</strong></td>
                         <td class="td-avg">—</td>
@@ -246,7 +223,6 @@ else
 
     // Annual KPIs
     private decimal annualFees = 0;
-    private decimal annualRevenue = 0;
     private decimal avgMonthlyFee = 0;
     private int activeMonths = 0;
     private decimal maxMonthFee = 0;
@@ -335,9 +311,8 @@ else
             }
 
             // Calculate KPIs
-            annualRevenue = monthlyData.Sum(m => m.Revenue);
-            annualFees = annualRevenue * 0.02m;
-            activeMonths = monthlyData.Count(m => m.Revenue > 0);
+            annualFees = monthlyData.Sum(m => m.AdminFee);
+            activeMonths = monthlyData.Count(m => m.AdminFee > 0);
             avgMonthlyFee = activeMonths > 0 ? annualFees / activeMonths : 0;
             maxMonthFee = monthlyData.Max(m => m.AdminFee);
         }
@@ -367,7 +342,6 @@ else
             printedAt = DateTime.Now.ToString("MMMM dd, yyyy hh:mm tt"),
             year = selectedYear,
             annualFees = annualFees.ToString("N2"),
-            annualRevenue = annualRevenue.ToString("N2"),
             avgMonthlyFee = avgMonthlyFee.ToString("N2"),
             activeMonths = activeMonths.ToString(),
             totalTransactions = monthlyData.Sum(m => m.Transactions).ToString("N0"),
@@ -375,7 +349,6 @@ else
             months = monthlyData.Select(m => new
             {
                 name = m.MonthName,
-                revenue = m.Revenue.ToString("N2"),
                 adminFee = m.AdminFee.ToString("N2"),
                 transactions = m.Transactions.ToString()
             }).ToList()

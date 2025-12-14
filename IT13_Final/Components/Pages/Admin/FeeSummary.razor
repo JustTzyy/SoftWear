@@ -99,7 +99,7 @@ else
                 <span class="kpi-value">₱@totalAdminFees.ToString("N2")</span>
                 <span class="kpi-trend trend-up">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
-                    <span>2% of revenue</span>
+                    <span>Platform earnings</span>
                 </span>
             </div>
         </div>
@@ -107,15 +107,14 @@ else
         <div class="kpi-card kpi-success">
             <div class="kpi-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
-                    <line x1="1" y1="10" x2="23" y2="10"></line>
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
                 </svg>
             </div>
             <div class="kpi-content">
-                <span class="kpi-label">Gross Revenue</span>
-                <span class="kpi-value">₱@grossRevenue.ToString("N2")</span>
+                <span class="kpi-label">Total Transactions</span>
+                <span class="kpi-value">@totalTransactions.ToString("N0")</span>
                 <span class="kpi-trend">
-                    <span>Total sales</span>
+                    <span>Fee transactions</span>
                 </span>
             </div>
         </div>
@@ -133,7 +132,7 @@ else
                 <span class="kpi-label">Active Sellers</span>
                 <span class="kpi-value">@activeSellers</span>
                 <span class="kpi-trend">
-                    <span>With revenue</span>
+                    <span>With transactions</span>
                 </span>
             </div>
         </div>
@@ -207,8 +206,8 @@ else
                 </svg>
             </div>
             <div class="stat-content">
-                <span class="stat-value">₱@avgRevenuePerSeller.ToString("N0")</span>
-                <span class="stat-label">Avg Revenue/Seller</span>
+                <span class="stat-value">₱@avgFeePerSeller.ToString("N2")</span>
+                <span class="stat-label">Avg Fee/Seller</span>
             </div>
         </div>
     </div>
@@ -225,10 +224,8 @@ else
                     <tr>
                         <th class="th-rank">#</th>
                         <th class="th-seller">Seller</th>
-                        <th class="th-revenue">Gross Revenue</th>
-                        <th class="th-fee">Admin Fee (2%)</th>
+                        <th class="th-fee">Admin Fee</th>
                         <th class="th-transactions">Transactions</th>
-                        <th class="th-net">Net to Seller</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -249,17 +246,15 @@ else
                                         </div>
                                     </div>
                                 </td>
-                                <td class="td-revenue">₱@item.Revenue.ToString("N2")</td>
                                 <td class="td-fee">₱@item.AdminFee.ToString("N2")</td>
                                 <td class="td-transactions">@item.Transactions</td>
-                                <td class="td-net">₱@item.NetToSeller.ToString("N2")</td>
                             </tr>
                         }
                     }
                     else
                     {
                         <tr>
-                            <td colspan="6" class="empty-cell">
+                            <td colspan="4" class="empty-cell">
                                 <div class="empty-state">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                                         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -287,7 +282,8 @@ else
 
     // KPIs
     private decimal totalAdminFees = 0;
-    private decimal grossRevenue = 0;
+    private decimal pendingFees = 0;
+    private decimal collectedFees = 0;
     private int activeSellers = 0;
     private int totalTransactions = 0;
 
@@ -295,7 +291,7 @@ else
     private decimal avgFeePerTransaction = 0;
     private decimal avgDailyFee = 0;
     private int periodDays = 0;
-    private decimal avgRevenuePerSeller = 0;
+    private decimal avgFeePerSeller = 0;
 
     private List<SellerFeeData> allData = new();
     private List<SellerFeeData> filteredData => string.IsNullOrWhiteSpace(searchTerm) 
@@ -307,9 +303,9 @@ else
     {
         public string SellerName { get; set; } = "";
         public string Email { get; set; } = "";
-        public decimal Revenue { get; set; }
-        public decimal AdminFee => Revenue * 0.02m;
-        public decimal NetToSeller => Revenue - AdminFee;
+        public decimal AdminFee { get; set; }
+        public decimal PendingFees { get; set; }
+        public decimal CollectedFees { get; set; }
         public int Transactions { get; set; }
     }
 
@@ -462,46 +458,33 @@ else
             using var conn = new SqlConnection(connectionString);
             await conn.OpenAsync();
 
-            // Build date filter
+            // Build date filter for subscription transactions
             var dateFilter = "";
             if (startDate.HasValue)
-                dateFilter += " AND CAST(s.timestamps AS DATE) >= @StartDate";
+                dateFilter += " AND CAST(st.created_at AS DATE) >= @StartDate";
             if (endDate.HasValue)
-                dateFilter += " AND CAST(s.timestamps AS DATE) <= @EndDate";
+                dateFilter += " AND CAST(st.created_at AS DATE) <= @EndDate";
 
-            // Get sales grouped by product owner (seller)
-            // Products are owned by sellers through tbl_products.user_id
-            // Only show sales that have been approved in Daily Sales Verification
-            var salesSql = $@"
+            // Get admin fee data from subscription transactions table
+            var feesSql = $@"
                 SELECT 
-                    p.user_id as seller_id,
+                    st.seller_user_id,
                     COALESCE(u.name, CONCAT(u.fname, ' ', u.lname), u.email, 'Unknown') as seller_name,
                     u.email,
-                    ISNULL(SUM(si.subtotal), 0) as revenue,
-                    COUNT(DISTINCT s.id) as transactions
-                FROM dbo.tbl_sales s
-                INNER JOIN dbo.tbl_sales_items si ON si.sale_id = s.id
-                INNER JOIN dbo.tbl_variants v ON si.variant_id = v.id
-                INNER JOIN dbo.tbl_products p ON v.product_id = p.id
-                LEFT JOIN dbo.tbl_users u ON p.user_id = u.id
-                WHERE s.archives IS NULL
-                AND si.archives IS NULL
-                AND s.status = 'Completed'
-                AND EXISTS (
-                    SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
-                    WHERE dsv.cashier_user_id = s.user_id
-                    AND dsv.sale_date = CAST(s.timestamps AS DATE)
-                    AND dsv.seller_user_id = p.user_id
-                    AND dsv.status = 'Approved'
-                    AND dsv.archived_at IS NULL
-                )
+                    COALESCE(SUM(st.admin_fee_amount), 0) as total_fees,
+                    COALESCE(SUM(CASE WHEN st.status = 'Pending' THEN st.admin_fee_amount ELSE 0 END), 0) as pending_fees,
+                    COALESCE(SUM(CASE WHEN st.status = 'Collected' THEN st.admin_fee_amount ELSE 0 END), 0) as collected_fees,
+                    COUNT(*) as transactions
+                FROM dbo.tbl_subscription_transactions st
+                INNER JOIN dbo.tbl_users u ON st.seller_user_id = u.id
+                WHERE st.transaction_type = 'AdminFee'
                 {dateFilter}
-                GROUP BY p.user_id, u.name, u.fname, u.lname, u.email
-                ORDER BY revenue DESC";
+                GROUP BY st.seller_user_id, u.name, u.fname, u.lname, u.email
+                ORDER BY total_fees DESC";
 
             allData = new List<SellerFeeData>();
 
-            using (var cmd = new SqlCommand(salesSql, conn))
+            using (var cmd = new SqlCommand(feesSql, conn))
             {
                 if (startDate.HasValue)
                     cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
@@ -511,33 +494,30 @@ else
                 using var reader = await cmd.ExecuteReaderAsync();
                 while (await reader.ReadAsync())
                 {
-                    var sellerId = reader.IsDBNull(0) ? (int?)null : reader.GetInt32(0);
-                    var sellerName = reader.IsDBNull(1) ? "Unassigned" : reader.GetString(1);
+                    var sellerName = reader.IsDBNull(1) ? "Unknown" : reader.GetString(1);
                     var email = reader.IsDBNull(2) ? "" : reader.GetString(2);
-                    var revenue = reader.IsDBNull(3) ? 0 : reader.GetDecimal(3);
-                    var transactions = reader.IsDBNull(4) ? 0 : reader.GetInt32(4);
-
-                    // If no seller assigned, label as unassigned
-                    if (!sellerId.HasValue)
-                    {
-                        sellerName = "Products (No Seller Assigned)";
-                        email = "";
-                    }
+                    var adminFee = reader.IsDBNull(3) ? 0 : reader.GetDecimal(3);
+                    var pending = reader.IsDBNull(4) ? 0 : reader.GetDecimal(4);
+                    var collected = reader.IsDBNull(5) ? 0 : reader.GetDecimal(5);
+                    var transactions = reader.IsDBNull(6) ? 0 : reader.GetInt32(6);
 
                     allData.Add(new SellerFeeData
                     {
                         SellerName = sellerName,
                         Email = email,
-                        Revenue = revenue,
+                        AdminFee = adminFee,
+                        PendingFees = pending,
+                        CollectedFees = collected,
                         Transactions = transactions
                     });
                 }
             }
 
-            // Calculate KPIs
-            grossRevenue = allData.Sum(x => x.Revenue);
-            totalAdminFees = grossRevenue * 0.02m;
-            activeSellers = allData.Count(x => x.SellerName != "Products (No Seller Assigned)");
+            // Calculate KPIs from admin fee data
+            totalAdminFees = allData.Sum(x => x.AdminFee);
+            pendingFees = allData.Sum(x => x.PendingFees);
+            collectedFees = allData.Sum(x => x.CollectedFees);
+            activeSellers = allData.Count;
             totalTransactions = allData.Sum(x => x.Transactions);
 
             // Calculate stats
@@ -545,7 +525,7 @@ else
             periodDays = Math.Max(1, (endDate ?? DateTime.Now.Date).Subtract(startDate ?? DateTime.Now.Date).Days + 1);
             if (!startDate.HasValue && !endDate.HasValue) periodDays = 0; // All time - don't show daily avg
             avgDailyFee = periodDays > 0 ? totalAdminFees / periodDays : 0;
-            avgRevenuePerSeller = activeSellers > 0 ? grossRevenue / activeSellers : 0;
+            avgFeePerSeller = activeSellers > 0 ? totalAdminFees / activeSellers : 0;
         }
         catch (Exception ex)
         {
@@ -595,7 +575,8 @@ else
             kpi = new
             {
                 totalAdminFees = totalAdminFees.ToString("N2"),
-                grossRevenue = grossRevenue.ToString("N2"),
+                pendingFees = pendingFees.ToString("N2"),
+                collectedFees = collectedFees.ToString("N2"),
                 activeSellers = activeSellers.ToString(),
                 totalTransactions = totalTransactions.ToString("N0")
             },
@@ -603,10 +584,10 @@ else
             sellers = filteredData.Select(s => new
             {
                 name = s.SellerName,
-                revenue = s.Revenue.ToString("N2"),
                 adminFee = s.AdminFee.ToString("N2"),
-                transactions = s.Transactions.ToString(),
-                netToSeller = s.NetToSeller.ToString("N2")
+                pendingFees = s.PendingFees.ToString("N2"),
+                collectedFees = s.CollectedFees.ToString("N2"),
+                transactions = s.Transactions.ToString()
             }).ToList()
         };
 

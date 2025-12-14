@@ -356,6 +356,7 @@ namespace IT13_Final.Services.Data
                 "Operating Expenses - Rent",
                 "Operating Expenses - Office Supplies",
                 "Operating Expenses - Printing materials",
+                "Operating Expenses - Stock Loss",
                 "Operating Expenses - Others",
                 // Utilities Expenses
                 "Utilities Expenses - Wifi/internet",
