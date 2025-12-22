@@ -133,20 +133,19 @@
                     <th>Total Amount</th>
                     <th>Expected Delivery</th>
                     <th>Status</th>
-                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 @if (isLoading)
                 {
                     <tr>
-                        <td colspan="7" class="loading-cell">Loading pending purchase orders...</td>
+                        <td colspan="6" class="loading-cell">Loading pending purchase orders...</td>
                     </tr>
                 }
                 else if (pendingPurchaseOrders.Count == 0)
                 {
                     <tr>
-                        <td colspan="7" class="empty-cell">No pending purchase orders found for this filter.</td>
+                        <td colspan="6" class="empty-cell">No pending purchase orders found for this filter.</td>
                     </tr>
                 }
                 else
@@ -184,19 +183,6 @@
                             </td>
                             <td>
                                 <span class="status-text status-text-pending">@po.Status</span>
-                            </td>
-                            <td class="actions-cell" @onclick:stopPropagation="true">
-                                <button class="action-btn approve-btn" @onclick='() => HandleApprovePO(po.Id)' title="Approve Purchase Order" disabled="@isProcessing">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <polyline points="20 6 9 17 4 12"></polyline>
-                                    </svg>
-                                </button>
-                                <button class="action-btn cancel-btn" @onclick='() => HandleCancelPO(po.Id)' title="Cancel Purchase Order" disabled="@isProcessing">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <path d="M18 6 6 18"></path>
-                                        <path d="m6 6 12 12"></path>
-                                    </svg>
-                                </button>
                             </td>
                         </tr>
                     }

@@ -4,6 +4,7 @@
 @inject IT13_Final.Services.Audit.IHistoryService HistoryService
 @inject IJSRuntime JSRuntime
 @inject IT13_Final.Services.Data.ICashflowAuditService CashflowAuditService
+@inject IT13_Final.Services.Data.IIncomeBreakdownService IncomeBreakdownService
 
 @* Welcome Header *@
 <div class="welcome-header">
@@ -616,84 +617,19 @@ else
     {
         try
         {
-            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
-            using var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString);
-            await conn.OpenAsync();
+            // Use IncomeBreakdownService for consistent tax calculations across all pages
+            var incomeData = await IncomeBreakdownService.GetIncomeBreakdownAsync(
+                sellerUserId,
+                startDate,
+                endDate,
+                onlyApprovedDays
+            );
 
-            // Get total sales from cash payments within the date range
-            var sql = @"
-                SELECT 
-                    SUM(p.amount_paid) as total_sales,
-                    SUM(si.subtotal) as total_revenue
-                FROM dbo.tbl_payments p
-                INNER JOIN dbo.tbl_sales s ON p.sale_id = s.id
-                INNER JOIN dbo.tbl_sales_items si ON s.id = si.sale_id
-                INNER JOIN dbo.tbl_users u ON s.user_id = u.id
-                WHERE p.payment_method = 'Cash'
-                AND s.status = 'Completed'
-                AND s.archives IS NULL
-                AND p.archives IS NULL
-                AND si.archives IS NULL
-                AND u.archived_at IS NULL";
+            // VAT is 12% on net income (after returns)
+            vatAmount = incomeData.NetIncome * 0.12m;
 
-            if (sellerUserId > 0)
-            {
-                sql += " AND u.user_id = @SellerUserId";
-            }
-
-            if (startDate.HasValue)
-            {
-                sql += " AND CAST(s.timestamps AS DATE) >= @StartDate";
-            }
-
-            if (endDate.HasValue)
-            {
-                sql += " AND CAST(s.timestamps AS DATE) <= @EndDate";
-            }
-
-            // Filter by approved daily sales verification
-            if (onlyApprovedDays)
-            {
-                sql += @"
-                    AND EXISTS (
-                        SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
-                        WHERE dsv.cashier_user_id = s.user_id
-                        AND CAST(dsv.sale_date AS DATE) = CAST(s.timestamps AS DATE)
-                        AND dsv.status = 'Approved'
-                        AND dsv.archived_at IS NULL";
-                if (sellerUserId > 0)
-                {
-                    sql += " AND dsv.seller_user_id = @SellerUserId";
-                }
-                sql += ")";
-            }
-
-            using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
-            if (sellerUserId > 0)
-            {
-                cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
-            }
-            if (startDate.HasValue)
-            {
-                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
-            }
-            if (endDate.HasValue)
-            {
-                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
-            }
-
-            using var reader = await cmd.ExecuteReaderAsync();
-            if (await reader.ReadAsync())
-            {
-                var totalSales = reader.IsDBNull(0) ? 0m : reader.GetDecimal(0);
-                var totalRevenue = reader.IsDBNull(1) ? 0m : reader.GetDecimal(1);
-
-                // VAT is 12% on total sales
-                vatAmount = totalSales * 0.12m;
-
-                // Admin Fee is 2% on total product revenue
-                adminFeeAmount = totalRevenue * 0.02m;
-            }
+            // Admin Fee is 2% on net income (after returns)
+            adminFeeAmount = incomeData.NetIncome * 0.02m;
         }
         catch (Exception ex)
         {

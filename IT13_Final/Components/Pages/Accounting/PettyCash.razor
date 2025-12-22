@@ -76,16 +76,16 @@
         <div class="summary-grid">
             <div class="summary-box">
                 <div class="summary-label">Configured Fund (Guide)</div>
-                <div class="summary-value">₱@pettyCashFundLimit.ToString("N2")</div>
+                <div class="summary-value">₱@FormatCompactNumber(pettyCashFundLimit)</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Total Petty Cash Used</div>
-                <div class="summary-value" style="color: #dc3545;">₱@totalPettyCashUsed.ToString("N2")</div>
+                <div class="summary-value" style="color: #dc3545;">₱@FormatCompactNumber(totalPettyCashUsed)</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Estimated Remaining</div>
                 <div class="summary-value" style="color: @(estimatedRemaining >= 0 ? "#10B981" : "#dc3545");">
-                    ₱@estimatedRemaining.ToString("N2")
+                    ₱@FormatCompactNumber(estimatedRemaining)
                 </div>
             </div>
             <div class="summary-box">
@@ -509,6 +509,27 @@
             isProcessing = false;
             StateHasChanged();
         }
+    }
+
+    private string FormatCompactNumber(decimal value)
+    {
+        var absValue = Math.Abs(value);
+        var isNegative = value < 0;
+        string result;
+        if (absValue >= 1_000_000_000_000m) result = FormatWithMaxDigits(absValue / 1_000_000_000_000m) + "T";
+        else if (absValue >= 1_000_000_000m) result = FormatWithMaxDigits(absValue / 1_000_000_000m) + "B";
+        else if (absValue >= 1_000_000m) result = FormatWithMaxDigits(absValue / 1_000_000m) + "M";
+        else if (absValue >= 10_000m) result = FormatWithMaxDigits(absValue / 1_000m) + "K";
+        else result = absValue.ToString("N2");
+        return isNegative ? $"{result} (Debt)" : result;
+    }
+
+    private string FormatWithMaxDigits(decimal num)
+    {
+        if (num >= 1000) return num.ToString("N0");
+        if (num >= 100) return num.ToString("F1");
+        if (num >= 10) return num.ToString("F2");
+        return num.ToString("F3");
     }
 }
 

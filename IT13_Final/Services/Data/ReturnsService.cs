@@ -81,6 +81,7 @@ namespace IT13_Final.Services.Data
         public string? ColorHexValue { get; set; }
         public int Quantity { get; set; }
         public string Condition { get; set; } = string.Empty;
+        public decimal Price { get; set; }
     }
 
     public class DailyReturnsData
@@ -578,10 +579,11 @@ namespace IT13_Final.Services.Data
                 SELECT ri.id, ri.return_id, ri.variant_id, ri.size_id, ri.color_id,
                        p.name as product_name, v.name as variant_name,
                        sz.name as size_name, c.name as color_name, c.hex_value as color_hex,
-                       ri.quantity, ri.condition
+                       ri.quantity, ri.condition, si.price
                 FROM dbo.tbl_return_items ri
                 INNER JOIN dbo.tbl_variants v ON ri.variant_id = v.id
                 INNER JOIN dbo.tbl_products p ON v.product_id = p.id
+                INNER JOIN dbo.tbl_sales_items si ON ri.sale_item_id = si.id
                 LEFT JOIN dbo.tbl_sizes sz ON ri.size_id = sz.id
                 LEFT JOIN dbo.tbl_colors c ON ri.color_id = c.id
                 WHERE ri.return_id = @ReturnId AND ri.archives IS NULL
@@ -606,7 +608,8 @@ namespace IT13_Final.Services.Data
                     ColorName = reader.IsDBNull(8) ? null : reader.GetString(8),
                     ColorHexValue = reader.IsDBNull(9) ? null : reader.GetString(9),
                     Quantity = reader.GetInt32(10),
-                    Condition = reader.IsDBNull(11) ? string.Empty : reader.GetString(11)
+                    Condition = reader.IsDBNull(11) ? string.Empty : reader.GetString(11),
+                    Price = reader.GetDecimal(12)
                 });
             }
 

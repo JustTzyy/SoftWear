@@ -91,19 +91,19 @@ else
             <div class="summary-grid">
                 <div class="summary-box">
                     <div class="summary-label">Total Sales (Before Tax)</div>
-                    <div class="summary-value">₱@totalSalesBeforeTax.ToString("N2")</div>
+                    <div class="summary-value">₱@FormatCompactNumber(totalSalesBeforeTax)</div>
                 </div>
                 <div class="summary-box">
                     <div class="summary-label">VAT (12%)</div>
-                    <div class="summary-value">₱@vatAmount.ToString("N2")</div>
+                    <div class="summary-value">₱@FormatCompactNumber(vatAmount)</div>
                 </div>
                 <div class="summary-box">
                     <div class="summary-label">Admin Fee (2%)</div>
-                    <div class="summary-value">₱@adminFeeAmount.ToString("N2")</div>
+                    <div class="summary-value">₱@FormatCompactNumber(adminFeeAmount)</div>
                 </div>
                 <div class="summary-box">
                     <div class="summary-label">Total Tax & Fees</div>
-                    <div class="summary-value">₱@totalTaxAndFees.ToString("N2")</div>
+                    <div class="summary-value">₱@FormatCompactNumber(totalTaxAndFees)</div>
                 </div>
                 <div class="summary-box">
                     <div class="summary-label">Total Products Sold</div>
@@ -111,7 +111,7 @@ else
                 </div>
                 <div class="summary-box">
                     <div class="summary-label">Total Product Revenue</div>
-                    <div class="summary-value">₱@totalProductRevenue.ToString("N2")</div>
+                    <div class="summary-value">₱@FormatCompactNumber(totalProductRevenue)</div>
                 </div>
             </div>
         </div>
@@ -320,9 +320,10 @@ else
                 onlyApprovedDays
             );
 
-            totalSalesBeforeTax = income.TotalGrossSales;
+            // Use net income (after returns) for tax calculations
+            totalSalesBeforeTax = income.NetIncome;
 
-            // Calculate VAT (12% on total sales)
+            // Calculate VAT (12% on net income after returns)
             vatAmount = totalSalesBeforeTax * 0.12m;
 
             // Get product-level data for admin fee calculation (2% per product)
@@ -537,7 +538,9 @@ else
             {
                 totalProductsSold = reader.IsDBNull(0) ? 0 : reader.GetInt32(0);
                 totalProductRevenue = reader.IsDBNull(1) ? 0 : reader.GetDecimal(1);
-                adminFeeAmount = totalProductRevenue * 0.02m;
+                // Admin fee is calculated on net income (after returns) for consistency
+                // totalSalesBeforeTax already contains NetIncome from IncomeBreakdownService
+                adminFeeAmount = totalSalesBeforeTax * 0.02m;
             }
         }
         catch (Exception ex)
@@ -752,5 +755,26 @@ else
             isGeneratingPDF = false;
             StateHasChanged();
         }
+    }
+
+    private string FormatCompactNumber(decimal value)
+    {
+        var absValue = Math.Abs(value);
+        var isNegative = value < 0;
+        string result;
+        if (absValue >= 1_000_000_000_000m) result = FormatWithMaxDigits(absValue / 1_000_000_000_000m) + "T";
+        else if (absValue >= 1_000_000_000m) result = FormatWithMaxDigits(absValue / 1_000_000_000m) + "B";
+        else if (absValue >= 1_000_000m) result = FormatWithMaxDigits(absValue / 1_000_000m) + "M";
+        else if (absValue >= 10_000m) result = FormatWithMaxDigits(absValue / 1_000m) + "K";
+        else result = absValue.ToString("N2");
+        return isNegative ? $"{result} (Debt)" : result;
+    }
+
+    private string FormatWithMaxDigits(decimal num)
+    {
+        if (num >= 1000) return num.ToString("N0");
+        if (num >= 100) return num.ToString("F1");
+        if (num >= 10) return num.ToString("F2");
+        return num.ToString("F3");
     }
 }

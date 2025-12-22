@@ -846,32 +846,31 @@ else
     private string FormatCompactNumber(decimal value)
     {
         var absValue = Math.Abs(value);
-        var sign = value < 0 ? "-" : "";
+        var isNegative = value < 0;
+        string result;
         
         if (absValue >= 1_000_000_000_000m) // Trillion
         {
-            var num = absValue / 1_000_000_000_000m;
-            return sign + FormatWithMaxDigits(num) + "T";
+            result = FormatWithMaxDigits(absValue / 1_000_000_000_000m) + "T";
         }
         else if (absValue >= 1_000_000_000m) // Billion
         {
-            var num = absValue / 1_000_000_000m;
-            return sign + FormatWithMaxDigits(num) + "B";
+            result = FormatWithMaxDigits(absValue / 1_000_000_000m) + "B";
         }
         else if (absValue >= 1_000_000m) // Million
         {
-            var num = absValue / 1_000_000m;
-            return sign + FormatWithMaxDigits(num) + "M";
+            result = FormatWithMaxDigits(absValue / 1_000_000m) + "M";
         }
         else if (absValue >= 10_000m) // Thousand (10K+)
         {
-            var num = absValue / 1_000m;
-            return sign + FormatWithMaxDigits(num) + "K";
+            result = FormatWithMaxDigits(absValue / 1_000m) + "K";
         }
         else
         {
-            return value.ToString("N0");
+            result = absValue.ToString("N0");
         }
+        
+        return isNegative ? $"{result} (Debt)" : result;
     }
 
     private string FormatWithMaxDigits(decimal num)
@@ -1100,9 +1099,9 @@ else
             // Load cashier performance (using cashier IDs)
             await LoadCashierPerformance(cashierIds);
 
-            // Calculate Tax & Fees (based on total sales)
-            vatAmount = totalIncome * 0.12m;         // 12% VAT on sales
-            adminFeeAmount = totalIncome * 0.02m;    // 2% admin fee on product revenue
+            // Calculate Tax & Fees (based on net income after returns)
+            vatAmount = grossIncome * 0.12m;         // 12% VAT on net income
+            adminFeeAmount = grossIncome * 0.02m;    // 2% admin fee on net income
             totalTaxAndFees = vatAmount + adminFeeAmount;
 
             FilterDataByDateRange();

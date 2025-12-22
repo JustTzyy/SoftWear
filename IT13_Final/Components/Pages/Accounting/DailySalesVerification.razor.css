@@ -357,6 +357,7 @@
     font-size: clamp(14px, 1.8vw, 24px);
     font-weight: 700;
     color: #1a1a1a;
+    text-align: right;
     letter-spacing: -0.5px;
     line-height: 1.2;
     word-break: break-word;

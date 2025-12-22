@@ -83,19 +83,21 @@ namespace IT13_Final.Services.Data
             // If sellerUserId is 0, we can't filter by approved days (need seller context)
 
             // Get total gross sales and transaction count
-            // If sellerUserId is 0, show all sales (for accounting users without specific seller link)
-            var sellerFilter = sellerUserId > 0 ? "AND u.user_id = @SellerUserId" : "";
+            // Filter by seller (product owner) not cashier
+            var sellerFilter = sellerUserId > 0 ? "AND p.user_id = @SellerUserId" : "";
             
             var summarySql = $@"
                 SELECT 
-                    COALESCE(SUM(s.amount), 0) as total_gross_sales,
+                    COALESCE(SUM(si.subtotal), 0) as total_gross_sales,
                     COUNT(DISTINCT s.id) as total_transactions
                 FROM dbo.tbl_sales s
-                INNER JOIN dbo.tbl_users u ON s.user_id = u.id
+                INNER JOIN dbo.tbl_sales_items si ON s.id = si.sale_id
+                INNER JOIN dbo.tbl_variants v ON si.variant_id = v.id
+                INNER JOIN dbo.tbl_products p ON v.product_id = p.id
                 WHERE s.archives IS NULL 
+                AND si.archives IS NULL
                 AND s.status = 'Completed'
                 {sellerFilter}
-                AND u.archived_at IS NULL
                 {dateFilter}
                 {approvedDaysFilter}";
 
@@ -133,7 +135,7 @@ namespace IT13_Final.Services.Data
                 returnsDateFilter += " AND CAST(s.timestamps AS DATE) <= @EndDate";
             }
 
-            var returnsSellerFilter = sellerUserId > 0 ? "AND u.user_id = @SellerUserId" : "";
+            var returnsSellerFilter = sellerUserId > 0 ? "AND p.user_id = @SellerUserId" : "";
 
             var returnsSql = $@"
                 SELECT COALESCE(SUM(si.price * ri.quantity), 0) as total_returns
@@ -141,12 +143,12 @@ namespace IT13_Final.Services.Data
                 INNER JOIN dbo.tbl_return_items ri ON r.id = ri.return_id
                 INNER JOIN dbo.tbl_sales_items si ON ri.sale_item_id = si.id
                 INNER JOIN dbo.tbl_sales s ON r.sale_id = s.id
-                INNER JOIN dbo.tbl_users u ON s.user_id = u.id
+                INNER JOIN dbo.tbl_variants v ON si.variant_id = v.id
+                INNER JOIN dbo.tbl_products p ON v.product_id = p.id
                 WHERE r.archives IS NULL 
                 AND r.status IN ('Approved', 'Completed')
                 AND si.archives IS NULL
                 {returnsSellerFilter}
-                AND u.archived_at IS NULL
                 {returnsDateFilter}";
 
             using (var cmd = new SqlCommand(returnsSql, conn))
@@ -169,9 +171,16 @@ namespace IT13_Final.Services.Data
                 {
                     result.TotalReturns = Convert.ToDecimal(returnsResult);
                 }
+                
+                // Debug logging
+                Console.WriteLine($"[IncomeBreakdown] SellerUserId: {sellerUserId}, Returns Query Result: {result.TotalReturns}");
+                Console.WriteLine($"[IncomeBreakdown] Date Range: {startDate?.ToString("yyyy-MM-dd")} to {endDate?.ToString("yyyy-MM-dd")}");
             }
 
             result.NetIncome = result.TotalGrossSales - result.TotalReturns;
+            
+            // Debug logging for all values
+            Console.WriteLine($"[IncomeBreakdown] TotalGrossSales: {result.TotalGrossSales}, TotalReturns: {result.TotalReturns}, NetIncome: {result.NetIncome}");
 
             // Get income by cashier (grouped by cashier who made the sale)
             // Ensure cashiers belong to the same seller as the accounting user

@@ -827,32 +827,31 @@ else
     private string FormatCompactNumber(decimal value)
     {
         var absValue = Math.Abs(value);
-        var sign = value < 0 ? "-" : "";
+        var isNegative = value < 0;
+        string result;
         
         if (absValue >= 1_000_000_000_000m) // Trillion
         {
-            var num = absValue / 1_000_000_000_000m;
-            return sign + FormatWithMaxDigits(num) + "T";
+            result = FormatWithMaxDigits(absValue / 1_000_000_000_000m) + "T";
         }
         else if (absValue >= 1_000_000_000m) // Billion
         {
-            var num = absValue / 1_000_000_000m;
-            return sign + FormatWithMaxDigits(num) + "B";
+            result = FormatWithMaxDigits(absValue / 1_000_000_000m) + "B";
         }
         else if (absValue >= 1_000_000m) // Million
         {
-            var num = absValue / 1_000_000m;
-            return sign + FormatWithMaxDigits(num) + "M";
+            result = FormatWithMaxDigits(absValue / 1_000_000m) + "M";
         }
         else if (absValue >= 10_000m) // Thousand (10K+)
         {
-            var num = absValue / 1_000m;
-            return sign + FormatWithMaxDigits(num) + "K";
+            result = FormatWithMaxDigits(absValue / 1_000m) + "K";
         }
         else
         {
-            return value.ToString("N0");
+            result = absValue.ToString("N0");
         }
+        
+        return isNegative ? $"{result} (Debt)" : result;
     }
 
     private string FormatWithMaxDigits(decimal num)
@@ -951,11 +950,11 @@ else
             stats.NetIncome = income.NetIncome;
             stats.TotalTransactions = income.TotalTransactions;
 
-            // Calculate VAT (12% on gross sales)
-            stats.VAT = stats.GrossSales * 0.12m;
+            // Calculate VAT (12% on net income after returns)
+            stats.VAT = stats.NetIncome * 0.12m;
 
-            // Calculate Admin Fee (2% per product)
-            await CalculateAdminFee();
+            // Calculate Admin Fee (2% on net income after returns)
+            stats.AdminFee = stats.NetIncome * 0.02m;
 
             // Load expenses
             var allExpenses = await ExpenseService.GetExpensesAsync(
@@ -1071,77 +1070,6 @@ else
         }
     }
 
-    private async Task CalculateAdminFee()
-    {
-        try
-        {
-            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
-            using var conn = new SqlConnection(connectionString);
-            await conn.OpenAsync();
-
-            var sql = @"
-                SELECT SUM(si.subtotal) as total_revenue
-                FROM dbo.tbl_sales_items si
-                INNER JOIN dbo.tbl_sales s ON si.sale_id = s.id
-                INNER JOIN dbo.tbl_users u ON s.user_id = u.id
-                WHERE s.archives IS NULL
-                AND si.archives IS NULL
-                AND s.status = 'Completed'
-                AND u.archived_at IS NULL";
-
-            if (sellerUserId > 0)
-            {
-                sql += " AND u.user_id = @SellerUserId";
-            }
-
-            if (startDate.HasValue)
-            {
-                sql += " AND CAST(s.timestamps AS DATE) >= @StartDate";
-            }
-
-            if (endDate.HasValue)
-            {
-                sql += " AND CAST(s.timestamps AS DATE) <= @EndDate";
-            }
-
-            // Filter by approved daily sales verification (always true for accounting)
-            sql += @"
-                AND EXISTS (
-                    SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
-                    WHERE dsv.cashier_user_id = s.user_id
-                    AND CAST(dsv.sale_date AS DATE) = CAST(s.timestamps AS DATE)
-                    AND dsv.status = 'Approved'
-                    AND dsv.archived_at IS NULL";
-            if (sellerUserId > 0)
-            {
-                sql += " AND dsv.seller_user_id = @SellerUserId";
-            }
-            sql += ")";
-
-            using var cmd = new SqlCommand(sql, conn);
-            if (sellerUserId > 0)
-            {
-                cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
-            }
-            if (startDate.HasValue)
-            {
-                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
-            }
-            if (endDate.HasValue)
-            {
-                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
-            }
-
-            var result = await cmd.ExecuteScalarAsync();
-            var totalRevenue = result != null && result != DBNull.Value ? Convert.ToDecimal(result) : 0m;
-            stats.AdminFee = totalRevenue * 0.02m;
-        }
-        catch (Exception ex)
-        {
-            await JSRuntime.InvokeVoidAsync("console.error", $"Error calculating admin fee: {ex.Message}");
-            stats.AdminFee = 0m;
-        }
-    }
 
     private async Task<(decimal Total, int Count)> LoadSupplierPayments()
     {

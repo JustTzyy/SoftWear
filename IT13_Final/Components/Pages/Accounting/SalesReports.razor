@@ -121,7 +121,7 @@
             <div class="summary-box">
                 <div class="summary-label">Total Sales Amount</div>
                 <div class="summary-value @(!showConfidentialInfo ? "hidden-value" : "")">
-                    @(showConfidentialInfo ? $"₱{totalSalesAmount:N2}" : "••••••••")
+                    @(showConfidentialInfo ? $"₱{FormatCompactNumber(totalSalesAmount)}" : "••••••••")
                 </div>
             </div>
             <div class="summary-box">
@@ -131,13 +131,13 @@
             <div class="summary-box">
                 <div class="summary-label">VAT (12%)</div>
                 <div class="summary-value @(!showConfidentialInfo ? "hidden-value" : "")">
-                    @(showConfidentialInfo ? $"₱{vatAmount:N2}" : "••••••••")
+                    @(showConfidentialInfo ? $"₱{FormatCompactNumber(vatAmount)}" : "••••••••")
                 </div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Admin Fee (2%)</div>
                 <div class="summary-value @(!showConfidentialInfo ? "hidden-value" : "")">
-                    @(showConfidentialInfo ? $"₱{adminFeeAmount:N2}" : "••••••••")
+                    @(showConfidentialInfo ? $"₱{FormatCompactNumber(adminFeeAmount)}" : "••••••••")
                 </div>
             </div>
         </div>
@@ -267,6 +267,7 @@
     private int totalPages => (int)Math.Ceiling(totalCount / (double)pageSize);
 
     private decimal totalSalesAmount = 0m;
+    private decimal totalReturnsAmount = 0m;
     private decimal vatAmount = 0m;
     private decimal adminFeeAmount = 0m;
 
@@ -309,11 +310,18 @@
             var allSalesForSummary = await SalesService.GetSalesForReportsAsync(allCashiers, searchTerm, startDate, endDate, onlyApprovedDays, 1, 10000);
             totalSalesAmount = allSalesForSummary.Sum(s => s.Amount);
             
-            // Calculate VAT (12% on total sales)
-            vatAmount = totalSalesAmount * 0.12m;
+            // Calculate total approved returns
+            totalReturnsAmount = await CalculateTotalReturnsAsync();
             
-            // Calculate Admin Fee (2% per product) - need to query sales_items
-            await CalculateAdminFee();
+            // Calculate net sales (total sales - approved returns)
+            // VAT and Admin Fee are calculated on net sales after returns
+            var netSalesAmount = totalSalesAmount - totalReturnsAmount;
+            
+            // Calculate VAT (12% on net sales after returns)
+            vatAmount = netSalesAmount * 0.12m;
+            
+            // Calculate Admin Fee (2% on net sales after returns)
+            adminFeeAmount = netSalesAmount * 0.02m;
         }
         catch (Exception ex)
         {
@@ -544,21 +552,23 @@
         StateHasChanged();
     }
 
-    private async Task CalculateAdminFee()
+    private async Task<decimal> CalculateTotalReturnsAsync()
     {
         try
         {
             const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
-            using var conn = new SqlConnection(connectionString);
+            using var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString);
             await conn.OpenAsync();
 
             var sql = @"
-                SELECT SUM(si.subtotal) as total_revenue
-                FROM dbo.tbl_sales_items si
-                INNER JOIN dbo.tbl_sales s ON si.sale_id = s.id
-                WHERE s.archives IS NULL
-                AND si.archives IS NULL
-                AND s.status = 'Completed'";
+                SELECT COALESCE(SUM(si.price * ri.quantity), 0) as total_returns
+                FROM dbo.tbl_returns r
+                INNER JOIN dbo.tbl_return_items ri ON r.id = ri.return_id
+                INNER JOIN dbo.tbl_sales_items si ON ri.sale_item_id = si.id
+                INNER JOIN dbo.tbl_sales s ON r.sale_id = s.id
+                WHERE r.archives IS NULL 
+                AND r.status IN ('Approved', 'Completed')
+                AND si.archives IS NULL";
 
             if (startDate.HasValue)
             {
@@ -570,24 +580,7 @@
                 sql += " AND CAST(s.timestamps AS DATE) <= @EndDate";
             }
 
-            if (!string.IsNullOrWhiteSpace(searchTerm))
-            {
-                sql += " AND s.sale_number LIKE @SearchTerm";
-            }
-
-            // Filter by approved daily sales verification
-            if (onlyApprovedDays)
-            {
-                sql += @"
-                    AND EXISTS (
-                        SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
-                        WHERE dsv.cashier_user_id = s.user_id
-                        AND CAST(dsv.sale_date AS DATE) = CAST(s.timestamps AS DATE)
-                        AND dsv.status = 'Approved'
-                        AND dsv.archived_at IS NULL)";
-            }
-
-            using var cmd = new SqlCommand(sql, conn);
+            using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
             if (startDate.HasValue)
             {
                 cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
@@ -596,21 +589,17 @@
             {
                 cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
             }
-            if (!string.IsNullOrWhiteSpace(searchTerm))
-            {
-                cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
-            }
 
             var result = await cmd.ExecuteScalarAsync();
-            var totalRevenue = result != null && result != DBNull.Value ? Convert.ToDecimal(result) : 0m;
-            adminFeeAmount = totalRevenue * 0.02m;
+            return result != null && result != DBNull.Value ? Convert.ToDecimal(result) : 0m;
         }
         catch (Exception ex)
         {
-            await JSRuntime.InvokeVoidAsync("console.error", $"Error calculating admin fee: {ex.Message}");
-            adminFeeAmount = 0m;
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error calculating returns: {ex.Message}");
+            return 0m;
         }
     }
+
 
     private async Task PrintReport()
     {
@@ -821,6 +810,27 @@
     public void Dispose()
     {
         _searchTimer?.Dispose();
+    }
+
+    private string FormatCompactNumber(decimal value)
+    {
+        var absValue = Math.Abs(value);
+        var isNegative = value < 0;
+        string result;
+        if (absValue >= 1_000_000_000_000m) result = FormatWithMaxDigits(absValue / 1_000_000_000_000m) + "T";
+        else if (absValue >= 1_000_000_000m) result = FormatWithMaxDigits(absValue / 1_000_000_000m) + "B";
+        else if (absValue >= 1_000_000m) result = FormatWithMaxDigits(absValue / 1_000_000m) + "M";
+        else if (absValue >= 10_000m) result = FormatWithMaxDigits(absValue / 1_000m) + "K";
+        else result = absValue.ToString("N2");
+        return isNegative ? $"{result} (Debt)" : result;
+    }
+
+    private string FormatWithMaxDigits(decimal num)
+    {
+        if (num >= 1000) return num.ToString("N0");
+        if (num >= 100) return num.ToString("F1");
+        if (num >= 10) return num.ToString("F2");
+        return num.ToString("F3");
     }
 }
 

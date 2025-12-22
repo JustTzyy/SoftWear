@@ -665,7 +665,9 @@ else
     private class DailyFeeData
     {
         public DateTime Date { get; set; }
-        public decimal Revenue { get; set; }
+        public decimal GrossRevenue { get; set; }
+        public decimal Returns { get; set; }
+        public decimal Revenue => GrossRevenue - Returns;
         public decimal AdminFee => Revenue * 0.02m;
     }
 
@@ -673,7 +675,9 @@ else
     {
         public int Month { get; set; }
         public string MonthName { get; set; } = "";
-        public decimal Revenue { get; set; }
+        public decimal GrossRevenue { get; set; }
+        public decimal Returns { get; set; }
+        public decimal Revenue => GrossRevenue - Returns;
         public decimal AdminFee => Revenue * 0.02m;
     }
 
@@ -1024,11 +1028,22 @@ else
 
             // Load daily fee data for chart
             // Only show sales that have been approved in Daily Sales Verification
+            // Subtract approved returns from revenue
             dailyFeeData.Clear();
             var dailySql = $@"
                 SELECT 
                     CAST(s.timestamps AS DATE) as sale_date,
-                    SUM(si.subtotal) as revenue
+                    SUM(si.subtotal) - COALESCE(
+                        (SELECT SUM(si2.price * ri.quantity)
+                         FROM dbo.tbl_returns r
+                         INNER JOIN dbo.tbl_return_items ri ON r.id = ri.return_id
+                         INNER JOIN dbo.tbl_sales_items si2 ON ri.sale_item_id = si2.id
+                         INNER JOIN dbo.tbl_sales s2 ON r.sale_id = s2.id
+                         WHERE r.archives IS NULL
+                         AND r.status IN ('Approved', 'Completed')
+                         AND CAST(s2.timestamps AS DATE) = CAST(s.timestamps AS DATE)
+                         AND si2.archives IS NULL), 0
+                    ) as revenue
                 FROM dbo.tbl_sales_items si
                 INNER JOIN dbo.tbl_sales s ON si.sale_id = s.id
                 INNER JOIN dbo.tbl_variants v ON si.variant_id = v.id
@@ -1061,8 +1076,42 @@ else
                     dailyFeeData.Add(new DailyFeeData
                     {
                         Date = reader.GetDateTime(0),
-                        Revenue = reader.IsDBNull(1) ? 0 : reader.GetDecimal(1)
+                        GrossRevenue = reader.IsDBNull(1) ? 0 : reader.GetDecimal(1)
                     });
+                }
+            }
+
+            // Get daily returns
+            var dailyReturnsSql = $@"
+                SELECT 
+                    CAST(s.timestamps AS DATE) as sale_date,
+                    COALESCE(SUM(si.price * ri.quantity), 0) as total_returns
+                FROM dbo.tbl_returns r
+                INNER JOIN dbo.tbl_return_items ri ON r.id = ri.return_id
+                INNER JOIN dbo.tbl_sales_items si ON ri.sale_item_id = si.id
+                INNER JOIN dbo.tbl_sales s ON r.sale_id = s.id
+                WHERE r.archives IS NULL
+                AND r.status IN ('Approved', 'Completed')
+                AND si.archives IS NULL
+                {dateFilter}
+                GROUP BY CAST(s.timestamps AS DATE)";
+
+            using (var cmd = new SqlCommand(dailyReturnsSql, conn))
+            {
+                if (startDate.HasValue)
+                    cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+                if (endDate.HasValue)
+                    cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    var date = reader.GetDateTime(0);
+                    var data = dailyFeeData.FirstOrDefault(d => d.Date == date);
+                    if (data != null)
+                    {
+                        data.Returns = reader.IsDBNull(1) ? 0 : reader.GetDecimal(1);
+                    }
                 }
             }
 
@@ -1074,7 +1123,7 @@ else
             var monthlySql = @"
                 SELECT 
                     MONTH(s.timestamps) as month,
-                    SUM(si.subtotal) as revenue
+                    SUM(si.subtotal) as gross_revenue
                 FROM dbo.tbl_sales_items si
                 INNER JOIN dbo.tbl_sales s ON si.sale_id = s.id
                 INNER JOIN dbo.tbl_variants v ON si.variant_id = v.id
@@ -1103,10 +1152,41 @@ else
                     var data = monthlyFeeData.FirstOrDefault(m => m.Month == month);
                     if (data != null)
                     {
-                        data.Revenue = reader.IsDBNull(1) ? 0 : reader.GetDecimal(1);
+                        data.GrossRevenue = reader.IsDBNull(1) ? 0 : reader.GetDecimal(1);
                     }
                 }
             }
+
+            // Get monthly returns
+            var monthlyReturnsSql = @"
+                SELECT 
+                    MONTH(s.timestamps) as month,
+                    COALESCE(SUM(si.price * ri.quantity), 0) as total_returns
+                FROM dbo.tbl_returns r
+                INNER JOIN dbo.tbl_return_items ri ON r.id = ri.return_id
+                INNER JOIN dbo.tbl_sales_items si ON ri.sale_item_id = si.id
+                INNER JOIN dbo.tbl_sales s ON r.sale_id = s.id
+                WHERE r.archives IS NULL
+                AND r.status IN ('Approved', 'Completed')
+                AND si.archives IS NULL
+                AND YEAR(s.timestamps) = @Year
+                GROUP BY MONTH(s.timestamps)";
+
+            using (var cmd = new SqlCommand(monthlyReturnsSql, conn))
+            {
+                cmd.Parameters.AddWithValue("@Year", DateTime.Now.Year);
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    var month = reader.GetInt32(0);
+                    var data = monthlyFeeData.FirstOrDefault(m => m.Month == month);
+                    if (data != null)
+                    {
+                        data.Returns = reader.IsDBNull(1) ? 0 : reader.GetDecimal(1);
+                    }
+                }
+            }
+
             maxMonthFee = monthlyFeeData.Any() ? monthlyFeeData.Max(m => m.AdminFee) : 0;
 
             // Load user counts
@@ -1139,11 +1219,24 @@ else
             // Load top sellers - get sellers (product owners) with highest sales revenue
             // Join through variants and products to get the actual seller, not the cashier
             // Only show sales that have been approved in Daily Sales Verification
+            // Subtract approved returns from revenue
             var topSellersSql = $@"
                 SELECT TOP 10
                     COALESCE(u.name, CONCAT(u.fname, ' ', u.lname), u.email, 'Unknown') as seller_name,
                     u.email,
-                    ISNULL(SUM(si.subtotal), 0) as revenue
+                    ISNULL(SUM(si.subtotal), 0) - COALESCE(
+                        (SELECT SUM(si2.price * ri.quantity)
+                         FROM dbo.tbl_returns r
+                         INNER JOIN dbo.tbl_return_items ri ON r.id = ri.return_id
+                         INNER JOIN dbo.tbl_sales_items si2 ON ri.sale_item_id = si2.id
+                         INNER JOIN dbo.tbl_sales s2 ON r.sale_id = s2.id
+                         INNER JOIN dbo.tbl_variants v2 ON si2.variant_id = v2.id
+                         INNER JOIN dbo.tbl_products p2 ON v2.product_id = p2.id
+                         WHERE r.archives IS NULL
+                         AND r.status IN ('Approved', 'Completed')
+                         AND p2.user_id = p.user_id
+                         AND si2.archives IS NULL), 0
+                    ) as revenue
                 FROM dbo.tbl_sales s
                 INNER JOIN dbo.tbl_sales_items si ON si.sale_id = s.id
                 INNER JOIN dbo.tbl_variants v ON si.variant_id = v.id
@@ -1162,7 +1255,19 @@ else
                 )
                 {dateFilter}
                 GROUP BY p.user_id, u.name, u.fname, u.lname, u.email
-                ORDER BY SUM(si.subtotal) DESC";
+                ORDER BY ISNULL(SUM(si.subtotal), 0) - COALESCE(
+                        (SELECT SUM(si2.price * ri.quantity)
+                         FROM dbo.tbl_returns r
+                         INNER JOIN dbo.tbl_return_items ri ON r.id = ri.return_id
+                         INNER JOIN dbo.tbl_sales_items si2 ON ri.sale_item_id = si2.id
+                         INNER JOIN dbo.tbl_sales s2 ON r.sale_id = s2.id
+                         INNER JOIN dbo.tbl_variants v2 ON si2.variant_id = v2.id
+                         INNER JOIN dbo.tbl_products p2 ON v2.product_id = p2.id
+                         WHERE r.archives IS NULL
+                         AND r.status IN ('Approved', 'Completed')
+                         AND p2.user_id = p.user_id
+                         AND si2.archives IS NULL), 0
+                    ) DESC";
 
             allTopSellers.Clear();
             using (var cmd = new SqlCommand(topSellersSql, conn))

@@ -233,7 +233,9 @@ else
     {
         public int Month { get; set; }
         public string MonthName { get; set; } = "";
-        public decimal Revenue { get; set; }
+        public decimal GrossRevenue { get; set; }
+        public decimal Returns { get; set; }
+        public decimal Revenue => GrossRevenue - Returns;
         public decimal AdminFee => Revenue * 0.02m;
         public int Transactions { get; set; }
     }
@@ -270,10 +272,11 @@ else
                 .ToList();
 
             // Only show sales that have been approved in Daily Sales Verification
+            // Calculate gross sales and returns separately for accurate net revenue
             var sql = @"
                 SELECT 
                     MONTH(s.timestamps) as month,
-                    SUM(si.subtotal) as revenue,
+                    SUM(si.subtotal) as gross_revenue,
                     COUNT(DISTINCT s.id) as transactions
                 FROM dbo.tbl_sales_items si
                 INNER JOIN dbo.tbl_sales s ON si.sale_id = s.id
@@ -304,8 +307,38 @@ else
                     var data = monthlyData.FirstOrDefault(m => m.Month == month);
                     if (data != null)
                     {
-                        data.Revenue = reader.IsDBNull(1) ? 0 : reader.GetDecimal(1);
+                        data.GrossRevenue = reader.IsDBNull(1) ? 0 : reader.GetDecimal(1);
                         data.Transactions = reader.IsDBNull(2) ? 0 : reader.GetInt32(2);
+                    }
+                }
+            }
+
+            // Get returns for each month
+            var returnsSql = @"
+                SELECT 
+                    MONTH(s.timestamps) as month,
+                    COALESCE(SUM(si.price * ri.quantity), 0) as total_returns
+                FROM dbo.tbl_returns r
+                INNER JOIN dbo.tbl_return_items ri ON r.id = ri.return_id
+                INNER JOIN dbo.tbl_sales_items si ON ri.sale_item_id = si.id
+                INNER JOIN dbo.tbl_sales s ON r.sale_id = s.id
+                WHERE r.archives IS NULL
+                AND r.status IN ('Approved', 'Completed')
+                AND si.archives IS NULL
+                AND YEAR(s.timestamps) = @Year
+                GROUP BY MONTH(s.timestamps)";
+
+            using (var cmd = new SqlCommand(returnsSql, conn))
+            {
+                cmd.Parameters.AddWithValue("@Year", selectedYear);
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    var month = reader.GetInt32(0);
+                    var data = monthlyData.FirstOrDefault(m => m.Month == month);
+                    if (data != null)
+                    {
+                        data.Returns = reader.IsDBNull(1) ? 0 : reader.GetDecimal(1);
                     }
                 }
             }

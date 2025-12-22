@@ -4,6 +4,7 @@
 @inject IT13_Final.Services.Audit.IHistoryService HistoryService
 @inject IJSRuntime JSRuntime
 @inject IT13_Final.Services.Data.ICashflowAuditService CashflowAuditService
+@inject IT13_Final.Services.Data.IIncomeBreakdownService IncomeBreakdownService
 
 @* Welcome Header *@
 <div class="welcome-header">
@@ -98,25 +99,25 @@
         <div class="summary-grid">
             <div class="summary-box">
                 <div class="summary-label">Cash-in</div>
-                <div class="summary-value @GetFontSizeClass(totalCashIn)" style="color: #10B981;">₱@totalCashIn.ToString("N2")</div>
+                <div class="summary-value" style="color: #10B981;">₱@FormatCompactNumber(totalCashIn)</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Cash-out</div>
-                <div class="summary-value @GetFontSizeClass(totalCashOut)" style="color: #dc3545;">₱@totalCashOut.ToString("N2")</div>
+                <div class="summary-value" style="color: #dc3545;">₱@FormatCompactNumber(totalCashOut)</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Net Cash Movement</div>
-                <div class="summary-value @GetFontSizeClass(netCashMovement)" style="color: @(netCashMovement >= 0 ? "#10B981" : "#dc3545");">
-                    ₱@netCashMovement.ToString("N2")
+                <div class="summary-value" style="color: @(netCashMovement >= 0 ? "#10B981" : "#dc3545");">
+                    ₱@FormatCompactNumber(netCashMovement)
                 </div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">VAT (12%)</div>
-                <div class="summary-value @GetFontSizeClass(vatAmount)">₱@vatAmount.ToString("N2")</div>
+                <div class="summary-value">₱@FormatCompactNumber(vatAmount)</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Admin Fee (2%)</div>
-                <div class="summary-value @GetFontSizeClass(adminFeeAmount)">₱@adminFeeAmount.ToString("N2")</div>
+                <div class="summary-value">₱@FormatCompactNumber(adminFeeAmount)</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Total Records</div>
@@ -599,84 +600,19 @@ else
     {
         try
         {
-            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
-            using var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString);
-            await conn.OpenAsync();
+            // Use IncomeBreakdownService for consistent tax calculations across all pages
+            var incomeData = await IncomeBreakdownService.GetIncomeBreakdownAsync(
+                sellerUserId,
+                startDate,
+                endDate,
+                onlyApprovedDays
+            );
 
-            // Get total sales from cash payments within the date range
-            var sql = @"
-                SELECT 
-                    SUM(p.amount_paid) as total_sales,
-                    SUM(si.subtotal) as total_revenue
-                FROM dbo.tbl_payments p
-                INNER JOIN dbo.tbl_sales s ON p.sale_id = s.id
-                INNER JOIN dbo.tbl_sales_items si ON s.id = si.sale_id
-                INNER JOIN dbo.tbl_users u ON s.user_id = u.id
-                WHERE p.payment_method = 'Cash'
-                AND s.status = 'Completed'
-                AND s.archives IS NULL
-                AND p.archives IS NULL
-                AND si.archives IS NULL
-                AND u.archived_at IS NULL";
+            // VAT is 12% on net income (after returns)
+            vatAmount = incomeData.NetIncome * 0.12m;
 
-            if (sellerUserId > 0)
-            {
-                sql += " AND u.user_id = @SellerUserId";
-            }
-
-            if (startDate.HasValue)
-            {
-                sql += " AND CAST(s.timestamps AS DATE) >= @StartDate";
-            }
-
-            if (endDate.HasValue)
-            {
-                sql += " AND CAST(s.timestamps AS DATE) <= @EndDate";
-            }
-
-            // Filter by approved daily sales verification
-            if (onlyApprovedDays)
-            {
-                sql += @"
-                    AND EXISTS (
-                        SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
-                        WHERE dsv.cashier_user_id = s.user_id
-                        AND CAST(dsv.sale_date AS DATE) = CAST(s.timestamps AS DATE)
-                        AND dsv.status = 'Approved'
-                        AND dsv.archived_at IS NULL";
-                if (sellerUserId > 0)
-                {
-                    sql += " AND dsv.seller_user_id = @SellerUserId";
-                }
-                sql += ")";
-            }
-
-            using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
-            if (sellerUserId > 0)
-            {
-                cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
-            }
-            if (startDate.HasValue)
-            {
-                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
-            }
-            if (endDate.HasValue)
-            {
-                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
-            }
-
-            using var reader = await cmd.ExecuteReaderAsync();
-            if (await reader.ReadAsync())
-            {
-                var totalSales = reader.IsDBNull(0) ? 0m : reader.GetDecimal(0);
-                var totalRevenue = reader.IsDBNull(1) ? 0m : reader.GetDecimal(1);
-
-                // VAT is 12% on total sales
-                vatAmount = totalSales * 0.12m;
-
-                // Admin Fee is 2% on total product revenue
-                adminFeeAmount = totalRevenue * 0.02m;
-            }
+            // Admin Fee is 2% on net income (after returns)
+            adminFeeAmount = incomeData.NetIncome * 0.02m;
         }
         catch (Exception ex)
         {
@@ -801,6 +737,27 @@ else
             isGeneratingPDF = false;
             StateHasChanged();
         }
+    }
+
+    private string FormatCompactNumber(decimal value)
+    {
+        var absValue = Math.Abs(value);
+        var isNegative = value < 0;
+        string result;
+        if (absValue >= 1_000_000_000_000m) result = FormatWithMaxDigits(absValue / 1_000_000_000_000m) + "T";
+        else if (absValue >= 1_000_000_000m) result = FormatWithMaxDigits(absValue / 1_000_000_000m) + "B";
+        else if (absValue >= 1_000_000m) result = FormatWithMaxDigits(absValue / 1_000_000m) + "M";
+        else if (absValue >= 10_000m) result = FormatWithMaxDigits(absValue / 1_000m) + "K";
+        else result = absValue.ToString("N2");
+        return isNegative ? $"{result} (Debt)" : result;
+    }
+
+    private string FormatWithMaxDigits(decimal num)
+    {
+        if (num >= 1000) return num.ToString("N0");
+        if (num >= 100) return num.ToString("F1");
+        if (num >= 10) return num.ToString("F2");
+        return num.ToString("F3");
     }
 }
 

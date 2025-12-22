@@ -1,44 +1,56 @@
-.subscription-container {
-    padding: 24px;
-    max-width: 1400px;
-    margin: 0 auto;
+/* Subscription Page - Matching Dashboard Design */
+
+/* Welcome Header */
+.welcome-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    padding: 24px 28px;
+    background: linear-gradient(135deg, #1a2332 0%, #304D6D 50%, #5C7CFA 100%);
+    border-radius: 16px;
+    color: white;
+    box-shadow: 0 4px 20px rgba(26, 35, 50, 0.3);
 }
 
-.subscription-header {
-    text-align: center;
-    margin-bottom: 32px;
+.welcome-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
-.page-title {
+.welcome-greeting {
     font-size: 28px;
     font-weight: 700;
-    color: #1a1a2e;
-    margin: 0 0 8px 0;
+    margin: 0;
+    letter-spacing: -0.5px;
 }
 
-.page-subtitle {
-    font-size: 16px;
-    color: #6b7280;
+.welcome-date {
+    font-size: 14px;
+    opacity: 0.85;
     margin: 0;
+    font-weight: 400;
 }
 
 /* Loading State */
-.loading-container {
+.loading-state {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 60px 20px;
-    gap: 16px;
+    padding: 80px 20px;
+    color: #6b7280;
 }
 
 .loading-spinner {
-    width: 40px;
-    height: 40px;
-    border: 3px solid #e5e7eb;
+    width: 48px;
+    height: 48px;
+    border: 4px solid #e5e7eb;
     border-top-color: #5C7CFA;
     border-radius: 50%;
     animation: spin 1s linear infinite;
+    margin-bottom: 16px;
 }
 
 @keyframes spin {
@@ -212,36 +224,21 @@
     margin: 0 0 16px 0;
 }
 
-.plan-price {
-    margin-bottom: 8px;
-}
-
-.price-amount {
-    font-size: 36px;
-    font-weight: 800;
-    color: #1a1a2e;
-}
-
-.price-period {
-    font-size: 14px;
-    color: #6b7280;
-}
-
 .admin-fee {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 2px;
+    gap: 4px;
 }
 
 .fee-percentage {
-    font-size: 20px;
-    font-weight: 700;
+    font-size: 32px;
+    font-weight: 800;
     color: #5C7CFA;
 }
 
 .fee-label {
-    font-size: 12px;
+    font-size: 13px;
     color: #6b7280;
 }
 
@@ -390,11 +387,14 @@
 
 /* Responsive */
 @media (max-width: 768px) {
-    .subscription-container {
-        padding: 16px;
+    .welcome-header {
+        flex-direction: column;
+        gap: 16px;
+        text-align: center;
+        padding: 20px;
     }
 
-    .page-title {
+    .welcome-greeting {
         font-size: 22px;
     }
 

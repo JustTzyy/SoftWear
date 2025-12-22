@@ -103,7 +103,7 @@
             </div>
             <div class="summary-box">
                 <div class="summary-label">Total Sales</div>
-                <div class="summary-value">₱@totalSales.ToString("N2")</div>
+                <div class="summary-value">₱@FormatCompactNumber(totalSales)</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Total Transactions</div>
@@ -134,20 +134,19 @@
                         <th>Total Sales</th>
                         <th>Returns</th>
                         <th>Status</th>
-                        <th style="text-align: center;">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     @if (isLoading)
                     {
                         <tr>
-                            <td colspan="5" class="loading-cell">Loading daily sales reports...</td>
+                            <td colspan="4" class="loading-cell">Loading daily sales reports...</td>
                         </tr>
                     }
                     else if (pendingDailySales.Count == 0)
                     {
                         <tr>
-                            <td colspan="5" class="empty-cell">No daily sales reports found for this filter.</td>
+                            <td colspan="4" class="empty-cell">No daily sales reports found for this filter.</td>
                         </tr>
                     }
                     else
@@ -169,32 +168,6 @@
                                 </td>
                                 <td>
                                     <span style="color: @(report.Status == "Verified" ? "#065F46" : report.Status == "Rejected" ? "#991B1B" : "#D97706"); font-weight: 600;">@report.Status</span>
-                                </td>
-                                <td class="actions-cell" @onclick:stopPropagation="true">
-                                    @if (report.Status == "Pending")
-                                    {
-                                        <button class="action-btn approve-btn" @onclick='() => HandleApproveDailySales(report.CashierUserId, report.SaleDate)' title="Approve Daily Sales" disabled="@isProcessing">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                <polyline points="20 6 9 17 4 12"></polyline>
-                                            </svg>
-                                        </button>
-                                        <button class="action-btn cancel-btn" @onclick='() => HandleRejectDailySales(report.CashierUserId, report.SaleDate)' title="Reject Daily Sales" disabled="@isProcessing">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                <path d="M18 6 6 18"></path>
-                                                <path d="m6 6 12 12"></path>
-                                            </svg>
-                                        </button>
-                                    }
-                                    else
-                                    {
-                                        <div style="font-size: 12px; color: #6b7280; text-align: center;">
-                                            @if (report.VerifiedByName != null && report.VerifiedAt.HasValue)
-                                            {
-                                                <div>@report.VerifiedByName</div>
-                                                <div style="font-size: 11px; color: #9ca3af;">@report.VerifiedAt.Value.ToString("MMM dd, yyyy HH:mm")</div>
-                                            }
-                                        </div>
-                                    }
                                 </td>
                             </tr>
                         }
@@ -969,6 +942,27 @@
     public void Dispose()
     {
         _searchTimer?.Dispose();
+    }
+
+    private string FormatCompactNumber(decimal value)
+    {
+        var absValue = Math.Abs(value);
+        var isNegative = value < 0;
+        string result;
+        if (absValue >= 1_000_000_000_000m) result = FormatWithMaxDigits(absValue / 1_000_000_000_000m) + "T";
+        else if (absValue >= 1_000_000_000m) result = FormatWithMaxDigits(absValue / 1_000_000_000m) + "B";
+        else if (absValue >= 1_000_000m) result = FormatWithMaxDigits(absValue / 1_000_000m) + "M";
+        else if (absValue >= 10_000m) result = FormatWithMaxDigits(absValue / 1_000m) + "K";
+        else result = absValue.ToString("N2");
+        return isNegative ? $"{result} (Debt)" : result;
+    }
+
+    private string FormatWithMaxDigits(decimal num)
+    {
+        if (num >= 1000) return num.ToString("N0");
+        if (num >= 100) return num.ToString("F1");
+        if (num >= 10) return num.ToString("F2");
+        return num.ToString("F3");
     }
 }
 

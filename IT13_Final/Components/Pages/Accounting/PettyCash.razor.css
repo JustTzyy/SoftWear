@@ -300,16 +300,14 @@
    Summary Grid
 ======================================== */
 .summary-grid {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
     gap: 16px;
     margin-bottom: 24px;
 }
 
 .summary-box {
-    flex: 1 1 calc(20% - 13px);
-    min-width: 180px;
-    background: white;
+    background: #f8fafc;
     border: 1px solid #e5e7eb;
     border-radius: 16px;
     padding: 20px;
@@ -337,6 +335,7 @@
     font-size: clamp(14px, 1.8vw, 24px);
     font-weight: 700;
     color: #1a1a1a;
+    text-align: right;
     letter-spacing: -0.5px;
     line-height: 1.2;
     word-break: break-word;
