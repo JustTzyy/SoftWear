@@ -128,20 +128,19 @@
                     <th>Cashier</th>
                     <th>Date</th>
                     <th>Status</th>
-                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 @if (isLoading)
                 {
                     <tr>
-                        <td colspan="6" class="loading-cell">Loading pending returns...</td>
+                        <td colspan="5" class="loading-cell">Loading pending returns...</td>
                     </tr>
                 }
                 else if (pendingReturns.Count == 0)
                 {
                     <tr>
-                        <td colspan="6" class="empty-cell">No pending returns found for this filter.</td>
+                        <td colspan="5" class="empty-cell">No pending returns found for this filter.</td>
                     </tr>
                 }
                 else
@@ -160,19 +159,6 @@
                             </td>
                             <td>
                                 <span class="status-text status-text-pending">@returnItem.Status</span>
-                            </td>
-                            <td class="actions-cell" @onclick:stopPropagation="true">
-                                <button class="action-btn approve-btn" @onclick='() => HandleApproveReturn(returnItem.Id)' title="Approve Return" disabled="@isProcessing">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <polyline points="20 6 9 17 4 12"></polyline>
-                                    </svg>
-                                </button>
-                                <button class="action-btn cancel-btn" @onclick='() => HandleCancelReturn(returnItem.Id)' title="Cancel Return" disabled="@isProcessing">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <path d="M18 6 6 18"></path>
-                                        <path d="m6 6 12 12"></path>
-                                    </svg>
-                                </button>
                             </td>
                         </tr>
                     }
@@ -284,7 +270,7 @@
                                                     @item.ColorName
                                                 </div>
                                             }
-                                            <div class="item-price">Quantity: @item.Quantity | Condition: @item.Condition</div>
+                                            <div class="item-price">Price: ₱@item.Price.ToString("N2") | Quantity: @item.Quantity | Condition: @item.Condition</div>
                                         </div>
                                     </div>
                                 }

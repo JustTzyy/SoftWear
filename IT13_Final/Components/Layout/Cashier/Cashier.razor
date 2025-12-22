@@ -7,14 +7,10 @@
 
 <div class="grid min-h-screen transition-all duration-300 ease-in-out" style="grid-template-columns: @(sidebarCollapsed ? "80px" : "260px") 1fr; background: #e5e7eb;">
     <aside class="bg-white transition-all duration-300 ease-in-out overflow-hidden" style="border-right: 1px solid #E0E0E0;">
-        <div class="flex items-start gap-3 py-4 px-4 cursor-pointer hover:bg-gray-50 transition-colors duration-200" style="min-height: 64px;" @onclick="ToggleSidebar" title="Toggle sidebar">
-            <a href="/cashier/dashboard" class="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style="border: 2px solid #5C7CFA; padding: 6px; background-color: #1a2332;" @onclick:stopPropagation>
+        <div class="flex items-center justify-center py-4 px-4 cursor-pointer hover:bg-gray-50 transition-colors duration-200" style="min-height: 64px;" @onclick="ToggleSidebar" title="Toggle sidebar">
+            <a href="/cashier/dashboard" class="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0" style="border: 2px solid #5C7CFA; padding: 6px; background-color: #1a2332;" @onclick:stopPropagation>
                 <img src="/images/logo.png" alt="Logo" class="w-full h-full object-contain" style="display: block; margin: auto;" />
             </a>
-            <div class="transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap" style="opacity: @(sidebarCollapsed ? "0" : "1"); width: @(sidebarCollapsed ? "0" : "auto");">
-                <div class="font-extrabold tracking-wide text-sm leading-tight">SOFTWEAR</div>
-                <div class="text-gray-500 text-xs -mt-0.5">Cashier</div>
-            </div>
         </div>
 
         <nav class="grid gap-1 px-2 mt-1">

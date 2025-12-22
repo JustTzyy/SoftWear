@@ -10,7 +10,7 @@
 @* Welcome Header *@
 <div class="welcome-header">
     <div class="welcome-content">
-        <h1 class="welcome-greeting">Subscription Management</h1>
+        <h1 class="welcome-greeting">Business License Management</h1>
         <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
     </div>
     <div class="header-actions">
@@ -72,7 +72,7 @@
 {
     <div class="loading-state">
         <div class="loading-spinner"></div>
-        <p>Loading subscription data...</p>
+        <p>Loading license data...</p>
     </div>
 }
 else
@@ -124,7 +124,7 @@ else
                 <span class="kpi-label">Active Sellers</span>
                 <span class="kpi-value">@sellerSummaries.Count</span>
                 <span class="kpi-trend">
-                    <span>With subscriptions</span>
+                    <span>With licenses</span>
                 </span>
             </div>
         </div>
@@ -138,7 +138,7 @@ else
                 </svg>
             </div>
             <div class="kpi-content">
-                <span class="kpi-label">Subscription Plans</span>
+                <span class="kpi-label">License Plans</span>
                 <span class="kpi-value">@subscriptionPlans.Count</span>
                 <span class="kpi-trend">
                     <span>Available plans</span>
@@ -161,7 +161,7 @@ else
                         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
                         <circle cx="9" cy="7" r="4"></circle>
                     </svg>
-                    <span>No seller subscription data found</span>
+                    <span>No seller license data found</span>
                 </div>
             }
             else

@@ -6,51 +6,54 @@
 @inject NavigationManager Nav
 @implements IDisposable
 
-<div class="subscription-container">
-    <div class="subscription-header">
-        <h1 class="page-title">Choose Your Subscription Plan</h1>
-        <p class="page-subtitle">Select the plan that best fits your business needs. You can upgrade or downgrade at any time.</p>
+@* Welcome Header - Matching Dashboard Design *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Business License Plans</h1>
+        <p class="welcome-date">Select the plan that best fits your business needs</p>
     </div>
+</div>
 
-    @if (isLoading)
-    {
-        <div class="loading-container">
-            <div class="loading-spinner"></div>
-            <p>Loading subscription plans...</p>
-        </div>
-    }
-    else if (!string.IsNullOrEmpty(errorMessage))
-    {
-        <div class="error-message">
+@if (currentSubscription != null)
+{
+    <div class="current-plan-banner">
+        <div class="banner-content">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="8" x2="12" y2="12"></line>
-                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
             </svg>
-            <span>@errorMessage</span>
-        </div>
-    }
-    else
-    {
-        @if (currentSubscription != null)
-        {
-            <div class="current-plan-banner">
-                <div class="banner-content">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                    </svg>
-                    <div>
-                        <strong>Current Plan:</strong> @currentSubscription.PlanName
-                        <span class="plan-badge @currentSubscription.PlanCode.ToLower()">@currentSubscription.PlanCode</span>
-                    </div>
-                </div>
-                <div class="banner-details">
-                    <span>Admin Fee: @currentSubscription.AdminFeePercentage.ToString("0.0")%</span>
-                    <span>Since: @currentSubscription.StartDate.ToString("MMM dd, yyyy")</span>
-                </div>
+            <div>
+                <strong>Current Plan:</strong> @currentSubscription.PlanName
+                <span class="plan-badge @currentSubscription.PlanCode.ToLower()">@currentSubscription.PlanCode</span>
             </div>
-        }
+        </div>
+        <div class="banner-details">
+            <span>Admin Fee: @currentSubscription.AdminFeePercentage.ToString("0.0")%</span>
+            <span>Since: @currentSubscription.StartDate.ToString("MMM dd, yyyy")</span>
+        </div>
+    </div>
+}
+
+@if (isLoading)
+{
+    <div class="loading-state">
+        <div class="loading-spinner"></div>
+        <p>Loading license plans...</p>
+    </div>
+}
+else if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="error-message">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        <span>@errorMessage</span>
+    </div>
+}
+else
+{
 
         <div class="plans-grid">
             @foreach (var plan in plans)
@@ -67,17 +70,6 @@
                     
                     <div class="plan-header">
                         <h2 class="plan-name">@plan.Name</h2>
-                        <div class="plan-price">
-                            @if (plan.Price > 0)
-                            {
-                                <span class="price-amount">$@plan.Price.ToString("0.00")</span>
-                                <span class="price-period">/month</span>
-                            }
-                            else
-                            {
-                                <span class="price-amount">Free</span>
-                            }
-                        </div>
                         <div class="admin-fee">
                             <span class="fee-percentage">@plan.AdminFeePercentage.ToString("0.0")%</span>
                             <span class="fee-label">admin fee per transaction</span>
@@ -242,8 +234,7 @@
                 <span>@successMessage</span>
             </div>
         }
-    }
-</div>
+}
 
 @code {
     private List<IT13_Final.Services.Data.SubscriptionPlanModel> plans = new();
@@ -284,7 +275,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"Failed to load subscription data: {ex.Message}";
+            errorMessage = $"Failed to load license data: {ex.Message}";
         }
         finally
         {
@@ -355,8 +346,8 @@
                 
                 try 
                 { 
-                    await HistoryService.LogAsync(userId, "subscription_change", "Subscription", 
-                        $"Subscription {action} to {plan?.Name ?? "unknown"} plan"); 
+                    await HistoryService.LogAsync(userId, "license_change", "Business License", 
+                        $"License {action} to {plan?.Name ?? "unknown"} plan"); 
                 } 
                 catch { }
 
@@ -366,12 +357,12 @@
             }
             else
             {
-                errorMessage = "Failed to update subscription. Please try again.";
+                errorMessage = "Failed to update license. Please try again.";
             }
         }
         catch (Exception ex)
         {
-            errorMessage = $"Error updating subscription: {ex.Message}";
+            errorMessage = $"Error updating license: {ex.Message}";
         }
         finally
         {

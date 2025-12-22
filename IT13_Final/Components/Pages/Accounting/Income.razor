@@ -85,11 +85,11 @@
         <div class="summary-grid">
             <div class="summary-box">
                 <div class="summary-label">Total Gross Sales</div>
-                <div class="summary-value">₱@(incomeData?.TotalGrossSales.ToString("N2") ?? "0.00")</div>
+                <div class="summary-value">₱@FormatCompactNumber(incomeData?.TotalGrossSales ?? 0)</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Net Income</div>
-                <div class="summary-value">₱@(incomeData?.NetIncome.ToString("N2") ?? "0.00")</div>
+                <div class="summary-value">₱@FormatCompactNumber(incomeData?.NetIncome ?? 0)</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Total Transactions</div>
@@ -97,15 +97,15 @@
             </div>
             <div class="summary-box">
                 <div class="summary-label">Total Returns</div>
-                <div class="summary-value" style="color: #dc3545;">₱@(incomeData?.TotalReturns.ToString("N2") ?? "0.00")</div>
+                <div class="summary-value" style="color: #dc3545;">₱@FormatCompactNumber(incomeData?.TotalReturns ?? 0)</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">VAT (12%)</div>
-                <div class="summary-value">₱@vatAmount.ToString("N2")</div>
+                <div class="summary-value">₱@FormatCompactNumber(vatAmount)</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Admin Fee (2%)</div>
-                <div class="summary-value">₱@adminFeeAmount.ToString("N2")</div>
+                <div class="summary-value">₱@FormatCompactNumber(adminFeeAmount)</div>
             </div>
         </div>
     </div>
@@ -384,11 +384,14 @@ else
                 onlyApprovedDays
             );
 
-            // Calculate VAT (12% on total gross sales)
-            vatAmount = incomeData?.TotalGrossSales * 0.12m ?? 0m;
+            // Calculate VAT (12% on net income after returns)
+            vatAmount = incomeData?.NetIncome * 0.12m ?? 0m;
 
-            // Calculate Admin Fee (2% per product)
-            await CalculateAdminFee();
+            // Calculate Admin Fee (2% on net income after returns)
+            adminFeeAmount = incomeData?.NetIncome * 0.02m ?? 0m;
+            
+            // Debug logging
+            await JSRuntime.InvokeVoidAsync("console.log", $"[Accounting Income] GrossSales: {incomeData?.TotalGrossSales}, Returns: {incomeData?.TotalReturns}, NetIncome: {incomeData?.NetIncome}, VAT: {vatAmount}, AdminFee: {adminFeeAmount}");
         }
         catch (Exception ex)
         {
@@ -477,79 +480,6 @@ else
         await LoadIncomeData();
     }
 
-    private async Task CalculateAdminFee()
-    {
-        try
-        {
-            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
-            using var conn = new SqlConnection(connectionString);
-            await conn.OpenAsync();
-
-            var sql = @"
-                SELECT SUM(si.subtotal) as total_revenue
-                FROM dbo.tbl_sales_items si
-                INNER JOIN dbo.tbl_sales s ON si.sale_id = s.id
-                INNER JOIN dbo.tbl_users u ON s.user_id = u.id
-                WHERE s.archives IS NULL
-                AND si.archives IS NULL
-                AND s.status = 'Completed'
-                AND u.archived_at IS NULL";
-
-            if (sellerUserId > 0)
-            {
-                sql += " AND u.user_id = @SellerUserId";
-            }
-
-            if (startDate.HasValue)
-            {
-                sql += " AND CAST(s.timestamps AS DATE) >= @StartDate";
-            }
-
-            if (endDate.HasValue)
-            {
-                sql += " AND CAST(s.timestamps AS DATE) <= @EndDate";
-            }
-
-            if (onlyApprovedDays)
-            {
-                sql += @"
-                    AND EXISTS (
-                        SELECT 1 FROM dbo.tbl_daily_sales_verifications dsv
-                        WHERE dsv.cashier_user_id = s.user_id
-                        AND dsv.sale_date = CAST(s.timestamps AS DATE)
-                        AND dsv.status = 'Approved'
-                        AND dsv.archived_at IS NULL";
-                if (sellerUserId > 0)
-                {
-                    sql += " AND dsv.seller_user_id = @SellerUserId";
-                }
-                sql += ")";
-            }
-
-            using var cmd = new SqlCommand(sql, conn);
-            if (sellerUserId > 0)
-            {
-                cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
-            }
-            if (startDate.HasValue)
-            {
-                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
-            }
-            if (endDate.HasValue)
-            {
-                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
-            }
-
-            var result = await cmd.ExecuteScalarAsync();
-            var totalRevenue = result != null && result != DBNull.Value ? Convert.ToDecimal(result) : 0m;
-            adminFeeAmount = totalRevenue * 0.02m;
-        }
-        catch (Exception ex)
-        {
-            await JSRuntime.InvokeVoidAsync("console.error", $"Error calculating admin fee: {ex.Message}");
-            adminFeeAmount = 0m;
-        }
-    }
 
     private string GetDateRangeText()
     {
@@ -650,5 +580,26 @@ else
     public void Dispose()
     {
         // Cleanup if needed
+    }
+
+    private string FormatCompactNumber(decimal value)
+    {
+        var absValue = Math.Abs(value);
+        var isNegative = value < 0;
+        string result;
+        if (absValue >= 1_000_000_000_000m) result = FormatWithMaxDigits(absValue / 1_000_000_000_000m) + "T";
+        else if (absValue >= 1_000_000_000m) result = FormatWithMaxDigits(absValue / 1_000_000_000m) + "B";
+        else if (absValue >= 1_000_000m) result = FormatWithMaxDigits(absValue / 1_000_000m) + "M";
+        else if (absValue >= 10_000m) result = FormatWithMaxDigits(absValue / 1_000m) + "K";
+        else result = absValue.ToString("N2");
+        return isNegative ? $"{result} (Debt)" : result;
+    }
+
+    private string FormatWithMaxDigits(decimal num)
+    {
+        if (num >= 1000) return num.ToString("N0");
+        if (num >= 100) return num.ToString("F1");
+        if (num >= 10) return num.ToString("F2");
+        return num.ToString("F3");
     }
 }

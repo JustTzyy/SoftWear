@@ -14,23 +14,23 @@
             <img src="/images/logo.png" alt="Logo" style="width: 100%; height: 100%; object-fit: contain;" />
         </div>
 
-        <h1 class="mt-2 mb-0 text-[26px] tracking-[2px] font-extrabold text-white drop-shadow-md">SOFTWEAR</h1>
+        <h1 class="mt-4 mb-0 text-[26px] tracking-[2px] font-extrabold text-white drop-shadow-md">SOFTWEAR</h1>
         <p class="mt-2 mb-0 text-white text-sm font-medium">Welcome back!</p>
-        <p class="mt-0.5 mb-0 text-gray-100 text-sm">Please sign in to your account</p>
+        <p class="mt-1 mb-6 text-gray-100 text-sm">Please sign in to your account</p>
 
         <EditForm Model="_loginModel" OnValidSubmit="HandleLoginAsync">
             <DataAnnotationsValidator />
 
-            <div class="relative mt-[18px] mb-[30px]">
-                <input @bind-value="_loginModel.Email" @bind-value:event="oninput" placeholder="Email" class="w-full h-[46px] px-[14px] pr-[52px] rounded-[10px] border-2 border-air-blue bg-white outline-none transition-[border-color,box-shadow] duration-200 text-[15px] focus:border-yinmn-blue focus:shadow-[0_0_0_4px_rgba(48,77,109,0.25)]" />
-                <div class="absolute top-[calc(100%+6px)] left-[14px] h-[18px] leading-[18px] text-left">
+            <div class="relative mb-4">
+                <input @bind-value="_loginModel.Email" @bind-value:event="oninput" placeholder="Email" class="w-full h-[46px] px-4 pr-12 rounded-[10px] border-2 border-air-blue bg-white outline-none transition-[border-color,box-shadow] duration-200 text-[15px] focus:border-yinmn-blue focus:shadow-[0_0_0_4px_rgba(48,77,109,0.25)]" />
+                <div class="absolute top-[calc(100%+4px)] left-4 h-[18px] leading-[18px] text-left">
                     <ValidationMessage For="@(() => _loginModel.Email)" />
                 </div>
             </div>
 
-            <div class="relative mt-[18px] mb-[30px]">
-                <input type="@(isPasswordVisible ? "text" : "password")" @bind-value="_loginModel.Password" @bind-value:event="oninput" placeholder="Password" class="w-full h-[46px] px-[14px] pr-[52px] rounded-[10px] border-2 border-air-blue bg-white outline-none transition-[border-color,box-shadow] duration-200 text-[15px] focus:border-yinmn-blue focus:shadow-[0_0_0_4px_rgba(48,77,109,0.25)]" />
-                <button type="button" class="absolute right-0 top-0 h-[46px] w-[46px] border-none bg-transparent cursor-pointer grid place-items-center" @onclick="TogglePasswordVisibility" aria-label="@(isPasswordVisible ? "Hide password" : "Show password")">
+            <div class="relative mb-4">
+                <input type="@(isPasswordVisible ? "text" : "password")" @bind-value="_loginModel.Password" @bind-value:event="oninput" placeholder="Password" class="w-full h-[46px] px-4 pr-12 rounded-[10px] border-2 border-air-blue bg-white outline-none transition-[border-color,box-shadow] duration-200 text-[15px] focus:border-yinmn-blue focus:shadow-[0_0_0_4px_rgba(48,77,109,0.25)]" />
+                <button type="button" class="absolute right-0 top-0 h-[46px] w-12 border-none bg-transparent cursor-pointer grid place-items-center" @onclick="TogglePasswordVisibility" aria-label="@(isPasswordVisible ? "Hide password" : "Show password")">
                     @if (isPasswordVisible)
                     {
                         <!-- eye-off icon -->
@@ -49,15 +49,15 @@
                         </svg>
                     }
                 </button>
-                <div class="absolute top-[calc(100%+6px)] left-[14px] h-[18px] leading-[18px] text-left">
+                <div class="absolute top-[calc(100%+4px)] left-4 h-[18px] leading-[18px] text-left">
                     <ValidationMessage For="@(() => _loginModel.Password)" />
                 </div>
             </div>
 
-            <button type="submit" class="mx-auto block w-3/4 mt-6 h-10 rounded-xl border-none text-white font-bold tracking-wide bg-[#3C506A] shadow-[0_6px_16px_rgba(0,0,0,0.3)] cursor-pointer transition-[filter,transform] duration-150 hover:brightness-[1.1] active:translate-y-[1px]">LOGIN</button>
+            <button type="submit" class="w-full mt-2 h-[46px] rounded-[10px] border-none text-white font-bold tracking-wide bg-[#3C506A] shadow-[0_6px_16px_rgba(0,0,0,0.3)] cursor-pointer transition-[filter,transform] duration-150 hover:brightness-[1.1] active:translate-y-[1px]">LOGIN</button>
             @if (!string.IsNullOrEmpty(_loginError))
             {
-                <div class="text-red-700 text-xs mt-2.5 text-center whitespace-nowrap overflow-hidden text-ellipsis font-medium">@_loginError</div>
+                <div class="text-[#F5A9A9] text-xs mt-3 text-center whitespace-nowrap overflow-hidden text-ellipsis font-medium">@_loginError</div>
             }
         </EditForm>
     </div>
@@ -165,7 +165,7 @@
                 
                 if (accessDenied)
                 {
-                    _loginError = $"Access denied. Your seller's subscription plan does not include {deniedModule} module access.";
+                    _loginError = $"Access denied. Your seller's business license plan does not include {deniedModule} module access.";
                     AuthState.Logout();
                     StateHasChanged();
                     return;
@@ -177,7 +177,7 @@
                      user.Role.Equals("stock clerk", StringComparison.OrdinalIgnoreCase))
             {
                 // Staff without seller subscription - block access
-                _loginError = "Access denied. Your seller does not have an active subscription.";
+                _loginError = "Access denied. Your seller does not have an active business license.";
                 AuthState.Logout();
                 StateHasChanged();
                 return;

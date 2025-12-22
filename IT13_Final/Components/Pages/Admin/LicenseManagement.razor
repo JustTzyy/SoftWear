@@ -1,0 +1,727 @@
+@page "/admin/licenses"
+@layout IT13_Final.Components.Layout.Admin.Admin
+@inject IT13_Final.Services.Auth.AuthState AuthState
+@inject IT13_Final.Services.Audit.IHistoryService HistoryService
+@inject NavigationManager Nav
+@inject IJSRuntime JSRuntime
+@using Microsoft.Data.SqlClient
+@implements IDisposable
+
+@* Welcome Header *@
+<div class="welcome-header">
+    <div class="welcome-content">
+        <h1 class="welcome-greeting">Business License Plans</h1>
+        <p class="welcome-date">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+    </div>
+    <div class="header-actions">
+        <button class="action-btn print-btn" @onclick="PrintLicenses" title="Print records">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 9V2h12v7"></path>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                <rect x="6" y="14" width="12" height="8"></rect>
+            </svg>
+        </button>
+    </div>
+</div>
+
+@* Search Filter *@
+<div class="dashboard-filters">
+    <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.3-4.3"></path>
+        </svg>
+        <input type="text" class="search-input" placeholder="Search by name or code..." @bind="searchTerm" @bind:event="oninput" />
+        @if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            <button class="clear-search-btn" @onclick="ClearSearch" title="Clear search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        }
+    </div>
+    <div class="date-filters">
+        <select class="date-select" @bind="statusFilter" @bind:after="LoadLicensePlans">
+            <option value="">All Status</option>
+            <option value="active">Active Only</option>
+            <option value="inactive">Inactive Only</option>
+        </select>
+    </div>
+</div>
+
+@if (showSuccessMessage && !string.IsNullOrEmpty(successMessageText))
+{
+    <div class="success-banner">
+        <svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+        </svg>
+        <span>@successMessageText</span>
+    </div>
+}
+
+@* License Plans Card *@
+<div class="content-card">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h3 class="card-title">License Plans</h3>
+            <span class="card-subtitle">@filteredPlans.Count total plans</span>
+        </div>
+        <div class="card-actions">
+            <button class="card-action-btn primary" @onclick="HandleAddLicense">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="12" y1="9" x2="12" y2="15"></line>
+                    <line x1="9" y1="12" x2="15" y2="12"></line>
+                </svg>
+                <span>Add License Plan</span>
+            </button>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Code</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="4" class="loading-cell">Loading...</td>
+                    </tr>
+                }
+                else if (filteredPlans.Count == 0)
+                {
+                    <tr>
+                        <td colspan="4" class="empty-cell">No license plans found</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var plan in filteredPlans)
+                    {
+                        <tr class="clickable-row" @onclick="() => HandleRowClick(plan.Id)">
+                            <td>@plan.Id</td>
+                            <td class="user-name">@plan.Name</td>
+                            <td class="code-text @plan.Code.ToLower()">@plan.Code</td>
+                            <td class="actions-cell" @onclick:stopPropagation>
+                                <button class="action-btn edit-btn" @onclick="() => HandleEdit(plan.Id)" title="Edit license">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
+                                        <path d="m15 5 4 4"></path>
+                                    </svg>
+                                </button>
+                                <button class="action-btn @(plan.IsActive ? "delete-btn" : "restore-btn")" 
+                                        @onclick="() => ToggleStatus(plan.Id, plan.IsActive)" 
+                                        title="@(plan.IsActive ? "Deactivate" : "Activate")">
+                                    @if (plan.IsActive)
+                                    {
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <circle cx="12" cy="12" r="10"></circle>
+                                            <line x1="15" y1="9" x2="9" y2="15"></line>
+                                            <line x1="9" y1="9" x2="15" y2="15"></line>
+                                        </svg>
+                                    }
+                                    else
+                                    {
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                        </svg>
+                                    }
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@* View License Details Modal *@
+@if (showDetails && selectedPlan != null)
+{
+    <div class="modal-overlay" @onclick="CloseDetails">
+        <div class="modal-container" @onclick:stopPropagation>
+            <div class="modal-header">
+                <div class="modal-title">
+                    <svg class="modal-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                    </svg>
+                    <span>License Plan Details</span>
+                </div>
+                <button class="modal-close" @onclick="CloseDetails" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                    <span class="modal-close-text">Close</span>
+                </button>
+            </div>
+
+            <div class="modal-content">
+                <div class="details-column">
+                    <div class="details-section">
+                        <div class="details-section-header">
+                            <span class="section-icon-emoji">📋</span>
+                            <span class="section-title">Plan Information</span>
+                        </div>
+                        <div class="details-list">
+                            <div class="detail-item">
+                                <span class="detail-label">Plan Name</span>
+                                <span class="detail-value">@selectedPlan.Name</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Code</span>
+                                <span class="detail-value">@selectedPlan.Code</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Admin Fee</span>
+                                <span class="detail-value">@selectedPlan.AdminFeePercentage.ToString("0.0")%</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Price</span>
+                                <span class="detail-value">@(selectedPlan.Price > 0 ? $"${selectedPlan.Price:N2}/month" : "Free")</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Status</span>
+                                <span class="detail-value status-badge @(selectedPlan.IsActive ? "active" : "inactive")">
+                                    @(selectedPlan.IsActive ? "Active" : "Inactive")
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="details-column">
+                    <div class="details-section">
+                        <div class="details-section-header">
+                            <span class="section-icon-emoji">🔧</span>
+                            <span class="section-title">Module Access</span>
+                        </div>
+                        <div class="details-list">
+                            <div class="detail-item">
+                                <span class="detail-label">Stock Clerk Module</span>
+                                <span class="detail-value module-status @(selectedPlan.HasStockClerkAccess ? "enabled" : "disabled")">
+                                    @(selectedPlan.HasStockClerkAccess ? "✓ Enabled" : "✗ Disabled")
+                                </span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Cashier Module</span>
+                                <span class="detail-value module-status @(selectedPlan.HasCashierAccess ? "enabled" : "disabled")">
+                                    @(selectedPlan.HasCashierAccess ? "✓ Enabled" : "✗ Disabled")
+                                </span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Accounting Module</span>
+                                <span class="detail-value module-status @(selectedPlan.HasAccountingAccess ? "enabled" : "disabled")">
+                                    @(selectedPlan.HasAccountingAccess ? "✓ Enabled" : "✗ Disabled")
+                                </span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Full Reports Access</span>
+                                <span class="detail-value module-status @(selectedPlan.HasFullReportsAccess ? "enabled" : "disabled")">
+                                    @(selectedPlan.HasFullReportsAccess ? "✓ Enabled" : "✗ Disabled")
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="details-section" style="margin-top: 16px;">
+                        <div class="details-section-header">
+                            <span class="section-icon-emoji">📝</span>
+                            <span class="section-title">Description</span>
+                        </div>
+                        <p class="description-text">@(string.IsNullOrEmpty(selectedPlan.Description) ? "No description available." : selectedPlan.Description)</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* Add/Edit License Modal *@
+@if (showEditModal)
+{
+    <div class="modal-overlay" @onclick="CloseEditModal">
+        <div class="add-admin-modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2 class="modal-title-text">@(isEditing ? "Edit License Plan" : "Add License Plan")</h2>
+                <button class="modal-close-btn" @onclick="CloseEditModal" title="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="form-field">
+                        <label class="field-label">Plan Name <span class="required-asterisk">*</span></label>
+                        <input class="form-input" @bind="editModel.Name" placeholder="Enter plan name" />
+                    </div>
+                    <div class="form-field">
+                        <label class="field-label">Code <span class="required-asterisk">*</span></label>
+                        <input class="form-input" @bind="editModel.Code" placeholder="e.g., BASIC, PRO" style="text-transform: uppercase;" />
+                    </div>
+                    <div class="form-field">
+                        <label class="field-label">Admin Fee (%)</label>
+                        <input type="number" step="0.1" min="0" max="100" class="form-input" @bind="editModel.AdminFeePercentage" />
+                    </div>
+                    <div class="form-field">
+                        <label class="field-label">Price ($/month)</label>
+                        <input type="number" step="0.01" min="0" class="form-input" @bind="editModel.Price" />
+                    </div>
+                    <div class="form-field full-width">
+                        <label class="field-label">Description</label>
+                        <textarea class="form-input textarea" @bind="editModel.Description" placeholder="Enter plan description" rows="3"></textarea>
+                    </div>
+                </div>
+
+                <div class="modules-section">
+                    <h4 class="modules-title">Module Access</h4>
+                    <div class="modules-grid">
+                        <label class="module-checkbox">
+                            <input type="checkbox" @bind="editModel.HasStockClerkAccess" />
+                            <span class="checkbox-label">Stock Clerk Module</span>
+                        </label>
+                        <label class="module-checkbox">
+                            <input type="checkbox" @bind="editModel.HasCashierAccess" />
+                            <span class="checkbox-label">Cashier Module</span>
+                        </label>
+                        <label class="module-checkbox">
+                            <input type="checkbox" @bind="editModel.HasAccountingAccess" />
+                            <span class="checkbox-label">Accounting Module</span>
+                        </label>
+                        <label class="module-checkbox">
+                            <input type="checkbox" @bind="editModel.HasFullReportsAccess" />
+                            <span class="checkbox-label">Full Reports Access</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="status-section">
+                    <label class="module-checkbox">
+                        <input type="checkbox" @bind="editModel.IsActive" />
+                        <span class="checkbox-label">Plan is Active</span>
+                    </label>
+                </div>
+
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="error-message">@errorMessage</div>
+                }
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn-cancel" @onclick="CloseEditModal">Cancel</button>
+                <button class="btn-save" @onclick="SaveLicensePlan" disabled="@isSaving">
+                    @if (isSaving)
+                    {
+                        <span>Saving...</span>
+                    }
+                    else
+                    {
+                        <span>@(isEditing ? "Update Plan" : "Create Plan")</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private const string ConnectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+    
+    private List<LicensePlanModel> licensePlans = new();
+    private List<LicensePlanModel> filteredPlans => string.IsNullOrWhiteSpace(searchTerm)
+        ? licensePlans
+        : licensePlans.Where(p => 
+            p.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+            p.Code.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)).ToList();
+    
+    private string searchTerm = "";
+    private string statusFilter = "";
+    private bool isLoading = true;
+    private bool showSuccessMessage = false;
+    private string successMessageText = "";
+    
+    private bool showDetails = false;
+    private LicensePlanModel? selectedPlan;
+    
+    private bool showEditModal = false;
+    private bool isEditing = false;
+    private bool isSaving = false;
+    private string errorMessage = "";
+    private LicensePlanEditModel editModel = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        AuthState.Changed += StateHasChanged;
+        await LoadLicensePlans();
+    }
+
+    private async Task LoadLicensePlans()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            licensePlans.Clear();
+            using var conn = new SqlConnection(ConnectionString);
+            await conn.OpenAsync();
+
+            var statusCondition = statusFilter switch
+            {
+                "active" => "AND is_active = 1",
+                "inactive" => "AND is_active = 0",
+                _ => ""
+            };
+
+            var sql = $@"
+                SELECT id, name, code, description, price, admin_fee_percentage,
+                       has_stock_clerk_access, has_cashier_access, has_accounting_access,
+                       has_full_reports_access, is_active, display_order, created_at, updated_at
+                FROM dbo.tbl_subscription_plans
+                WHERE 1=1 {statusCondition}
+                ORDER BY display_order, name";
+
+            using var cmd = new SqlCommand(sql, conn);
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+            {
+                licensePlans.Add(new LicensePlanModel
+                {
+                    Id = reader.GetInt32(0),
+                    Name = reader.IsDBNull(1) ? "" : reader.GetString(1),
+                    Code = reader.IsDBNull(2) ? "" : reader.GetString(2),
+                    Description = reader.IsDBNull(3) ? "" : reader.GetString(3),
+                    Price = reader.IsDBNull(4) ? 0 : reader.GetDecimal(4),
+                    AdminFeePercentage = reader.IsDBNull(5) ? 0 : reader.GetDecimal(5),
+                    HasStockClerkAccess = !reader.IsDBNull(6) && reader.GetBoolean(6),
+                    HasCashierAccess = !reader.IsDBNull(7) && reader.GetBoolean(7),
+                    HasAccountingAccess = !reader.IsDBNull(8) && reader.GetBoolean(8),
+                    HasFullReportsAccess = !reader.IsDBNull(9) && reader.GetBoolean(9),
+                    IsActive = !reader.IsDBNull(10) && reader.GetBoolean(10),
+                    DisplayOrder = reader.IsDBNull(11) ? 0 : reader.GetInt32(11),
+                    CreatedAt = reader.IsDBNull(12) ? DateTime.Now : reader.GetDateTime(12),
+                    UpdatedAt = reader.IsDBNull(13) ? null : reader.GetDateTime(13)
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading license plans: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ClearSearch()
+    {
+        searchTerm = "";
+    }
+
+    private void HandleRowClick(int id)
+    {
+        selectedPlan = licensePlans.FirstOrDefault(p => p.Id == id);
+        if (selectedPlan != null)
+        {
+            showDetails = true;
+        }
+    }
+
+    private void CloseDetails()
+    {
+        showDetails = false;
+        selectedPlan = null;
+    }
+
+    private void HandleAddLicense()
+    {
+        isEditing = false;
+        editModel = new LicensePlanEditModel
+        {
+            AdminFeePercentage = 2.0m,
+            IsActive = true
+        };
+        errorMessage = "";
+        showEditModal = true;
+    }
+
+    private void HandleEdit(int id)
+    {
+        var plan = licensePlans.FirstOrDefault(p => p.Id == id);
+        if (plan != null)
+        {
+            isEditing = true;
+            editModel = new LicensePlanEditModel
+            {
+                Id = plan.Id,
+                Name = plan.Name,
+                Code = plan.Code,
+                Description = plan.Description,
+                Price = plan.Price,
+                AdminFeePercentage = plan.AdminFeePercentage,
+                HasStockClerkAccess = plan.HasStockClerkAccess,
+                HasCashierAccess = plan.HasCashierAccess,
+                HasAccountingAccess = plan.HasAccountingAccess,
+                HasFullReportsAccess = plan.HasFullReportsAccess,
+                IsActive = plan.IsActive
+            };
+            errorMessage = "";
+            showEditModal = true;
+        }
+    }
+
+    private void CloseEditModal()
+    {
+        showEditModal = false;
+        editModel = new();
+        errorMessage = "";
+    }
+
+    private async Task SaveLicensePlan()
+    {
+        if (string.IsNullOrWhiteSpace(editModel.Name))
+        {
+            errorMessage = "Plan name is required.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(editModel.Code))
+        {
+            errorMessage = "Plan code is required.";
+            return;
+        }
+
+        isSaving = true;
+        errorMessage = "";
+        StateHasChanged();
+
+        try
+        {
+            using var conn = new SqlConnection(ConnectionString);
+            await conn.OpenAsync();
+
+            if (isEditing)
+            {
+                var sql = @"
+                    UPDATE dbo.tbl_subscription_plans
+                    SET name = @Name,
+                        code = @Code,
+                        description = @Description,
+                        price = @Price,
+                        admin_fee_percentage = @AdminFee,
+                        has_stock_clerk_access = @StockClerk,
+                        has_cashier_access = @Cashier,
+                        has_accounting_access = @Accounting,
+                        has_full_reports_access = @Reports,
+                        is_active = @IsActive,
+                        updated_at = SYSUTCDATETIME()
+                    WHERE id = @Id";
+
+                using var cmd = new SqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@Id", editModel.Id);
+                cmd.Parameters.AddWithValue("@Name", editModel.Name);
+                cmd.Parameters.AddWithValue("@Code", editModel.Code.ToUpper());
+                cmd.Parameters.AddWithValue("@Description", editModel.Description ?? "");
+                cmd.Parameters.AddWithValue("@Price", editModel.Price);
+                cmd.Parameters.AddWithValue("@AdminFee", editModel.AdminFeePercentage);
+                cmd.Parameters.AddWithValue("@StockClerk", editModel.HasStockClerkAccess);
+                cmd.Parameters.AddWithValue("@Cashier", editModel.HasCashierAccess);
+                cmd.Parameters.AddWithValue("@Accounting", editModel.HasAccountingAccess);
+                cmd.Parameters.AddWithValue("@Reports", editModel.HasFullReportsAccess);
+                cmd.Parameters.AddWithValue("@IsActive", editModel.IsActive);
+
+                await cmd.ExecuteNonQueryAsync();
+                
+                try { await HistoryService.LogAsync(AuthState.CurrentUser?.Id ?? 0, "update", "Business License", $"Updated license plan: {editModel.Name}"); } catch { }
+                
+                ShowSuccess($"License plan '{editModel.Name}' updated successfully!");
+            }
+            else
+            {
+                var sql = @"
+                    INSERT INTO dbo.tbl_subscription_plans 
+                    (name, code, description, price, admin_fee_percentage, 
+                     has_stock_clerk_access, has_cashier_access, has_accounting_access, 
+                     has_full_reports_access, is_active, display_order, created_at)
+                    VALUES 
+                    (@Name, @Code, @Description, @Price, @AdminFee,
+                     @StockClerk, @Cashier, @Accounting, @Reports, @IsActive,
+                     (SELECT ISNULL(MAX(display_order), 0) + 1 FROM dbo.tbl_subscription_plans),
+                     SYSUTCDATETIME())";
+
+                using var cmd = new SqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@Name", editModel.Name);
+                cmd.Parameters.AddWithValue("@Code", editModel.Code.ToUpper());
+                cmd.Parameters.AddWithValue("@Description", editModel.Description ?? "");
+                cmd.Parameters.AddWithValue("@Price", editModel.Price);
+                cmd.Parameters.AddWithValue("@AdminFee", editModel.AdminFeePercentage);
+                cmd.Parameters.AddWithValue("@StockClerk", editModel.HasStockClerkAccess);
+                cmd.Parameters.AddWithValue("@Cashier", editModel.HasCashierAccess);
+                cmd.Parameters.AddWithValue("@Accounting", editModel.HasAccountingAccess);
+                cmd.Parameters.AddWithValue("@Reports", editModel.HasFullReportsAccess);
+                cmd.Parameters.AddWithValue("@IsActive", editModel.IsActive);
+
+                await cmd.ExecuteNonQueryAsync();
+                
+                try { await HistoryService.LogAsync(AuthState.CurrentUser?.Id ?? 0, "create", "Business License", $"Created license plan: {editModel.Name}"); } catch { }
+                
+                ShowSuccess($"License plan '{editModel.Name}' created successfully!");
+            }
+
+            CloseEditModal();
+            await LoadLicensePlans();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error saving license plan: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ToggleStatus(int id, bool currentlyActive)
+    {
+        try
+        {
+            using var conn = new SqlConnection(ConnectionString);
+            await conn.OpenAsync();
+
+            var sql = @"
+                UPDATE dbo.tbl_subscription_plans
+                SET is_active = @IsActive, updated_at = SYSUTCDATETIME()
+                WHERE id = @Id";
+
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@Id", id);
+            cmd.Parameters.AddWithValue("@IsActive", !currentlyActive);
+
+            await cmd.ExecuteNonQueryAsync();
+
+            var plan = licensePlans.FirstOrDefault(p => p.Id == id);
+            var action = currentlyActive ? "deactivated" : "activated";
+            
+            try { await HistoryService.LogAsync(AuthState.CurrentUser?.Id ?? 0, "update", "Business License", $"License plan {plan?.Name} {action}"); } catch { }
+            
+            ShowSuccess($"License plan '{plan?.Name}' {action} successfully!");
+            await LoadLicensePlans();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error toggling status: {ex.Message}");
+        }
+    }
+
+    private void ShowSuccess(string message)
+    {
+        successMessageText = message;
+        showSuccessMessage = true;
+        StateHasChanged();
+        
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(3000);
+            showSuccessMessage = false;
+            await InvokeAsync(StateHasChanged);
+        });
+    }
+
+    private async Task PrintLicenses()
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirmExportPDF");
+        if (!confirmed) return;
+
+        try
+        {
+            var reportData = new
+            {
+                title = "Business License Plans Report",
+                printedBy = AuthState.CurrentUser?.FullName ?? "Admin",
+                printedAt = DateTime.Now.ToString("MMMM dd, yyyy hh:mm tt"),
+                plans = filteredPlans.Select(p => new
+                {
+                    id = p.Id,
+                    name = p.Name,
+                    code = p.Code,
+                    adminFee = $"{p.AdminFeePercentage:0.0}%",
+                    status = p.IsActive ? "Active" : "Inactive",
+                    modules = string.Join(", ", new[] {
+                        p.HasStockClerkAccess ? "Stock" : null,
+                        p.HasCashierAccess ? "Cashier" : null,
+                        p.HasAccountingAccess ? "Accounting" : null,
+                        p.HasFullReportsAccess ? "Reports" : null
+                    }.Where(m => m != null))
+                }).ToList()
+            };
+
+            await JSRuntime.InvokeVoidAsync("generateLicensePlansPDF", reportData);
+            
+            try { await HistoryService.LogAsync(AuthState.CurrentUser?.Id ?? 0, "print", "Business License", "Printed license plans report"); } catch { }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error printing: {ex.Message}");
+        }
+    }
+
+    public void Dispose()
+    {
+        AuthState.Changed -= StateHasChanged;
+    }
+
+    private class LicensePlanModel
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Code { get; set; } = "";
+        public string Description { get; set; } = "";
+        public decimal Price { get; set; }
+        public decimal AdminFeePercentage { get; set; }
+        public bool HasStockClerkAccess { get; set; }
+        public bool HasCashierAccess { get; set; }
+        public bool HasAccountingAccess { get; set; }
+        public bool HasFullReportsAccess { get; set; }
+        public bool IsActive { get; set; }
+        public int DisplayOrder { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
+    }
+
+    private class LicensePlanEditModel
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Code { get; set; } = "";
+        public string Description { get; set; } = "";
+        public decimal Price { get; set; }
+        public decimal AdminFeePercentage { get; set; } = 2.0m;
+        public bool HasStockClerkAccess { get; set; }
+        public bool HasCashierAccess { get; set; }
+        public bool HasAccountingAccess { get; set; }
+        public bool HasFullReportsAccess { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
+}

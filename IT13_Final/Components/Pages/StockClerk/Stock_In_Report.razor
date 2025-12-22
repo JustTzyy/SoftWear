@@ -107,7 +107,7 @@
             </div>
             <div class="summary-box">
                 <div class="summary-label">Total Cost</div>
-                <div class="summary-value">₱@totalCost.ToString("N2")</div>
+                <div class="summary-value">₱@FormatCompactNumber(totalCost)</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">Total Records</div>
@@ -115,7 +115,7 @@
             </div>
             <div class="summary-box">
                 <div class="summary-label">Avg Cost per Item</div>
-                <div class="summary-value">₱@avgCostPerItem.ToString("N2")</div>
+                <div class="summary-value">₱@FormatCompactNumber(avgCostPerItem)</div>
             </div>
         </div>
     </div>
@@ -676,6 +676,27 @@
     public void Dispose()
     {
         _searchTimer?.Dispose();
+    }
+
+    private string FormatCompactNumber(decimal value)
+    {
+        var absValue = Math.Abs(value);
+        var isNegative = value < 0;
+        string result;
+        if (absValue >= 1_000_000_000_000m) result = FormatWithMaxDigits(absValue / 1_000_000_000_000m) + "T";
+        else if (absValue >= 1_000_000_000m) result = FormatWithMaxDigits(absValue / 1_000_000_000m) + "B";
+        else if (absValue >= 1_000_000m) result = FormatWithMaxDigits(absValue / 1_000_000m) + "M";
+        else if (absValue >= 10_000m) result = FormatWithMaxDigits(absValue / 1_000m) + "K";
+        else result = absValue.ToString("N2");
+        return isNegative ? $"{result} (Debt)" : result;
+    }
+
+    private string FormatWithMaxDigits(decimal num)
+    {
+        if (num >= 1000) return num.ToString("N0");
+        if (num >= 100) return num.ToString("F1");
+        if (num >= 10) return num.ToString("F2");
+        return num.ToString("F3");
     }
 }
 

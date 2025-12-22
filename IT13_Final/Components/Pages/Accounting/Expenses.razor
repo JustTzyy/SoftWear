@@ -102,19 +102,19 @@
         <div class="summary-grid">
             <div class="summary-box">
                 <div class="summary-label">Total Expenses</div>
-                <div class="summary-value">₱@totalExpenses.ToString("N2")</div>
+                <div class="summary-value">₱@FormatCompactNumber(totalExpenses)</div>
             </div>
             <div class="summary-box">
-                <div class="summary-label">Total Records</div>
-                <div class="summary-value">@totalCount</div>
+                <div class="summary-label">Stock Adjustments</div>
+                <div class="summary-value" style="color: #dc3545;">₱@FormatCompactNumber(stockAdjustmentLoss)</div>
             </div>
             <div class="summary-box">
-                <div class="summary-label">Avg Expense</div>
-                <div class="summary-value">₱@avgExpense.ToString("N2")</div>
+                <div class="summary-label">Combined Total</div>
+                <div class="summary-value" style="color: #dc3545;">₱@FormatCompactNumber(totalExpenses + stockAdjustmentLoss)</div>
             </div>
             <div class="summary-box">
                 <div class="summary-label">This Month</div>
-                <div class="summary-value">₱@thisMonthExpenses.ToString("N2")</div>
+                <div class="summary-value">₱@FormatCompactNumber(thisMonthExpenses + thisMonthStockLoss)</div>
             </div>
         </div>
     </div>
@@ -500,6 +500,8 @@
     private decimal totalExpenses = 0;
     private decimal avgExpense = 0;
     private decimal thisMonthExpenses = 0;
+    private decimal stockAdjustmentLoss = 0m;
+    private decimal thisMonthStockLoss = 0m;
 
     // Modal states
     private bool showExpenseModal = false;
@@ -521,6 +523,7 @@
         await LoadSellerUserId();
         expenseTypes = await ExpenseService.GetExpenseTypesAsync();
         await LoadExpenses();
+        await CalculateStockAdjustmentLosses();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -600,6 +603,9 @@
             avgExpense = expenses.Count > 0 ? totalExpenses / expenses.Count : 0;
             var thisMonthStart = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
             thisMonthExpenses = expenses.Where(e => e.ExpenseDate >= thisMonthStart).Sum(e => e.Amount);
+            
+            // Recalculate stock adjustment losses when filters change
+            await CalculateStockAdjustmentLosses();
         }
         catch (Exception ex)
         {
@@ -1228,6 +1234,92 @@
     public void Dispose()
     {
         _searchTimer?.Dispose();
+    }
+
+    private string FormatCompactNumber(decimal value)
+    {
+        var absValue = Math.Abs(value);
+        var isNegative = value < 0;
+        string result;
+        if (absValue >= 1_000_000_000_000m) result = FormatWithMaxDigits(absValue / 1_000_000_000_000m) + "T";
+        else if (absValue >= 1_000_000_000m) result = FormatWithMaxDigits(absValue / 1_000_000_000m) + "B";
+        else if (absValue >= 1_000_000m) result = FormatWithMaxDigits(absValue / 1_000_000m) + "M";
+        else if (absValue >= 10_000m) result = FormatWithMaxDigits(absValue / 1_000m) + "K";
+        else result = absValue.ToString("N2");
+        return isNegative ? $"{result} (Debt)" : result;
+    }
+
+    private string FormatWithMaxDigits(decimal num)
+    {
+        if (num >= 1000) return num.ToString("N0");
+        if (num >= 100) return num.ToString("F1");
+        if (num >= 10) return num.ToString("F2");
+        return num.ToString("F3");
+    }
+
+    private async Task CalculateStockAdjustmentLosses()
+    {
+        try
+        {
+            const string connectionString = "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Trusted_Connection=True;TrustServerCertificate=True;";
+            using var conn = new SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            var sql = @"
+                SELECT COALESCE(SUM(sa.quantity_adjusted * v.cost_price), 0) as total_loss
+                FROM dbo.tbl_stock_adjustments sa
+                INNER JOIN dbo.tbl_variants v ON sa.variant_id = v.id
+                WHERE sa.archives IS NULL 
+                AND sa.adjustment_type = 'Decrease'
+                AND v.user_id = @SellerUserId";
+
+            if (startDate.HasValue)
+            {
+                sql += " AND CAST(sa.timestamps AS DATE) >= @StartDate";
+            }
+            if (endDate.HasValue)
+            {
+                sql += " AND CAST(sa.timestamps AS DATE) <= @EndDate";
+            }
+
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+            if (startDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
+            }
+            if (endDate.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+            }
+
+            var result = await cmd.ExecuteScalarAsync();
+            stockAdjustmentLoss = result != null && result != DBNull.Value ? Convert.ToDecimal(result) : 0m;
+
+            // Calculate this month's stock losses
+            var thisMonthStart = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+            var sqlThisMonth = @"
+                SELECT COALESCE(SUM(sa.quantity_adjusted * v.cost_price), 0) as total_loss
+                FROM dbo.tbl_stock_adjustments sa
+                INNER JOIN dbo.tbl_variants v ON sa.variant_id = v.id
+                WHERE sa.archives IS NULL 
+                AND sa.adjustment_type = 'Decrease'
+                AND v.user_id = @SellerUserId
+                AND CAST(sa.timestamps AS DATE) >= @ThisMonthStart";
+
+            using var cmdThisMonth = new SqlCommand(sqlThisMonth, conn);
+            cmdThisMonth.Parameters.AddWithValue("@SellerUserId", sellerUserId);
+            cmdThisMonth.Parameters.AddWithValue("@ThisMonthStart", thisMonthStart);
+
+            var resultThisMonth = await cmdThisMonth.ExecuteScalarAsync();
+            thisMonthStockLoss = resultThisMonth != null && resultThisMonth != DBNull.Value ? Convert.ToDecimal(resultThisMonth) : 0m;
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error calculating stock adjustment losses: {ex.Message}");
+            stockAdjustmentLoss = 0m;
+            thisMonthStockLoss = 0m;
+        }
     }
 }
 
