@@ -7,7 +7,7 @@ param(
     [string]$AzureServer = "jussstzy.database.windows.net",
     [string]$AzureDatabase = "db_SoftWear",
     [string]$AzureUsername = "justin",
-    [string]$AzurePassword = "<your-password>",
+    [string]$AzurePassword = $env:AZURE_SQL_PASSWORD,
     [switch]$SkipExisting = $true
 )
 

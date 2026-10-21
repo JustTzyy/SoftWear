@@ -5,7 +5,7 @@ param(
     [string]$ServerName = "jussstzy.database.windows.net",
     [string]$DatabaseName = "db_SoftWear",
     [string]$Username = "justin",
-    [string]$Password = "<your-password>"
+    [string]$Password = $env:AZURE_SQL_PASSWORD
 )
 
 Write-Host "========================================" -ForegroundColor Cyan

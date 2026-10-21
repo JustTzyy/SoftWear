@@ -52,11 +52,29 @@ namespace IT13_Final.Services.Data
     {
         private readonly string _localConnectionString =
             "Server=localhost\\SQLEXPRESS;Database=db_SoftWear;Integrated Security=SSPI;TrustServerCertificate=True;Connection Timeout=30;";
+        // MonsterASP (databaseasp.net) remote SQL Server - local data is synced here.
+        // The connection string is NOT stored in source control. Provide it with either:
+        //   1) the SOFTWEAR_CLOUD_CONNECTION environment variable, or
+        //   2) a file named cloud-connection.txt next to IT13_Final.exe (git-ignored)
+        // Format: Server=<host>;Database=<db>;User Id=<user>;Password=<password>;Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True;Connection Timeout=60;
+        private readonly string _azureConnectionString = LoadCloudConnectionString();
 
-        // Azure connection string - using exact format from Azure Portal
-        // Server name: jusstzy.database.windows.net (single 's')
-        private readonly string _azureConnectionString =
-            "Server=tcp:jusstzy.database.windows.net,1433;Initial Catalog=db_SoftWear;Persist Security Info=False;User ID=justin;Password=<your-password>;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=60;";
+        private static string LoadCloudConnectionString()
+        {
+            var fromEnv = Environment.GetEnvironmentVariable("SOFTWEAR_CLOUD_CONNECTION");
+            if (!string.IsNullOrWhiteSpace(fromEnv))
+                return fromEnv.Trim();
+
+            var filePath = Path.Combine(AppContext.BaseDirectory, "cloud-connection.txt");
+            if (File.Exists(filePath))
+            {
+                var fromFile = File.ReadAllText(filePath).Trim();
+                if (!string.IsNullOrWhiteSpace(fromFile))
+                    return fromFile;
+            }
+
+            return string.Empty;
+        }
 
         // Tables in dependency order
         private readonly string[] _tables = new[]

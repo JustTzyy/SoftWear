@@ -279,3 +279,4 @@ Each seller module's most important function serves as the foundation or critica
 These functions work together to enable sellers to manage their complete retail business operations within the SoftWear platform.
 
 
+

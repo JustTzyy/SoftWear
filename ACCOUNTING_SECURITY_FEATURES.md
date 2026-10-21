@@ -527,3 +527,4 @@ The SoftWear system implements comprehensive security features that protect acco
 These security features work together to create a secure financial management system where accounting personnel can perform their duties with complete data privacy, proper access controls, and full accountability for all financial operations.
 
 
+

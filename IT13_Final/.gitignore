@@ -49,3 +49,7 @@ artifacts/
 # VS Code
 .vscode/
 
+
+# Cloud database credentials (never commit)
+cloud-connection.txt
+*.connection.txt

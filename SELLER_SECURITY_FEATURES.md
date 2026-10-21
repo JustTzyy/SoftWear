@@ -461,3 +461,4 @@ The SoftWear system implements comprehensive security features that protect sell
 These security features work together to create a secure, multi-tenant platform where sellers can operate their businesses with complete data privacy and protection.
 
 
+

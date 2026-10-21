@@ -310,3 +310,4 @@ Each cashier module's most important function serves as a critical transaction p
 These functions work together to provide comprehensive point-of-sale operations, ensuring accurate transactions, proper inventory management, and complete financial records in the SoftWear system.
 
 
+

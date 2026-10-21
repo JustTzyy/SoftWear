@@ -279,3 +279,4 @@ Each stock clerk module's most important function serves as a critical inventory
 These functions work together to provide comprehensive inventory management, ensuring accurate stock levels, complete audit trails, and efficient procurement operations in the SoftWear system.
 
 
+

@@ -536,3 +536,4 @@ The SoftWear system implements comprehensive security features that protect stoc
 These security features work together to create a secure inventory management system where stock clerks can perform their duties with complete data privacy, proper access controls, and full accountability for all inventory operations.
 
 
+

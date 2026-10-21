@@ -544,3 +544,4 @@ The SoftWear system implements comprehensive security features that protect cash
 These security features work together to create a secure point-of-sale system where cashiers can perform their duties with complete transaction privacy, proper access controls, and full accountability for all sales and return operations.
 
 
+
