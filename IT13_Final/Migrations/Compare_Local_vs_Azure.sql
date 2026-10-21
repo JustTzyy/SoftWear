@@ -111,7 +111,7 @@ GO
 
 -- ============================================
 -- AZURE DATABASE QUERIES
--- Run these on: jusstzy.database.windows.net
+-- Run these on: <your-server>.database.windows.net
 -- ============================================
 -- Copy the queries below and run them on Azure database
 -- ============================================

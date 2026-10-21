@@ -6,7 +6,7 @@ Since direct connection from your machine is blocked, here are 3 ways to create 
 
 ### Step 1: Create the Database
 1. Go to [Azure Portal](https://portal.azure.com)
-2. Navigate to your **SQL Server** resource (`jussstzy`)
+2. Navigate to your **SQL Server** resource (`<your-server>`)
 3. Click **"+ New database"** or **"Create database"** button
 4. Fill in:
    - **Database name:** `db_SoftWear`
@@ -17,7 +17,7 @@ Since direct connection from your machine is blocked, here are 3 ways to create 
 ### Step 2: Run Setup Script
 1. Once database is created, go to the **database** resource (not the server)
 2. Click **"Query editor (preview)"** in left menu
-3. Login: `justin` / `<your-password>`
+3. Login: `<your-username>` / `<your-password>`
 4. Open `C:\Github\SoftWear\IT13_Final\Migrations\Azure_SQL_Setup.sql`
 5. Copy entire contents and paste into Query Editor
 6. Click **"Run"**
@@ -35,7 +35,7 @@ az login
 # Create the database
 az sql db create \
   --resource-group softwear-rg \
-  --server jussstzy \
+  --server <your-server> \
   --name db_SoftWear \
   --service-objective Basic \
   --backup-storage-redundancy Local
@@ -49,7 +49,7 @@ Then run the setup script via Azure Portal Query Editor.
 
 If the database already exists but you want to verify, or if you can access Query Editor:
 
-1. Go to Azure Portal → Your SQL Server (`jussstzy`)
+1. Go to Azure Portal → Your SQL Server (`<your-server>`)
 2. Look for **"Query editor"** or **"SQL query editor"** option
 3. If available, login and run this:
 
@@ -75,7 +75,7 @@ Once `db_SoftWear` exists:
 
 1. Go to the **database** resource in Azure Portal
 2. Click **"Query editor (preview)"**
-3. Login with `justin` / `<your-password>`
+3. Login with `<your-username>` / `<your-password>`
 4. Copy and paste the entire contents of `Azure_SQL_Setup.sql`
 5. Click **"Run"** to create all tables
 
@@ -84,7 +84,7 @@ Once `db_SoftWear` exists:
 ## Quick Check: Does Database Exist?
 
 To check if database already exists:
-1. Go to Azure Portal → SQL Server (`jussstzy`)
+1. Go to Azure Portal → SQL Server (`<your-server>`)
 2. Click **"Databases"** in left menu
 3. Look for `db_SoftWear` in the list
 

@@ -2,7 +2,7 @@
 -- Create Database Script for Azure Portal
 -- ============================================
 -- Run this in Azure Portal Query Editor
--- Server: jussstzy.database.windows.net
+-- Server: <your-server>.database.windows.net
 -- ============================================
 
 -- Connect to master database

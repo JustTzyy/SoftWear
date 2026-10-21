@@ -264,7 +264,7 @@ The system supports **5 distinct user roles**, each with specific responsibiliti
 
 ### Cloud Hosting (Production)
 - **Platform**: Microsoft Azure
-- **Database Server**: `jusstzy.database.windows.net`
+- **Database Server**: `<your-server>.database.windows.net`
 - **Database Name**: `db_SoftWear`
 - **Authentication**: SQL Server Authentication
 - **Connection String**: Encrypted connection with SSL/TLS

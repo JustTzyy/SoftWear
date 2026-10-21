@@ -6,7 +6,7 @@ Since the automated script cannot connect (DNS resolution failed), please follow
 
 1. Go to [Azure Portal](https://portal.azure.com)
 2. Navigate to your SQL Server resource
-3. Check the **Server name** - it should be something like: `jussstzy.database.windows.net`
+3. Check the **Server name** - it should be something like: `<your-server>.database.windows.net`
 4. If the server name is different, update it in the connection strings
 
 ## Step 2: Configure Firewall Rules
@@ -31,9 +31,9 @@ Since the automated script cannot connect (DNS resolution failed), please follow
    - Download from: https://aka.ms/ssmsfullsetup
 
 2. **Connect to Azure SQL Database:**
-   - Server name: `jussstzy.database.windows.net` (or your actual server name)
+   - Server name: `<your-server>.database.windows.net` (or your actual server name)
    - Authentication: **SQL Server Authentication**
-   - Login: `justin`
+   - Login: `<your-username>`
    - Password: `<your-password>`
    - Click **"Connect"**
 
@@ -56,7 +56,7 @@ Since the automated script cannot connect (DNS resolution failed), please follow
 2. Navigate to your SQL Database resource
 3. Click **"Query editor"** in the left menu
 4. Login with:
-   - Login: `justin`
+   - Login: `<your-username>`
    - Password: `<your-password>`
 5. Copy and paste the contents of `Azure_SQL_Setup.sql`
 6. Click **"Run"**
@@ -68,7 +68,7 @@ If you have Azure CLI installed:
 ```bash
 az sql db create \
   --resource-group softwear-rg \
-  --server jussstzy \
+  --server <your-server> \
   --name db_SoftWear \
   --service-objective Basic
 
@@ -114,7 +114,7 @@ If you have existing data in your local database:
 
 After setup, verify your connection string in the code:
 ```
-Server=jussstzy.database.windows.net;Database=db_SoftWear;User Id=justin;Password=<your-password>;TrustServerCertificate=True;Connection Timeout=30;
+Server=<your-server>.database.windows.net;Database=db_SoftWear;User Id=<your-username>;Password=<your-password>;TrustServerCertificate=True;Connection Timeout=30;
 ```
 
 **Note:** If your server name is different, update all connection strings in:

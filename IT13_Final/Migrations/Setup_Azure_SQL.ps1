@@ -2,9 +2,9 @@
 # This script connects to Azure SQL and runs the migration script
 
 param(
-    [string]$ServerName = "jussstzy.database.windows.net",
+    [string]$ServerName = $env:AZURE_SQL_SERVER,
     [string]$DatabaseName = "db_SoftWear",
-    [string]$Username = "justin",
+    [string]$Username = $env:AZURE_SQL_USER,
     [string]$Password = $env:AZURE_SQL_PASSWORD,
     [string]$SqlScriptPath = ".\Migrations\Azure_SQL_Setup.sql"
 )

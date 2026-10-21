@@ -4,9 +4,9 @@
 param(
     [string]$LocalServer = "localhost\SQLEXPRESS",
     [string]$LocalDatabase = "db_SoftWear",
-    [string]$AzureServer = "jussstzy.database.windows.net",
+    [string]$AzureServer = $env:AZURE_SQL_SERVER,
     [string]$AzureDatabase = "db_SoftWear",
-    [string]$AzureUsername = "justin",
+    [string]$AzureUsername = $env:AZURE_SQL_USER,
     [string]$AzurePassword = $env:AZURE_SQL_PASSWORD,
     [switch]$SkipExisting = $true
 )

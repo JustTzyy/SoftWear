@@ -132,14 +132,14 @@ await HistoryService.LogAsync(userId, "create", "Products", "Created product: Pr
 **Azure Connection String**: Line 58-59
 ```csharp
 private readonly string _azureConnectionString =
-    "Server=tcp:jusstzy.database.windows.net,1433;Initial Catalog=db_SoftWear;Persist Security Info=False;User ID=justin;Password=<your-password>;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=60;";
+    "Server=tcp:<your-server>.database.windows.net,1433;Initial Catalog=db_SoftWear;Persist Security Info=False;User ID=<your-username>;Password=<your-password>;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=60;";
 ```
 
 **Azure Details**:
-- **Server**: `jusstzy.database.windows.net`
+- **Server**: `<your-server>.database.windows.net`
 - **Database**: `db_SoftWear`
 - **Port**: `1433`
-- **Username**: `justin`
+- **Username**: `<your-username>`
 - **Password**: `<your-password>`
 - **Encryption**: Enabled (SSL/TLS)
 
@@ -672,7 +672,7 @@ Server=localhost\SQLEXPRESS;Database=db_SoftWear;Integrated Security=SSPI;TrustS
 
 ### Azure Database
 ```
-Server=tcp:jusstzy.database.windows.net,1433;Initial Catalog=db_SoftWear;Persist Security Info=False;User ID=justin;Password=<your-password>;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=60;
+Server=tcp:<your-server>.database.windows.net,1433;Initial Catalog=db_SoftWear;Persist Security Info=False;User ID=<your-username>;Password=<your-password>;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=60;
 ```
 
 ---

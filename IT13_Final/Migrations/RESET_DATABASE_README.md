@@ -32,7 +32,7 @@ Run **047_Reset_Database_And_Seed_Users.sql** on both your local and Azure datab
 
 #### For Azure Database:
 1. Open SQL Server Management Studio (SSMS) or Azure Portal Query Editor
-2. Connect to your Azure SQL Database (jussstzy.database.windows.net)
+2. Connect to your Azure SQL Database (<your-server>.database.windows.net)
 3. Select the `db_SoftWear` database
 4. Open and execute `047_Reset_Database_And_Seed_Users.sql`
 

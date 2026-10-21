@@ -1,6 +1,6 @@
 -- ============================================
 -- Azure SQL Database Setup Script
--- Server: jussstzy.database.windows.net
+-- Server: <your-server>.database.windows.net
 -- Database: db_SoftWear
 -- Admin: justin
 -- ============================================
@@ -1731,7 +1731,7 @@ PRINT '  - Admin: admin@SoftWear.com / admin123';
 PRINT '  - Seller: seller@SoftWear.com / seller123';
 PRINT '';
 PRINT 'Database: db_SoftWear';
-PRINT 'Server: jussstzy.database.windows.net';
+PRINT 'Server: <your-server>.database.windows.net';
 PRINT '';
 GO
 

@@ -15,7 +15,7 @@ Since the direct connection from your application is failing (likely due to DNS/
 
 1. In your SQL Database resource, click **"Query editor (preview)"** in the left menu
 2. Login with:
-   - **Login:** `justin`
+   - **Login:** `<your-username>`
    - **Password:** `<your-password>`
 3. Click **"OK"**
 
@@ -46,10 +46,10 @@ SELECT COUNT(*) as AzureCount FROM dbo.tbl_roles;
    - Authentication: Windows Authentication
 
 2. **Connect to Azure Database:**
-   - Server: `jussstzy.database.windows.net`
+   - Server: `<your-server>.database.windows.net`
    - Database: `db_SoftWear`
    - Authentication: SQL Server Authentication
-   - Login: `justin`
+   - Login: `<your-username>`
    - Password: `<your-password>`
 
 3. **Use SSMS Import/Export Wizard:**
@@ -71,7 +71,7 @@ If your database shows as "Paused" in Azure Portal:
 ## Check Firewall Rules
 
 Make sure your IP is allowed:
-1. Go to Azure Portal → SQL Server → `jussstzy`
+1. Go to Azure Portal → SQL Server → `<your-server>`
 2. Click **"Networking"** or **"Firewalls and virtual networks"**
 3. Verify your IP `175.176.91.199` is in the list
 4. Click **"Save"** if you made changes

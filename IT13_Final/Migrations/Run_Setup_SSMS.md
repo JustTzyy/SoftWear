@@ -9,11 +9,11 @@ Since the PowerShell script is having DNS issues, here's the fastest way to set 
 
 2. **Connect to Azure SQL:**
    - Click "Connect" → "Database Engine"
-   - **Server name:** `jussstzy.database.windows.net`
+   - **Server name:** `<your-server>.database.windows.net`
      - ⚠️ **IMPORTANT:** If this doesn't work, check your Azure Portal for the exact server name
-     - It might be something like: `jussstzy.database.windows.net` or just `jussstzy`
+     - It might be something like: `<your-server>.database.windows.net` or just `<your-server>`
    - **Authentication:** SQL Server Authentication
-   - **Login:** `justin`
+   - **Login:** `<your-username>`
    - **Password:** `<your-password>`
    - Click "Connect"
 
@@ -49,7 +49,7 @@ Since the PowerShell script is having DNS issues, here's the fastest way to set 
 1. Go to Azure Portal
 2. Navigate to your SQL Database (not the server)
 3. Click "Query editor" in the left menu
-4. Login with `justin` / `<your-password>`
+4. Login with `<your-username>` / `<your-password>`
 5. Copy the entire contents of `Azure_SQL_Setup.sql`
 6. Paste and click "Run"
 

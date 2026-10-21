@@ -4,9 +4,9 @@ This guide will help you connect your SoftWear application to Azure SQL Database
 
 ## Prerequisites
 
-1. Azure SQL Database server: `jussstzy.database.windows.net`
+1. Azure SQL Database server: `<your-server>.database.windows.net`
 2. Database name: `db_SoftWear`
-3. Username: `justin`
+3. Username: `<your-username>`
 4. Password: `<your-password>`
 5. PowerShell (for running setup scripts)
 6. SQL Server Management Studio (SSMS) - Optional, for manual execution
@@ -43,9 +43,9 @@ The script will:
 ### Option B: Using SQL Server Management Studio (SSMS)
 
 1. Open SQL Server Management Studio
-2. Connect to: `jussstzy.database.windows.net`
+2. Connect to: `<your-server>.database.windows.net`
    - Authentication: SQL Server Authentication
-   - Login: `justin`
+   - Login: `<your-username>`
    - Password: `<your-password>`
 3. Open the file `Migrations\Azure_SQL_Setup.sql`
 4. Execute the script (F5)
@@ -76,9 +76,9 @@ You can customize the sync script with parameters:
 .\Sync_Data_To_Azure.ps1 `
     -LocalServer "localhost\SQLEXPRESS" `
     -LocalDatabase "db_SoftWear" `
-    -AzureServer "jussstzy.database.windows.net" `
+    -AzureServer "<your-server>.database.windows.net" `
     -AzureDatabase "db_SoftWear" `
-    -AzureUsername "justin" `
+    -AzureUsername "<your-username>" `
     -AzurePassword "<your-password>" `
     -SkipExisting:$false  # Set to $false to overwrite existing data
 ```
@@ -88,7 +88,7 @@ You can customize the sync script with parameters:
 All service files have been updated with the Azure SQL connection string:
 
 ```
-Server=jussstzy.database.windows.net;Database=db_SoftWear;User Id=justin;Password=<your-password>;TrustServerCertificate=True;Connection Timeout=30;
+Server=<your-server>.database.windows.net;Database=db_SoftWear;User Id=<your-username>;Password=<your-password>;TrustServerCertificate=True;Connection Timeout=30;
 ```
 
 You can test the connection by running your application.
@@ -143,9 +143,9 @@ If data sync fails:
 All services now use this connection string format:
 
 ```
-Server=jussstzy.database.windows.net;
+Server=<your-server>.database.windows.net;
 Database=db_SoftWear;
-User Id=justin;
+User Id=<your-username>;
 Password=<your-password>;
 TrustServerCertificate=True;
 Connection Timeout=30;

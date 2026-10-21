@@ -11,7 +11,7 @@ Since direct connection is having issues, use Azure Portal Query Editor - it wor
    - Look for `db_SoftWear` or your database name
 3. In the left menu, click **"Query editor (preview)"**
 4. Login with:
-   - **Login:** `justin`
+   - **Login:** `<your-username>`
    - **Password:** `<your-password>`
    - Click **"OK"**
 
@@ -50,9 +50,9 @@ If you prefer SSMS:
 
 1. **Download SSMS:** https://aka.ms/ssmsfullsetup
 2. **Connect:**
-   - Server: `jussstzy.database.windows.net`
+   - Server: `<your-server>.database.windows.net`
    - Authentication: SQL Server Authentication
-   - Login: `justin`
+   - Login: `<your-username>`
    - Password: `<your-password>`
 3. **Open:** `C:\Github\SoftWear\IT13_Final\Migrations\Azure_SQL_Setup.sql`
 4. **Execute:** Press F5
@@ -65,7 +65,7 @@ If you prefer SSMS:
 - Check that the database exists
 
 ### "Login failed"
-- Verify username: `justin`
+- Verify username: `<your-username>`
 - Verify password: `<your-password>`
 - Make sure SQL authentication is enabled
 
